@@ -228,7 +228,20 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div v-if="visible && items.length" ref="rootRef" class="ctx-menu" :style="posStyle">
+  <!--
+    ⚠ @pointerdown.stop：阻止冒泡到画布根元素。
+    否则点击菜单项时，画布根的 onRootPointerDown 会先执行 closeMenu()，
+    菜单被 v-if 卸载，随后的 click 事件落在已删除的按钮上，菜单项永远不触发。
+    （窗口捕获监听器仍能正确处理菜单外部点击关闭）
+  -->
+  <div
+    v-if="visible && items.length"
+    ref="rootRef"
+    class="ctx-menu"
+    :style="posStyle"
+    @pointerdown.stop
+    @contextmenu.stop.prevent
+  >
     <button
       v-for="item in items"
       :key="item.key"

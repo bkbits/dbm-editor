@@ -59,6 +59,8 @@ export const useCanvasStore = defineStore('canvas', {
     mode: null as Mode,
     spacePressed: false,
     additiveSelect: false,
+    /** 当前手势是否已捕获指针（延迟捕获：超过位移阈值才捕获，避免偷走 click/dblclick） */
+    pointerCaptured: false,
     panDraft: null as { lastX: number; lastY: number } | null,
     selectDraft: null as { x0: number; y0: number; x1: number; y1: number } | null,
     dragDraft: null as
@@ -276,6 +278,20 @@ export const useCanvasStore = defineStore('canvas', {
         /* ignore */
       }
     },
+    /**
+     * 延迟捕获：仅在手势真正开始移动后捕获指针。
+     * 若在 pointerdown 时立即捕获，浏览器会把后续 click/dblclick 派发到
+     * 捕获元素（画布根）而非实际点击目标，导致双击卡片/双击线段/
+     * 点击 NN 胶囊等全部失效。因此仅在位移超过阈值后才捕获。
+     */
+    captureOnce(e: PointerEvent) {
+      if (this.pointerCaptured) return
+      this.pointerCaptured = true
+      this.capturePointer(e)
+    },
+    resetPointerCapture() {
+      this.pointerCaptured = false
+    },
     /** 画布空白处按下（左键=框选，中键/空格+左键=平移） */
     onCanvasPointerDown(e: PointerEvent) {
       if (this.mode) return
@@ -288,14 +304,12 @@ export const useCanvasStore = defineStore('canvas', {
     beginPan(e: PointerEvent) {
       this.mode = 'pan'
       this.panDraft = { lastX: e.clientX, lastY: e.clientY }
-      this.capturePointer(e)
     },
     beginSelect(e: PointerEvent) {
       const local = this.localPoint(e)
       this.mode = 'select'
       this.additiveSelect = e.ctrlKey || e.shiftKey
       this.selectDraft = { x0: local.x, y0: local.y, x1: local.x, y1: local.y }
-      this.capturePointer(e)
     },
     /** 表卡片按下（卡片组件转发） */
     beginCardDrag(tableId: string, e: PointerEvent) {
@@ -320,7 +334,6 @@ export const useCanvasStore = defineStore('canvas', {
         origPositions,
         moved: false,
       }
-      this.capturePointer(e)
     },
     /** 连接点按下（卡片组件转发） */
     startConnect(tableId: string, side: Side, e: PointerEvent) {
@@ -332,11 +345,12 @@ export const useCanvasStore = defineStore('canvas', {
         world: this.screenToWorld(this.localPoint(e)),
         hoverTableId: null,
       }
-      this.capturePointer(e)
     },
     onPointerMove(e: PointerEvent) {
       if (!this.mode) return
       if (this.mode === 'pan' && this.panDraft) {
+        // 平移：首次移动即捕获（无点击语义依赖）
+        this.captureOnce(e)
         this.panX += e.clientX - this.panDraft.lastX
         this.panY += e.clientY - this.panDraft.lastY
         this.panDraft.lastX = e.clientX
@@ -345,6 +359,8 @@ export const useCanvasStore = defineStore('canvas', {
         const local = this.localPoint(e)
         this.selectDraft.x1 = local.x
         this.selectDraft.y1 = local.y
+        // 位移超过阈值才捕获：无位移的单击/双击仍指向原目标（卡片/线段/胶囊）
+        if (Math.hypot(local.x - this.selectDraft.x0, local.y - this.selectDraft.y0) > 3) this.captureOnce(e)
       } else if (this.mode === 'dragCards' && this.dragDraft) {
         const model = useModelStore()
         const world = this.screenToWorld(this.localPoint(e))
@@ -355,6 +371,8 @@ export const useCanvasStore = defineStore('canvas', {
           this.dragDraft.moved = true
           useHistoryStore().capture(model.takeSnapshot())
         }
+        // 拖拽阈值已过，此时捕获指针（拖出画布也能持续跟踪）
+        this.captureOnce(e)
         for (const id of this.dragDraft.ids) {
           const orig = this.dragDraft.origPositions[id]
           const t = model.tableById(id)
@@ -364,11 +382,14 @@ export const useCanvasStore = defineStore('canvas', {
           }
         }
       } else if (this.mode === 'connect' && this.connectDraft) {
+        // 连线：首次移动即捕获（连接点无点击语义依赖）
+        this.captureOnce(e)
         this.connectDraft.world = this.screenToWorld(this.localPoint(e))
         this.connectDraft.hoverTableId = this.hitTableAt(e)
       }
     },
     onPointerUp(e: PointerEvent) {
+      this.resetPointerCapture()
       if (!this.mode) return
       const mode = this.mode
       this.mode = null

@@ -28,7 +28,8 @@ import {
   SEED_TEMPLATES,
 } from './seed'
 
-const STORAGE_KEY = 'gdbme:db:v1'
+const STORAGE_KEY = 'gdbme:db:v2'
+const LEGACY_STORAGE_KEYS = ['gdbme:db:v1']
 
 interface MockDB {
   version: number
@@ -60,7 +61,7 @@ function createSeedDB(): MockDB {
     return table as Table
   })
   return {
-    version: 1,
+    version: 2,
     categories: JSON.parse(JSON.stringify(SEED_CATEGORIES)),
     tables,
     columns,
@@ -76,11 +77,13 @@ function loadDB(): MockDB {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw) {
       const parsed = JSON.parse(raw) as MockDB
-      if (parsed && parsed.version === 1 && Array.isArray(parsed.tables)) return parsed
+      if (parsed && parsed.version === 2 && Array.isArray(parsed.tables)) return parsed
     }
   } catch {
     /* 忽略损坏数据，回退种子 */
   }
+  // 清理旧版本存储（v1 缺少 parentIdColumn 等字段，直接回退种子）
+  for (const key of LEGACY_STORAGE_KEYS) localStorage.removeItem(key)
   return createSeedDB()
 }
 
@@ -215,6 +218,7 @@ const handlers: Record<string, Handler> = {
       tableName,
       className: String(body.className || '').trim() || undefined,
       comment: String(body.comment || '').trim(),
+      parentIdColumn: String(body?.parentIdColumn || '').trim() || undefined,
       x: Number(body?.x ?? 0) || 0,
       y: Number(body?.y ?? 0) || 0,
     }
@@ -237,6 +241,8 @@ const handlers: Record<string, Handler> = {
       tableName,
       className: String(body.className || '').trim() || undefined,
       comment: String(body.comment || '').trim(),
+      // 树形父ID字段：空值代表取消树形（ ?? target.parentIdColumn 兼容局部载荷）
+      parentIdColumn: String(body?.parentIdColumn ?? target.parentIdColumn ?? '').trim() || undefined,
       x: Number(body?.x ?? target.x ?? 0) || 0,
       y: Number(body?.y ?? target.y ?? 0) || 0,
     })

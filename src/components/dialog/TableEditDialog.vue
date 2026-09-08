@@ -28,11 +28,20 @@ const draft = reactive({
   tableName: '',
   className: '',
   comment: '',
+  parentIdColumn: '', // 树形表父ID字段，空代表非树形表
   x: 0,
   y: 0,
   columns: [] as DraftColumn[],
   indexes: [] as DraftIndex[],
   activeTab: 'columns',
+})
+
+/** 树形表开关：开启时父ID字段默认 parent_id，关闭时清空 */
+const treeEnabled = computed({
+  get: () => Boolean(draft.parentIdColumn.trim()),
+  set: (v: boolean) => {
+    draft.parentIdColumn = v ? draft.parentIdColumn.trim() || 'parent_id' : ''
+  },
 })
 
 const dialogOpen = computed(() => ui.tableEdit.open)
@@ -49,6 +58,7 @@ watch(dialogOpen, (open) => {
     draft.tableName = t.tableName
     draft.className = t.className || ''
     draft.comment = t.comment || ''
+    draft.parentIdColumn = t.parentIdColumn || ''
     draft.x = t.x ?? 0
     draft.y = t.y ?? 0
     draft.columns = model.columnsOf(t.id).map((c) => ({ ...c }))
@@ -60,6 +70,7 @@ watch(dialogOpen, (open) => {
     draft.tableName = ''
     draft.className = ''
     draft.comment = ''
+    draft.parentIdColumn = ''
     draft.x = world.x - 130
     draft.y = world.y - 60
     draft.columns = [
@@ -188,6 +199,13 @@ async function deleteNavigate(id: string) {
   message.success('导航已删除')
 }
 
+/* 父ID字段候选：当前字段列表 */
+const parentColumnOptions = computed(() =>
+  draft.columns
+    .filter((c) => c.columnName.trim())
+    .map((c) => ({ value: c.columnName, label: c.columnName })),
+)
+
 /* ==================== 校验与保存 ==================== */
 
 const saving = reactive({ loading: false })
@@ -212,6 +230,11 @@ function validate(): string | null {
     for (const col of i.columns) {
       if (!names.has(col)) return `索引 ${i.indexName} 引用了不存在的字段：${col}`
     }
+  }
+  if (treeEnabled.value) {
+    const parentCol = draft.parentIdColumn.trim()
+    if (!parentCol) return '树形表需填写父ID字段'
+    if (!names.has(parentCol)) return `树形父ID字段「${parentCol}」不存在，请先在字段列表中添加`
   }
   return null
 }
@@ -252,6 +275,7 @@ async function save() {
         tableName: draft.tableName.trim(),
         className: draft.className.trim() || toCamelCase(draft.tableName),
         comment: draft.comment.trim(),
+        parentIdColumn: treeEnabled.value ? draft.parentIdColumn.trim() : undefined,
         x: draft.x,
         y: draft.y,
         columns,
@@ -264,6 +288,7 @@ async function save() {
         tableName: draft.tableName.trim(),
         className: draft.className.trim() || toCamelCase(draft.tableName),
         comment: draft.comment.trim(),
+        parentIdColumn: treeEnabled.value ? draft.parentIdColumn.trim() : undefined,
         x: draft.x,
         y: draft.y,
         columns,
@@ -312,6 +337,21 @@ async function save() {
       <div class="form-item grow">
         <label>表注释</label>
         <a-input v-model:value="draft.comment" placeholder="选填" size="small" />
+      </div>
+      <div class="form-item tree-item">
+        <label>树形表</label>
+        <div class="tree-row">
+          <a-checkbox v-model:checked="treeEnabled">启用（父ID字段）</a-checkbox>
+          <a-auto-complete
+            v-model:value="draft.parentIdColumn"
+            :options="parentColumnOptions"
+            :disabled="!treeEnabled"
+            size="small"
+            class="mono tree-input"
+            placeholder="parent_id"
+            :filter-option="(input: string, option: any) => String(option.value).toLowerCase().includes(input.toLowerCase())"
+          />
+        </div>
       </div>
     </div>
 
@@ -497,6 +537,10 @@ async function save() {
       min-width: 140px;
     }
 
+    &.tree-item {
+      grid-column: span 2;
+    }
+
     label {
       font-size: 11.5px;
       color: var(--text-2);
@@ -506,6 +550,19 @@ async function save() {
         margin-left: 2px;
       }
     }
+  }
+}
+
+.tree-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 24px;
+
+  .tree-input {
+    flex: 1;
+    min-width: 120px;
+    max-width: 240px;
   }
 }
 

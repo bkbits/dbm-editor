@@ -327,6 +327,7 @@ export const useModelStore = defineStore('model', {
         tableName: name,
         className: toCamelCase(name),
         comment: t.comment || '',
+        parentIdColumn: t.parentIdColumn,
         x: (t.x ?? 0) + 40,
         y: (t.y ?? 0) + 40,
         columns: this.columnsOf(tableId).map((c) => ({

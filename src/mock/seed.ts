@@ -109,6 +109,7 @@ export const SEED_TABLES = [
     tableName: 'sys_menu',
     className: 'SysMenu',
     comment: '菜单表',
+    parentIdColumn: 'parent_id',
     x: 1060,
     y: 80,
     columns: buildColumns('t-sys-menu', [
@@ -143,6 +144,7 @@ export const SEED_TABLES = [
     tableName: 'cms_category',
     className: 'CmsCategory',
     comment: '文章分类表',
+    parentIdColumn: 'parent_id',
     x: 60,
     y: 720,
     columns: buildColumns('t-cms-category', [

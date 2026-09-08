@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { Key, CircleCheck, CircleX, Plus, Link2, ChevronDown, EyeOff, ArrowDown } from '@lucide/vue'
+import { Key, CircleCheck, CircleX, Plus, Link2, ChevronDown, EyeOff, ArrowDown, GitBranch } from '@lucide/vue'
 import { useCanvasStore } from '@/stores/canvas'
 import { useModelStore } from '@/stores/model'
 import { useUiStore } from '@/stores/ui'
@@ -87,6 +87,11 @@ function onConnectorDown(e: PointerEvent, side: Side) {
   canvas.closeMenu()
   canvas.startConnect(props.tableId, side, e)
 }
+/** 隐藏本表（不删除数据，仅从画布视图移除；可在左侧大纲重新显示） */
+function onHide(e: MouseEvent) {
+  canvas.hideTable(props.tableId)
+  e.stopPropagation()
+}
 
 const SIDES: Array<{ side: Side; cls: string }> = [
   { side: 'n', cls: 'conn-n' },
@@ -142,8 +147,23 @@ onBeforeUnmount(() => {
     <div class="card-head">
       <div class="head-row">
         <span class="head-name mono">{{ table.tableName }}</span>
+        <GitBranch
+          v-if="table.parentIdColumn"
+          :size="12"
+          class="head-tree"
+          :title="`树形表（父ID字段：${table.parentIdColumn}）`"
+        />
         <Link2 v-if="isMapping" :size="12" class="head-mapping" title="中间映射表" />
         <EyeOff v-if="isHidden" :size="12" class="head-hidden" title="已隐藏（仅此提示）" />
+        <button
+          class="head-hide-btn"
+          type="button"
+          title="在画布中隐藏此表（可在大纲中恢复）"
+          @pointerdown.stop
+          @click.stop="onHide"
+        >
+          <EyeOff :size="12" />
+        </button>
       </div>
       <div v-if="table.comment" class="head-comment" :title="table.comment">{{ table.comment }}</div>
     </div>
@@ -261,6 +281,11 @@ onBeforeUnmount(() => {
   display: flex;
 }
 
+/* 隐藏按钮：卡片悬停时显示（与连接点同规则） */
+.table-card:hover .head-hide-btn {
+  display: inline-flex;
+}
+
 .conn-n {
   left: 50%;
   top: -8px;
@@ -324,6 +349,33 @@ onBeforeUnmount(() => {
   .head-hidden {
     color: var(--text-3);
     flex-shrink: 0;
+  }
+
+  .head-tree {
+    color: var(--success);
+    flex-shrink: 0;
+  }
+
+  /* 隐藏按钮：默认隐藏，卡片悬停时显示（悬停规则在顶层 .table-card:hover 中） */
+  .head-hide-btn {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    margin-left: auto;
+    flex-shrink: 0;
+    padding: 0;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text-3);
+    cursor: pointer;
+
+    &:hover {
+      background: var(--danger-weak);
+      color: var(--danger);
+    }
   }
 
   .head-comment {

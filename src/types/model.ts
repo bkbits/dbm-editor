@@ -26,6 +26,7 @@ export interface Table {
   tableName: string // 表名(唯一)
   className?: string // 实体类名(默认为表名大驼峰命名)
   comment?: string // 表注释
+  parentIdColumn?: string // 树形表父id列（如 parent_id），为空则代表非树形表
   x?: number // x坐标
   y?: number // y坐标
 }

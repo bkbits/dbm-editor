@@ -277,6 +277,9 @@ function showMappingTable() {
   }
 
   .nn-pill {
+    /* ⚠ pointer-events 是可继承属性：.edge 设为 none 后，若不在此显式覆盖，
+       胶囊及其子元素（rect/text/circle/path）会继承 none 而完全无法命中点击/悬停 */
+    pointer-events: all;
     cursor: pointer;
     rect {
       fill: var(--edge-pill-bg);

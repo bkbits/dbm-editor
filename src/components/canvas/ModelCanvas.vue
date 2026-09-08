@@ -120,6 +120,13 @@ const boundWheel = (e: WheelEvent) => {
   canvas.onWheel(e)
 }
 
+/* window 级 pointerup/pointercancel 兜底：
+   延迟指针捕获后，无位移的单击不再捕获指针，
+   若指针在画布外（大纲/头部）释放，根元素的 @pointerup 收不到事件，
+   会导致交互模式卡死；onPointerUp 为幂等早退设计，重复调用安全 */
+const boundWindowPointerUp = (e: PointerEvent) => canvas.onPointerUp(e)
+const boundWindowPointerCancel = (e: PointerEvent) => canvas.onPointerUp(e)
+
 function onRootPointerDown(e: PointerEvent) {
   // 事件仅在未被卡片/连线拦截（冒泡到根）时触发 —— 即空白区域
   canvas.closeMenu()
@@ -224,6 +231,8 @@ onMounted(() => {
   })
   resizeObserver.observe(rootRef.value)
   rootRef.value.addEventListener('wheel', boundWheel, { passive: false })
+  window.addEventListener('pointerup', boundWindowPointerUp)
+  window.addEventListener('pointercancel', boundWindowPointerCancel)
   window.addEventListener('keydown', onKeyDown)
   window.addEventListener('keyup', onKeyUp)
 })
@@ -231,6 +240,8 @@ onMounted(() => {
 onBeforeUnmount(() => {
   resizeObserver?.disconnect()
   rootRef.value?.removeEventListener('wheel', boundWheel)
+  window.removeEventListener('pointerup', boundWindowPointerUp)
+  window.removeEventListener('pointercancel', boundWindowPointerCancel)
   window.removeEventListener('keydown', onKeyDown)
   window.removeEventListener('keyup', onKeyUp)
   if (gridFrame) cancelAnimationFrame(gridFrame)

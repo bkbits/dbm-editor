@@ -1,6 +1,39 @@
 # 工作日志
 
 ---
+Task ID: 2
+Agent: main (Super Z)
+Task: 交互缺陷修复（右键菜单/双击卡片/双击导航线/NN 胶囊点击均无效）+ 新功能（卡片隐藏按钮、树形表选项）
+
+Work Log:
+- 根因诊断（四缺陷同源于事件系统）：
+  1) 右键菜单：菜单项 pointerdown 冒泡到画布根触发 closeMenu()，菜单被 v-if 卸载，click 落空 → 菜单项永不执行
+  2) 双击卡片/线段：beginCardDrag/beginSelect 在 pointerdown 立即 setPointerCapture(rootEl)，浏览器将 click/dblclick 派发到捕获元素（画布根）而非实际点击目标
+  3) NN 胶囊：pointer-events 为可继承属性，.edge 设 none 后 .nn-pill 及子元素继承 none 完全无法命中（.edge-hit 因显式 stroke 覆盖不受影响）
+- canvas.ts：重构为延迟指针捕获 —— pointerdown 不再立即捕获；onPointerMove 中 pan/connect 首次移动捕获、select/dragCards 超过 3px 阈值才捕获（captureOnce/resetPointerCapture）；无位移单击的 click/dblclick 正常派发到原目标
+- ModelCanvas.vue：window 级 pointerup/pointercancel 兜底监听（无捕获时指针在画布外释放不会卡死模式；onPointerUp 幂等早退设计重复调用安全）
+- CanvasContextMenu.vue：.ctx-menu 根元素加 @pointerdown.stop（菜单内点击不再冒泡触发画布根 closeMenu/beginSelect）+ @contextmenu.stop.prevent
+- NavigateEdge.vue：.nn-pill 加 pointer-events: all 覆盖继承
+- TableCard.vue：表头新增隐藏按钮（hover 显示、点击 canvas.hideTable、@pointerdown/.click.stop）；新增树形表标识 GitBranch 图标（title 显示父ID字段）
+- 树形表功能贯通：Table 接口加 parentIdColumn?: string（空=非树形）；TableEditDialog 加树形开关（开启自动填 parent_id）+ a-auto-complete 父ID字段（候选为当前字段列表）+ 校验（非空且必须存在于字段列表）；mock add/update 持久化；seed 为 sys_menu/cms_category 标记 parent_id；buildCopyDraft 复制保留；localStorage key 升级 v2（回退种子并清理 v1）
+- vue-tsc 类型检查通过；vite build 通过（2.32s）
+- agent-browser 真实输入事件端到端验证全部通过：
+  * 真实 click 派发目标为卡片内部元素（修复前被捕获偷走到画布根，用事件监听器断言验证）
+  * 双击 sys_user → 「编辑表」对话框打开；双击导航线 → 「编辑导航」对话框打开；真实单击线段 → 线段选中
+  * 真实右键 → 菜单打开 → 真实点击「编辑表」菜单项 → 菜单关闭且对话框打开（修复前菜单项点击失效）
+  * 真实点击 NN 胶囊 → 中间表 sys_user_role 显示、胶囊消失、剩余胶囊数量正确
+  * 隐藏按钮真实点击 → 卡片消失且写入 localStorage（隐藏计数与胶囊展开操作一致）
+  * 树形开关 → 默认 parent_id 填入 → 校验拦截（无该字段时）→ 补字段后保存成功 → 卡片树形标识出现 → localStorage v2 中 sys_user/sys_menu 均为 parent_id
+  * 回归：卡片拖拽（+100/+80 且持久化）、空白框选（选中 2 卡）、大纲眼睛按钮恢复显示、控制台 0 错误 0 警告
+- 重新打包 download/graph-db-model-editor.zip（130KB）
+
+Stage Summary:
+- 四项交互缺陷全部修复且经真实输入事件验证；两项新功能（隐藏按钮/树形表）完整落地并持久化
+- 关键设计决策：延迟指针捕获（位移阈值后才捕获）既保留拖拽/框选的画布外跟踪能力，又保证单击/双击事件派发到真实目标
+- 截图存于 docs/screenshots/fixes-verified.png
+- 遗留说明：CDP 驱动的合成双击无法触发浏览器 dblclick 合成（clickCount 限制），dblclick 已通过"真实 click 派发目标验证 + 合成 dblclick 处理器链路验证"双重佐证
+
+---
 Task ID: 1
 Agent: main (Super Z)
 Task: 图形数据库模型编辑工具 —— 需求规格说明书全量实现（Vue 3 + Vite + Bun + antdv-next）
