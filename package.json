@@ -1,0 +1,35 @@
+{
+  "name": "graph-db-model-editor",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "图形数据库模型编辑工具 - 可视化设计表结构、字段、索引及表间导航关系，支持模板代码生成",
+  "scripts": {
+    "vp": "vite",
+    "dev": "vite --port 3000 --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview --port 3000 --host 0.0.0.0",
+    "typecheck": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "@lucide/vue": "^1.42.0",
+    "antdv-next": "^1.5.3",
+    "axios": "^1.20.0",
+    "eta": "^4.6.0",
+    "highlight.js": "^11.12.0",
+    "jszip": "^3.10.1",
+    "pinia": "^4.0.3",
+    "vue": "^3.5.42"
+  },
+  "devDependencies": {
+    "@types/node": "^26.5.0",
+    "@vitejs/plugin-vue": "^6.0.8",
+    "sass": "^1.104.0",
+    "typescript": "~5.9.3",
+    "vite": "^8.2.2",
+    "vue-tsc": "^3.3.11"
+  },
+  "trustedDependencies": [
+    "@parcel/watcher"
+  ]
+}

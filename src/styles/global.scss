@@ -1,0 +1,88 @@
+/**
+ * 全局基础样式
+ */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--text-1);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--primary-weak);
+}
+
+/* 滚动条 */
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+
+/* 通用工具类 */
+.mono {
+  font-family: var(--font-mono);
+}
+
+.text-secondary {
+  color: var(--text-2);
+}
+.text-tertiary {
+  color: var(--text-3);
+}
+
+/* 应用骨架 */
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.app-main {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* 过渡 */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.18s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+/* highlight.js 搜索命中高亮 */
+mark.search-hit {
+  background: var(--warning-weak);
+  color: var(--warning);
+  border-radius: 2px;
+  padding: 0 1px;
+}

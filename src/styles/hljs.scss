@@ -1,0 +1,57 @@
+/**
+ * highlight.js 令牌配色（基于 CSS 变量，自动适配亮暗主题）
+ */
+.hljs {
+  color: var(--code-text);
+  background: transparent;
+}
+.hljs-comment,
+.hljs-quote {
+  color: var(--code-comment);
+  font-style: italic;
+}
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-subst {
+  color: var(--code-keyword);
+}
+.hljs-string,
+.hljs-regexp,
+.hljs-addition,
+.hljs-attribute {
+  color: var(--code-string);
+}
+.hljs-number,
+.hljs-literal {
+  color: var(--code-number);
+}
+.hljs-title,
+.hljs-section,
+.hljs-name,
+.hljs-selector-id,
+.hljs-selector-class {
+  color: var(--code-title);
+}
+.hljs-meta,
+.hljs-doctag,
+.hljs-type {
+  color: var(--code-meta);
+}
+.hljs-attr,
+.hljs-variable,
+.hljs-template-variable,
+.hljs-params {
+  color: var(--code-text);
+}
+.hljs-symbol,
+.hljs-bullet,
+.hljs-link {
+  color: var(--info);
+}
+.hljs-built_in,
+.hljs-builtin-name {
+  color: var(--code-number);
+}
+.hljs-deletion {
+  color: var(--danger);
+}
