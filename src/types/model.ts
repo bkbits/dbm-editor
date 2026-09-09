@@ -194,3 +194,21 @@ export interface ReplaceResult {
   files: number
   message: string
 }
+
+/* ==================== 设置 ==================== */
+
+/**
+ * 列默认类型规则：从数据库导入时，对列类型（如 VARCHAR(255)、Decimal(6, 4)）
+ * 按列表顺序依次进行正则表达式匹配（忽略大小写），取第一条命中规则的 javaType
+ * 作为导入字段的 Java 类型默认值
+ */
+export interface ColumnTypeRule {
+  id: string // 规则ID
+  pattern: string // 列类型正则表达式(忽略大小写)
+  javaType: string // 命中后的默认 Java 类型
+}
+
+/** 应用设置 */
+export interface AppSettings {
+  columnTypeRules: ColumnTypeRule[] // 列默认类型规则（有序，越靠前优先级越高）
+}

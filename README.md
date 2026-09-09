@@ -67,9 +67,9 @@ bun run typecheck
 
 ### 编辑对话框
 
-- **表编辑**：双击卡片/大纲表名或右键菜单触发；字段（增删改/上下排序/类型自动映射 Java 类型/字典关联）、索引（UNIQUE/NORMAL/FULLTEXT）、导航列表（跳转编辑/删除）
+- **表编辑**：双击卡片/大纲表名或右键菜单触发；字段（增删改/拖拽手柄排序/类型自动映射 Java 类型/字典关联）、索引（UNIQUE/NORMAL/FULLTEXT）、导航列表（跳转编辑/删除）
 - **导航编辑**：四种类型、两端关联属性、属性名、级联操作（自动/无动作/删除/设为Null，双向独立配置）、NN 中间表（自动创建或选择已有表）、一键反转方向
-- **从数据库导入**：`GET /api/codegen/table/queryFromDB` 模拟真实库表结构，勾选导入
+- **从数据库导入**：`GET /api/codegen/table/queryFromDB` 模拟真实库表结构，勾选导入；字段 Java 类型默认值由「系统设置 → 列默认类型」规则依序正则匹配推导（悬停可预览各字段推导结果），未命中回退内置类型映射
 
 ### 字典管理
 
@@ -112,6 +112,13 @@ Eta 语法：`<% %>` 逻辑、`<%= %>` 输出、`<%# %>` 自定义注释标签�
 
 内置 4 个模板：`entity`（Java 实体）、`dao`、`service`、`sql`（建表 DDL），可在「模板管理」中自由修改与新增。
 
+### 系统设置
+
+- **列默认类型**：从数据库导入时的 Java 类型默认映射。对字段的数据库类型（如 `VARCHAR(255)`、`Decimal(6, 4)`）按规则列表**自上而下依次**进行正则表达式匹配（忽略大小写），取**第一条命中**规则的 Java 类型作为默认值；全部未命中时回退内置类型映射表
+- 可选 Java 类型：`Character` / `String` / `Long` / `Integer` / `Float` / `Double` / `BigDecimal` / `LocalDateTime` / `LocalDate` / `LocalTime` / `Timestamp`
+- 规则顺序即优先级，拖拽手柄调整；非法正则即时标红并禁用保存；内置「规则测试」输入任意数据库类型实时预览命中结果（含未保存修改，区分「生效/命中被抢先」）
+- 设置保存后持久化（mock 接口 + localStorage）
+
 ### 主题
 
 - 全部颜色/间距/圆角/阴影通过 CSS 变量定义（`src/styles/variables.scss`），可在外部覆盖定制主题
@@ -134,7 +141,12 @@ Eta 语法：`<% %>` 逻辑、`<%= %>` 输出、`<%# %>` 自定义注释标签�
 | POST | `/api/codegen/table/remove` | 删除表（级联清理字段/索引/导航） |
 | POST (multipart) | `/api/codegen/replace` | 上传 zip 替换代码文件（需确认后调用） |
 
-> 规范未定义字典/模板接口，Mock 按相同 REST 风格扩展了 `/api/codegen/dict/*` 与 `/api/codegen/template/*`（`src/mock/db.ts` 有注明）。数据重置：左下大纲面板「重置演示数据」按钮。
+> 规范未定义字典/模板/设置接口，Mock 按相同 REST 风格扩展了 `/api/codegen/dict/*`、`/api/codegen/template/*` 与 `/api/codegen/settings/*`（`src/mock/db.ts` 有注明）。数据重置：左下大纲面板「重置演示数据」按钮。
+
+```bash
+GET  /api/codegen/settings/query    # 查询应用设置
+POST /api/codegen/settings/update   # 更新设置（列默认类型规则，正则合法性校验）
+```
 
 ## 项目结构
 
@@ -148,12 +160,13 @@ Eta 语法：`<% %>` 逻辑、`<%= %>` 输出、`<%# %>` 自定义注释标签�
    ├─ main.ts              # 入口（注册 Pinia / antdv-next / 主题）
    ├─ App.vue              # v-if 页面切换 + ConfigProvider 暗色算法
    ├─ api/                 # axios 实例（mock adapter）+ 接口模块
+   ├─ composables/         # useDragSort 行拖拽排序（字段/设置规则共用）
    ├─ mock/                # 种子数据 + Mock 数据库（localStorage 持久化）
-   ├─ stores/              # Pinia：model / canvas / dict / template / theme / ui / history
+   ├─ stores/              # Pinia：model / canvas / dict / template / theme / ui / history / settings
    ├─ types/               # 数据模型类型（与规格说明书一致）
    ├─ utils/               # 字符串 / Java 类型映射 / 导航推导 / 几何 / Eta 渲染 / 高亮
    ├─ styles/              # CSS 变量（亮暗双主题）/ 全局样式 / hljs 配色
-   ├─ views/               # EditorView / DictView / TemplateView
+   ├─ views/               # EditorView / DictView / TemplateView / SettingsView
    └─ components/
       ├─ layout/           # AppHeader
       ├─ outline/          # 左侧表格大纲
@@ -173,6 +186,10 @@ Eta 语法：`<% %>` 逻辑、`<%= %>` 输出、`<%# %>` 自定义注释标签�
 | --- | --- |
 | ![亮色](docs/screenshots/editor-final-light.png) | ![暗色](docs/screenshots/editor-dark.png) |
 
-| 表编辑对话框 | 模板管理（实时预览） |
+| 表编辑对话框（拖拽手柄排序） | 系统设置 · 列默认类型 |
 | --- | --- |
-| ![表编辑](docs/screenshots/table-edit-dialog.png) | ![模板](docs/screenshots/template-view-fixed.png) |
+| ![表编辑](docs/screenshots/table-columns-drag-handle.png) | ![设置](docs/screenshots/settings-column-rules.png) |
+
+| 模板管理（实时预览） |
+| --- |
+| ![模板](docs/screenshots/template-view-fixed.png) |

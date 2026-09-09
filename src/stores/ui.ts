@@ -4,7 +4,7 @@
 import { defineStore } from 'pinia'
 import type { GeneratedFile } from '@/types/model'
 
-export type PageName = 'editor' | 'dict' | 'template'
+export type PageName = 'editor' | 'dict' | 'template' | 'settings'
 
 export interface TableEditDialogState {
   open: boolean

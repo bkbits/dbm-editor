@@ -3,6 +3,7 @@
  * （系统管理 / 内容管理 / 商城 三个分类，含一对一、一对多、多对多及中间表）
  */
 import type {
+  AppSettings,
   CodeTemplate,
   DBTableDef,
   Dict,
@@ -668,3 +669,28 @@ export const SEED_DB_TABLES: DBTableDef[] = [
     ],
   },
 ]
+
+/* ============ 设置 ============ */
+/**
+ * 种子设置：列默认类型规则（有序，导入时依序正则匹配，取第一条命中）
+ * 注意顺序依赖：bigint 先于 int、datetime/timestamp 先于 time/date、
+ * char(1) 先于 char，否则前缀类类型会被宽泛规则抢先命中
+ */
+export const SEED_SETTINGS: AppSettings = {
+  columnTypeRules: [
+    { id: 'rule-char-1', pattern: '^\\s*char\\s*\\(\\s*1\\s*\\)', javaType: 'Character' },
+    { id: 'rule-char', pattern: 'char', javaType: 'String' },
+    { id: 'rule-text', pattern: 'text', javaType: 'String' },
+    { id: 'rule-json-enum-set', pattern: 'json|enum|set', javaType: 'String' },
+    { id: 'rule-bigint', pattern: 'bigint', javaType: 'Long' },
+    { id: 'rule-int', pattern: 'int', javaType: 'Integer' },
+    { id: 'rule-decimal', pattern: 'decimal|numeric', javaType: 'BigDecimal' },
+    { id: 'rule-float', pattern: 'float', javaType: 'Float' },
+    { id: 'rule-double', pattern: 'double|real', javaType: 'Double' },
+    { id: 'rule-datetime', pattern: 'datetime', javaType: 'LocalDateTime' },
+    { id: 'rule-timestamp', pattern: 'timestamp', javaType: 'Timestamp' },
+    { id: 'rule-time', pattern: '^\\s*time', javaType: 'LocalTime' },
+    { id: 'rule-date', pattern: 'date', javaType: 'LocalDate' },
+    { id: 'rule-year', pattern: 'year', javaType: 'Integer' },
+  ],
+}

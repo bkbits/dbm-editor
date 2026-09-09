@@ -2,6 +2,7 @@
  * API 模块：按需求规格说明书 api 清单组织
  */
 import type {
+  AppSettings,
   CodeTemplate,
   DBTableDef,
   Dict,
@@ -77,4 +78,12 @@ export const templateApi = {
   add: (data: Partial<CodeTemplate>) => post<CodeTemplate>('/codegen/template/add', data),
   update: (data: CodeTemplate) => post<CodeTemplate>('/codegen/template/update', data),
   remove: (id: string) => post<boolean>('/codegen/template/remove', { id }),
+}
+
+/* ---------- 设置（mock 扩展接口） ---------- */
+export const settingsApi = {
+  /** 查询应用设置（列默认类型规则等） */
+  query: () => get<AppSettings>('/codegen/settings/query'),
+  /** 更新应用设置 */
+  update: (data: AppSettings) => post<AppSettings>('/codegen/settings/update', data),
 }

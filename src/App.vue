@@ -6,16 +6,19 @@ import { useUiStore } from '@/stores/ui'
 import { useModelStore } from '@/stores/model'
 import { useDictStore } from '@/stores/dict'
 import { useTemplateStore } from '@/stores/template'
+import { useSettingsStore } from '@/stores/settings'
 import AppHeader from '@/components/layout/AppHeader.vue'
 import EditorView from '@/views/EditorView.vue'
 import DictView from '@/views/DictView.vue'
 import TemplateView from '@/views/TemplateView.vue'
+import SettingsView from '@/views/SettingsView.vue'
 
 const themeStore = useThemeStore()
 const ui = useUiStore()
 const model = useModelStore()
 const dict = useDictStore()
 const templateStore = useTemplateStore()
+const settingsStore = useSettingsStore()
 
 const antdThemeConfig = computed(() => ({
   algorithm: themeStore.isDark ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
@@ -28,6 +31,7 @@ watch(
     if (page === 'editor') model.init()
     else if (page === 'dict') dict.init()
     else if (page === 'template') templateStore.init()
+    else if (page === 'settings') settingsStore.init()
   },
   { immediate: true },
 )
@@ -42,6 +46,7 @@ watch(
           <EditorView v-if="ui.page === 'editor'" />
           <DictView v-else-if="ui.page === 'dict'" />
           <TemplateView v-else-if="ui.page === 'template'" />
+          <SettingsView v-else-if="ui.page === 'settings'" />
         </main>
       </div>
     </a-app>

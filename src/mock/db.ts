@@ -6,6 +6,7 @@
  */
 import JSZip from 'jszip'
 import type {
+  AppSettings,
   CodeTemplate,
   DBTableDef,
   Dict,
@@ -24,6 +25,7 @@ import {
   SEED_DB_TABLES,
   SEED_DICTS,
   SEED_NAVIGATES,
+  SEED_SETTINGS,
   SEED_TABLES,
   SEED_TEMPLATES,
 } from './seed'
@@ -40,6 +42,7 @@ interface MockDB {
   navigates: TableNavigate[]
   dicts: Dict[]
   templates: CodeTemplate[]
+  settings: AppSettings
 }
 
 /** 业务错误 */
@@ -69,6 +72,7 @@ function createSeedDB(): MockDB {
     navigates: JSON.parse(JSON.stringify(SEED_NAVIGATES)),
     dicts: JSON.parse(JSON.stringify(SEED_DICTS)),
     templates: JSON.parse(JSON.stringify(SEED_TEMPLATES)),
+    settings: JSON.parse(JSON.stringify(SEED_SETTINGS)),
   }
 }
 
@@ -77,7 +81,13 @@ function loadDB(): MockDB {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw) {
       const parsed = JSON.parse(raw) as MockDB
-      if (parsed && parsed.version === 2 && Array.isArray(parsed.tables)) return parsed
+      if (parsed && parsed.version === 2 && Array.isArray(parsed.tables)) {
+        // 兼容旧数据（新增 settings 字段前落盘）：缺失时补种子设置
+        if (!parsed.settings || !Array.isArray(parsed.settings.columnTypeRules)) {
+          parsed.settings = JSON.parse(JSON.stringify(SEED_SETTINGS))
+        }
+        return parsed
+      }
     }
   } catch {
     /* 忽略损坏数据，回退种子 */
@@ -346,6 +356,28 @@ const handlers: Record<string, Handler> = {
     const id = requireStr(body?.id, 'id', '模板ID')
     db.templates = db.templates.filter((t) => t.id !== id)
     return true
+  },
+
+  /* ---------- 设置（规范未定义，mock 扩展接口） ---------- */
+  'GET /codegen/settings/query': () => JSON.parse(JSON.stringify(db.settings)),
+
+  'POST /codegen/settings/update': ({ body }) => {
+    const rules = Array.isArray(body?.columnTypeRules) ? body.columnTypeRules : []
+    const normalized = rules.map((r: any) => ({
+      id: String(r?.id || uid('rule-')),
+      pattern: String(r?.pattern ?? '').trim(),
+      javaType: String(r?.javaType || 'String'),
+    }))
+    for (const r of normalized) {
+      if (!r.pattern) throw new MockError('存在空的列类型正则表达式')
+      try {
+        new RegExp(r.pattern, 'i')
+      } catch {
+        throw new MockError(`无效的正则表达式：${r.pattern}`)
+      }
+    }
+    db.settings = { columnTypeRules: normalized }
+    return JSON.parse(JSON.stringify(db.settings))
   },
 }
 

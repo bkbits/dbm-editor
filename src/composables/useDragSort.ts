@@ -1,0 +1,93 @@
+/**
+ * 行拖拽排序组合式函数（HTML5 Drag & Drop，手柄触发）
+ *
+ * 设计要点：
+ * - 仅在手柄 pointerdown 的瞬间将所在行置为 draggable，避免整行常驻
+ *   draggable 破坏行内输入框的文本选择/拖选行为
+ * - 原生拖拽期间浏览器不派发 pointerup，复位依赖 dragend；
+ *   未形成拖拽（按下即松开）时由一次性 window pointerup 监听复位
+ * - 落点依据悬停行的上/下半区决定插入位置，插入位置按 splice
+ *   语义换算，任意 from/to 组合均正确
+ */
+import { reactive } from 'vue'
+
+export interface DragSortState {
+  /** 被拖拽行索引（-1 表示无拖拽） */
+  from: number
+  /** 当前悬停行索引 */
+  over: number
+  /** 悬停位置：目标行上缘 / 下缘 */
+  pos: 'above' | 'below'
+}
+
+export function useDragSort<T>(getList: () => T[], onSorted?: () => void) {
+  const state = reactive<DragSortState>({ from: -1, over: -1, pos: 'above' })
+
+  /** 手柄按下：置 draggable 并注册一次性指针复位（未形成拖拽时） */
+  function handleDown(idx: number) {
+    state.from = idx
+    state.over = -1
+    window.addEventListener(
+      'pointerup',
+      () => {
+        state.from = -1
+      },
+      { once: true },
+    )
+  }
+
+  function onDragStart(idx: number, e: DragEvent) {
+    if (state.from !== idx) {
+      e.preventDefault()
+      return
+    }
+    if (e.dataTransfer) {
+      // Firefox 要求拖拽起始时写入数据，否则拖拽不会发起
+      e.dataTransfer.setData('text/plain', String(idx))
+      e.dataTransfer.effectAllowed = 'move'
+    }
+  }
+
+  function onDragEnd() {
+    state.from = -1
+    state.over = -1
+    state.pos = 'above'
+  }
+
+  function onDragOver(idx: number, e: DragEvent) {
+    if (state.from < 0) return
+    const row = e.currentTarget as HTMLElement
+    const rect = row.getBoundingClientRect()
+    state.over = idx
+    state.pos = e.clientY - rect.top < rect.height / 2 ? 'above' : 'below'
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
+  }
+
+  function onDrop() {
+    const from = state.from
+    const over = state.over
+    const above = state.pos === 'above'
+    onDragEnd()
+    if (from < 0 || over < 0 || from === over) return
+    const list = getList()
+    if (!Array.isArray(list) || from >= list.length || over >= list.length) return
+    // 先移除再插入：插入目标大于来源时需要回退一位换算
+    const insertRaw = above ? over : over + 1
+    const [item] = list.splice(from, 1)
+    const insert = insertRaw > from ? insertRaw - 1 : insertRaw
+    list.splice(insert, 0, item)
+    onSorted?.()
+  }
+
+  /** 行样式类：拖拽中半透明 + 上/下落点指示线 */
+  function rowClass(idx: number) {
+    const active = state.from >= 0
+    return {
+      dragging: state.from === idx,
+      'drop-above': active && state.over === idx && state.pos === 'above',
+      'drop-below': active && state.over === idx && state.pos === 'below',
+    }
+  }
+
+  return { state, handleDown, onDragStart, onDragEnd, onDragOver, onDrop, rowClass }
+}

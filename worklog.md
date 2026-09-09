@@ -94,3 +94,33 @@ Stage Summary:
 - 关键决策：插件 dist 版不可 ESM 导入故深路径引源码；<%# %> 注释模式为官方 grammar 的本地增补；连接点/隐藏按钮用 opacity+scale+pointer-events 替代 display 切换实现平滑过渡
 - 截图：docs/screenshots/template-eta-highlight(.|-dark).png、edge-selected-solid.png、edge-dark-hover-select.png
 - 交付物：download/graph-db-model-editor.zip + download/README.md
+
+---
+Task ID: 4
+Agent: main (Super Z)
+Task: 字段排序改为拖拽手柄 + 新增设置模块（列默认类型：DB 导入时正则依序匹配取第一条命中的 Java 类型）
+
+Work Log:
+- 上下文恢复：通读 worklog（Task 1-3 全部完成）+ 重读 TableEditDialog/ui/AppHeader/App/javaType/db/seed/modules/types/model/ImportDBDialog/DictView，确认代码风格与接口约定
+- 新增 src/composables/useDragSort.ts：HTML5 DnD 手柄拖拽排序组合式函数——手柄 pointerdown 瞬间置行 draggable（避免常驻 draggable 破坏输入框文本选择）、一次性 window pointerup 复位未成拖拽的按下、dragstart 校验 from、dragover 上/下半区定位、drop 以 splice 语义换算插入位、rowClass() 输出 dragging/drop-above/drop-below
+- TableEditDialog：删除 ArrowUp/ArrowDown 与 moveColumn，字段行首改为 GripVertical 手柄（touch-action:none、grab 光标、hover 过渡），挂接拖拽事件与落点指示线（box-shadow 2px 主色不占布局），cols-grid 首列 42px→28px；onSorted=renumber 保持 sort 重排
+- 设置模块数据层：types 新增 ColumnTypeRule/AppSettings；seed 新增 SEED_SETTINGS（14 条有序规则，bigint 先于 int、datetime/timestamp 先于 time/date、char(1) 先于 char 防前缀抢匹配）；MockDB 增 settings 字段，loadDB 对旧 v2 存量补种子（不升版本避免清用户数据），handlers 增 GET/POST /codegen/settings/query|update（正则合法性校验）
+- settingsApi + settings Pinia（init/save/matchJavaType/compiledRules 跳过非法正则；SETTINGS_JAVA_TYPES=规格 11 种：Character/String/Long/Integer/Float/Double/BigDecimal/LocalDateTime/LocalDate/LocalTime/Timestamp）
+- model.importFromDB：懒加载 settings 后 javaType=matchJavaType ?? getJavaTypeByType（设置第一条命中优先，未命中回退内置映射）
+- 页面接线：PageName 增 'settings'，AppHeader 增「系统设置」导航（Settings 图标），App.vue v-if 分支 + 进页 init
+- SettingsView.vue：规则表（手柄拖拽/序号/正则输入/Java 类型选择/测试标记/删除）+ 拖拽落点指示线 + 非法正则即时标红（红边框+行内错误+禁用保存）+ 规则测试面板（输入任意类型实时预览，区分「生效」与「命中被抢先」，回退显示内置映射结果）+ 脏状态提示/放弃修改/保存
+- ImportDBDialog：打开时预取设置；导入提示说明规则推导；字段数悬停 title 展示各字段「列名 类型 → Java 类型」预览
+- 验证（agent-browser 真实浏览器）：
+  * 设置页：14 条种子规则加载；测试面板 VARCHAR(255)→String(#2)、Decimal(6, 4)→BigDecimal(#7)、UUID→未命中回退 String；无效正则"("→标红+保存禁用+提示；修改 int→Long 保存→localStorage 持久化
+  * 拖拽（合成分发完整 DragEvent 序列：pointerdown→dragstart→dragover→drop→dragend）：规则行 14→0（above）、1→3（below）、拖拽中 drop-below/dragging/draggable=true 类名实测、无 drop 的 dragend 不重排且状态复位
+  * 表编辑对话框：4 字段行均含手柄且无上移下移；id 拖至 pv 下方→[stat_date,pv,id,uv]→保存→localStorage sort 0-3 持久化→画布卡片顺序同步
+  * 设置驱动导入：int→Long 保存后导入 t_stat_daily→pv/uv INT→Long（设置规则覆盖内置 Integer），预览 tooltip 一致
+  * 重置演示数据→13 表/14 规则/int→Integer 全部还原；控制台 0 错误；亮暗双主题截图
+  * 注：agent-browser drag 命令（Playwright 合成拖拽）会将 dragstart 派发到固定行（工具怪癖），改用直接派发忠实 DragEvent 序列验证，逻辑全部正确
+- vue-tsc 通过；vite build 通过（2.62s）；scripts/package.sh 固化打包流程（排除 node_modules/dist/.git/skills），重新打包 download/graph-db-model-editor.zip（2.7MB/95 文件，含顶层目录）
+- README 更新：表编辑改「拖拽手柄排序」、新增「系统设置」章节、Mock API 增 settings 说明、项目结构增 composables/SettingsView/settings、截图表格更新
+
+Stage Summary:
+- 两项需求全部完成并经真实浏览器验证：字段拖拽排序（共用组合式函数，含落点指示线/状态复位/持久化）、设置模块（列默认类型正则依序匹配，第一条命中优先，未命中回退内置映射，含校验/测试/持久化）
+- 关键决策：手柄按下瞬间才置 draggable（保输入框文本交互）；localStorage v2 不升版本、存量数据补默认设置；设置仅作用于 DB 导入默认值（按规格严格限定），编辑器内 onTypeChange 仍走内置映射
+- 交付物：download/graph-db-model-editor.zip + download/README.md；截图 docs/screenshots/settings-column-rules(.|-dark).png、settings-view.png、table-columns-drag-handle.png

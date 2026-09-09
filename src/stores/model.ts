@@ -21,6 +21,7 @@ import { toCamelCase } from '@/utils/string'
 import { getJavaTypeByType } from '@/utils/javaType'
 import { buildNavigateView } from '@/utils/navigate'
 import { resetDB } from '@/mock/db'
+import { useSettingsStore } from './settings'
 import { useHistoryStore } from './history'
 
 /** 模型快照（撤销/重做用） */
@@ -351,6 +352,9 @@ export const useModelStore = defineStore('model', {
     /* ==================== 从数据库导入 ==================== */
     async importFromDB(categoryId: string, defs: DBTableDef[]) {
       const history = useHistoryStore()
+      // 列默认类型规则：设置中第一条命中优先，未命中回退内置映射
+      const settings = useSettingsStore()
+      if (!settings.loaded) await settings.init()
       history.capture(this.takeSnapshot())
       // 自动布局：从当前最大 y 下方开始网格排布
       const maxY = this.tables.reduce((m, t) => Math.max(m, (t.y ?? 0) + 260), 40)
@@ -376,7 +380,7 @@ export const useModelStore = defineStore('model', {
             propertyName: toCamelCase(c.columnName, true),
             sort: i,
             type: c.type,
-            javaType: getJavaTypeByType(c.type),
+            javaType: settings.matchJavaType(c.type) ?? getJavaTypeByType(c.type),
             comment: c.comment || '',
             notNull: c.notNull,
             primaryKey: c.primaryKey,

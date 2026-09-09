@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, watch } from 'vue'
 import { message } from 'antdv-next'
-import { Plus, Trash2, ArrowUp, ArrowDown } from '@lucide/vue'
+import { Plus, Trash2, GripVertical } from '@lucide/vue'
 import type { TableColumn, TableIndex } from '@/types/model'
 import { useUiStore } from '@/stores/ui'
 import { useModelStore } from '@/stores/model'
@@ -11,6 +11,7 @@ import { toCamelCase } from '@/utils/string'
 import { getJavaTypeByType, COMMON_DB_TYPES, COMMON_JAVA_TYPES } from '@/utils/javaType'
 import { uid } from '@/utils/id'
 import { NAVIGATE_TYPE_LABEL, CASCADE_LABEL, flipNavigateType } from '@/utils/navigate'
+import { useDragSort } from '@/composables/useDragSort'
 
 const ui = useUiStore()
 const model = useModelStore()
@@ -125,14 +126,9 @@ function removeColumn(idx: number) {
   draft.columns.splice(idx, 1)
   renumber()
 }
-function moveColumn(idx: number, dir: -1 | 1) {
-  const target = idx + dir
-  if (target < 0 || target >= draft.columns.length) return
-  const list = draft.columns
-  const [item] = list.splice(idx, 1)
-  list.splice(target, 0, item)
-  renumber()
-}
+
+/* 字段拖拽排序（手柄触发，替代上移/下移按钮） */
+const columnDrag = useDragSort(() => draft.columns, renumber)
 function renumber() {
   draft.columns.forEach((c, i) => (c.sort = i))
 }
@@ -371,16 +367,24 @@ async function save() {
           <span></span>
         </div>
         <div class="columns-body">
-          <div v-for="(col, idx) in draft.columns" :key="col.id" class="column-row cols-grid">
-            <span class="sort-btns">
-              <button type="button" :disabled="idx === 0" @click="moveColumn(idx, -1)"><ArrowUp :size="11" /></button>
-              <button
-                type="button"
-                :disabled="idx === draft.columns.length - 1"
-                @click="moveColumn(idx, 1)"
-              >
-                <ArrowDown :size="11" />
-              </button>
+          <div
+            v-for="(col, idx) in draft.columns"
+            :key="col.id"
+            class="column-row cols-grid"
+            :data-idx="idx"
+            :class="columnDrag.rowClass(idx)"
+            :draggable="columnDrag.state.from === idx"
+            @dragstart="columnDrag.onDragStart(idx, $event)"
+            @dragend="columnDrag.onDragEnd()"
+            @dragover.prevent="columnDrag.onDragOver(idx, $event)"
+            @drop.prevent="columnDrag.onDrop()"
+          >
+            <span
+              class="drag-handle"
+              title="拖拽排序"
+              @pointerdown="columnDrag.handleDown(idx)"
+            >
+              <GripVertical :size="13" />
             </span>
             <a-input
               v-model:value="col.columnName"
@@ -574,7 +578,7 @@ async function save() {
 
 .cols-grid {
   display: grid;
-  grid-template-columns: 42px minmax(90px, 1fr) minmax(80px, 1fr) 130px 116px 44px 44px 108px minmax(70px, 1fr) 26px;
+  grid-template-columns: 28px minmax(96px, 1fr) minmax(84px, 1fr) 132px 118px 44px 44px 108px minmax(72px, 1fr) 26px;
   gap: 4px 6px;
   align-items: center;
 }
@@ -610,34 +614,40 @@ async function save() {
     &:hover {
       background: var(--bg-hover);
     }
+
+    &.dragging {
+      opacity: 0.45;
+    }
+
+    &.drop-above {
+      box-shadow: 0 -2px 0 0 var(--primary);
+    }
+
+    &.drop-below {
+      box-shadow: 0 2px 0 0 var(--primary);
+    }
   }
 }
 
-.sort-btns {
+.drag-handle {
   display: inline-flex;
-  gap: 2px;
+  align-items: center;
   justify-content: center;
+  width: 20px;
+  height: 22px;
+  border-radius: 4px;
+  color: var(--text-3);
+  cursor: grab;
+  touch-action: none;
+  transition: color 0.15s ease, background 0.15s ease;
 
-  button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 18px;
-    height: 18px;
-    border: 1px solid var(--border);
-    border-radius: 3px;
-    background: var(--bg-panel);
-    color: var(--text-3);
-    cursor: pointer;
+  &:hover {
+    color: var(--text-1);
+    background: var(--bg-hover);
+  }
 
-    &:hover:not(:disabled) {
-      color: var(--primary-text);
-      border-color: var(--primary);
-    }
-    &:disabled {
-      opacity: 0.4;
-      cursor: not-allowed;
-    }
+  &:active {
+    cursor: grabbing;
   }
 }
 

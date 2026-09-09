@@ -5,12 +5,15 @@ import type { DBTableDef } from '@/types/model'
 import { useUiStore } from '@/stores/ui'
 import { useModelStore } from '@/stores/model'
 import { useCanvasStore } from '@/stores/canvas'
+import { useSettingsStore } from '@/stores/settings'
 import { tableApi } from '@/api/modules'
 import { extractErrorMessage } from '@/api/http'
+import { getJavaTypeByType } from '@/utils/javaType'
 
 const ui = useUiStore()
 const model = useModelStore()
 const canvas = useCanvasStore()
+const settingsStore = useSettingsStore()
 
 const dialogOpen = computed(() => ui.importDB.open)
 
@@ -35,6 +38,8 @@ watch(dialogOpen, (open) => {
   if (open) {
     categoryId.value = model.categories[0]?.id ?? ''
     if (!dbTables.value.length) fetchDefs()
+    // 列默认类型规则预取：导入字段 Java 类型默认值由设置规则推导
+    settingsStore.init()
   }
 })
 
@@ -48,6 +53,21 @@ function toggle(tableName: string) {
 }
 
 const canImport = computed(() => Boolean(categoryId.value) && selected.size > 0)
+
+/** 字段 Java 类型预览：设置规则第一条命中优先，未命中回退内置映射 */
+function previewJavaType(type: string): string {
+  if (!settingsStore.loaded) return ''
+  return settingsStore.matchJavaType(type) ?? getJavaTypeByType(type)
+}
+
+function columnPreview(t: DBTableDef): string {
+  return t.columns
+    .map((c) => {
+      const jt = previewJavaType(c.type)
+      return jt ? `${c.columnName}  ${c.type} → ${jt}` : `${c.columnName}  ${c.type}`
+    })
+    .join('\n')
+}
 
 async function doImport() {
   if (!canImport.value) return
@@ -95,6 +115,10 @@ onMounted(() => {
         <a-button size="small" @click="fetchDefs">重新查询</a-button>
       </div>
 
+      <div class="import-tip">
+        字段 Java 类型默认值由「系统设置 → 列默认类型」规则依序正则匹配推导（悬停查看各字段推导结果）；未命中时回退内置类型映射。
+      </div>
+
       <div class="db-table-list">
         <div
           v-for="t in dbTables"
@@ -108,7 +132,7 @@ onMounted(() => {
             <div class="db-name mono">{{ t.tableName }}</div>
             <div class="db-comment">{{ t.comment }}</div>
           </div>
-          <div class="db-cols mono" :title="t.columns.map((c) => c.columnName).join(', ')">
+          <div class="db-cols mono" :title="columnPreview(t)">
             {{ t.columns.length }} 个字段
           </div>
         </div>
@@ -135,6 +159,17 @@ onMounted(() => {
       color: var(--text-2);
     }
   }
+}
+
+.import-tip {
+  font-size: 11.5px;
+  color: var(--text-3);
+  background: var(--bg-2);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-m);
+  padding: 6px 10px;
+  margin-bottom: 10px;
+  line-height: 1.6;
 }
 
 .db-table-list {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Database, BookText, FileCode, Sun, Moon } from '@lucide/vue'
+import { Database, BookText, FileCode, Sun, Moon, Settings } from '@lucide/vue'
 import { useThemeStore } from '@/stores/theme'
 import { useUiStore, type PageName } from '@/stores/ui'
 
@@ -10,6 +10,7 @@ const pages: Array<{ key: PageName; label: string; icon: unknown }> = [
   { key: 'editor', label: '模型编辑器', icon: Database },
   { key: 'dict', label: '字典管理', icon: BookText },
   { key: 'template', label: '模板管理', icon: FileCode },
+  { key: 'settings', label: '系统设置', icon: Settings },
 ]
 
 function switchPage(key: PageName) {
