@@ -258,6 +258,8 @@ export const useCanvasStore = defineStore('canvas', {
     /* ==================== 选择 ==================== */
     setSelection(ids: string[]) {
       this.selectedIds = ids
+      // 单一焦点语义：选中表时清除导航线选中态，避免表选中与线段选中两种高亮叠加混淆
+      this.selectedNavigateId = ''
     },
     selectCategory(id: string, additive = false) {
       if (additive) {
@@ -278,6 +280,8 @@ export const useCanvasStore = defineStore('canvas', {
       } else {
         this.selectedIds = [id]
       }
+      // 单一焦点语义（含 Ctrl/Shift 多选卡片路径）
+      this.selectedNavigateId = ''
     },
     clearSelection() {
       this.selectedIds = []
@@ -306,7 +310,9 @@ export const useCanvasStore = defineStore('canvas', {
     resetPointerCapture() {
       this.pointerCaptured = false
     },
-    /** 画布空白处按下（左键=框选，中键/空格+左键=平移） */
+    /** 画布根按下（左键=框选，中键/空格+左键=平移）。
+     *  注意：卡片会 stop 掉 pointerdown 冒泡，但导航线（含 NN 胶囊）不会 ——
+     *  在线段上按下时事件同样会冒泡到根走到这里 */
     onCanvasPointerDown(e: PointerEvent) {
       if (this.mode) return
       if (e.button === 1 || (e.button === 0 && this.spacePressed)) {
@@ -324,10 +330,15 @@ export const useCanvasStore = defineStore('canvas', {
       this.mode = 'select'
       this.additiveSelect = e.ctrlKey || e.shiftKey
       this.selectDraft = { x0: local.x, y0: local.y, x1: local.x, y1: local.y }
-      // 空白画布按下即捕获指针：框选没有 click/dblclick 目标语义，无需延迟；
+      // 按下目标为空白画布：立即捕获指针 —— 框选没有 click/dblclick 目标语义，无需延迟；
       // 且立即捕获后指针移出画布（首个 move 即出界）仍能持续更新选框，
-      // 否则快速拖拽时选框会卡在起点（move 事件派发到画布外的元素）
-      this.captureOnce(e)
+      // 否则快速拖拽时选框会卡在起点（move 事件派发到画布外的元素）。
+      // 按下目标为导航线/NN 胶囊（pointerdown 会冒泡到根）：必须延迟捕获（位移>3px 才捕获），
+      // 否则立即捕获会把后续 click/dblclick 派发到捕获元素（画布根）而非线段本身，
+      // 导致线段单击选中、双击编辑、胶囊点击展开中间表全部失效
+      const target = e.target as Element | null
+      const fromBlank = !target?.closest?.('[data-navigate-id]')
+      if (fromBlank) this.captureOnce(e)
     },
     /** 表卡片按下（卡片组件转发） */
     beginCardDrag(tableId: string, e: PointerEvent) {
@@ -440,6 +451,8 @@ export const useCanvasStore = defineStore('canvas', {
         this.selectedIds = this.additiveSelect
           ? [...new Set([...this.selectedIds, ...hits])]
           : hits
+        // 框选切换为表焦点：清除导航线选中态
+        this.selectedNavigateId = ''
       } else if (mode === 'dragCards' && this.dragDraft) {
         const ids = this.dragDraft.ids
         const moved = this.dragDraft.moved

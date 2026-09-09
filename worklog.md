@@ -156,3 +156,36 @@ Stage Summary:
 - 两项需求全部完成并经真实浏览器验证：字段拖拽排序（共用组合式函数，含落点指示线/状态复位/持久化）、设置模块（列默认类型正则依序匹配，第一条命中优先，未命中回退内置映射，含校验/测试/持久化）
 - 关键决策：手柄按下瞬间才置 draggable（保输入框文本交互）；localStorage v2 不升版本、存量数据补默认设置；设置仅作用于 DB 导入默认值（按规格严格限定），编辑器内 onTypeChange 仍走内置映射
 - 交付物：download/graph-db-model-editor.zip + download/README.md；截图 docs/screenshots/settings-column-rules(.|-dark).png、settings-view.png、table-columns-drag-handle.png
+
+---
+Task ID: 6
+Agent: main (Super Z)
+Task: 修复导航线双击编辑失效 + 修复导航线单击选中失效 + 卡片悬停/选中时关联导航线联动切换对应样式
+
+Work Log:
+- 修改前快照：scripts/snapshot.sh → snapshot/20260909094359.zip（101 文件）
+- 根因诊断（两项失效同源）：Task 5 为修复框选出画布卡死将 beginSelect 改为 pointerdown 立即捕获指针，并假设「beginSelect 只来自空白画布」；但导航线（含 NN 胶囊）的 pointerdown 会冒泡到画布根（不同于卡片的 @pointerdown.stop），在线段上按下同样触发 beginSelect → 立即捕获 → click/dblclick 被派发到捕获元素（画布根）而非线段本身 → 单击选中、双击编辑、NN 胶囊点击全部失效；且 pointerup 时 clearSelection 还会清掉已有线段选中
+- canvas.ts beginSelect 修复：按 pointerdown 命中目标区分捕获时机——target 不在 [data-navigate-id] 内（真空白画布）才立即捕获（保留 Task 5 的出画布跟踪修复）；线段/胶囊上按下走延迟捕获（位移 > 3px 才捕获），无位移单击/双击正常派发到线段
+- 单一焦点语义：setSelection / selectTable（含 Ctrl/Shift 多选）/ 框选 onPointerUp 选中分支均清除 selectedNavigateId（setSelectedNavigate 原有反向清除保留）——表选中与线段选中互斥，画布同一时刻只有一种选中焦点，避免两种高亮叠加混淆
+- 卡片 ⇄ 导航线联动（NavigateEdge.vue）：isRelated 拆分为 isRelatedHover（hoveredTableId 命中关联端点 → related-hover 类 → 悬停风格 2.8px/0.85）与 isRelatedSelected（selectedIds 命中关联端点 → related-selected 类 → 选中风格 3.4px/主色/光晕/标记描边）；isEndpoint 覆盖 self/target/mappingTable（NN 经由的中间表同样视为关联端点）；选中规则写在悬停规则之后，两类叠加时选中风格优先；提示 tooltip 仍仅在线段自身悬停/选中时出现
+- 状态残留清理：TableCard 卸载时若 hoveredTableId 指向自身则清除（卡片因隐藏/删除/视口裁剪卸载时 mouseleave 不保证触发，否则关联线会一直保持联动高亮）；NavigateEdge 卸载时同理清理 hoveredNavigateId/selectedNavigateId
+- README 画布章节新增「卡片 ⇄ 导航线联动」条目
+- 验证（agent-browser 真实鼠标输入，1920×1080 视口）：
+  * 单击线段（getPointAtLength + elementFromPoint 实测可点击点后真实 mouse down/up）：edge 获得 hovered+selected 类、3.4px、主色、opacity 1、tooltip 出现 —— 修复前 click 被捕获偷走永远无法选中
+  * 双击线段：真实两次点击（CDP clickCount 限制无法合成原生 dblclick，已知限制）+ 合成 dblclick 派发到 .edge-hit → 「编辑导航」对话框打开 —— 与既往方法论一致的双重佐证
+  * 卡片悬停（真实 mouse move）：cms_article 的 4 条关联线全部 related-hover + 2.8px + 0.85
+  * 卡片单击选中（真实 down/up）：4 条关联线 related-hover+related-selected、3.4px、opacity 1、drop-shadow 光晕；无关 6 条线保持默认 2px 无光晕；选中前线段的 selected 被 setSelection 清除（单一焦点生效）
+  * NN 胶囊真实点击 → 中间表 cms_article_tag 显示、对应胶囊消失（残留胶囊属 n-user-role/n-role-menu，正确）
+  * 空白框选回归：真实拖拽选框实时更新、释放后按完全包含语义选中 sys_role（Task 5 修复保留）
+  * 卡片双击回归：dispatchEvent dblclick → 「编辑表 · sys_role」对话框打开
+  * 亮/暗双主题截图（edge-related-light/dark.png）：暗色下 4 条关联线 3.4px + 暗色主色 rgb(45,212,191)
+  * 控制台 0 错误（仅 vite HMR 日志）
+- vue-tsc 通过；vite build 通过（2.81s）
+- patch 留档：patch/20260909095132.patch（4 文件 12K）
+- 重新打包 download/graph-db-model-editor.zip（106 文件 3.8M，无 snapshot/patch 泄漏，含新截图）
+
+Stage Summary:
+- 三项需求全部完成并经真实浏览器输入验证：线段单击选中与双击编辑恢复（根因是 Task 5 立即捕获偷走 click/dblclick——按命中目标区分捕获时机后，空白立即捕获与线段延迟捕获两全）、卡片悬停/选中时关联导航线（含 NN 中间表）联动切换到对应悬停/选中风格
+- 关键决策：不在线段模板上 stop pointerdown（保留从线段上起拖的框选能力），改为 beginSelect 内按 target.closest('[data-navigate-id]') 判定空白与否；表选中与线段选中互斥的单一焦点语义；卡片/线段卸载时主动清理悬停态防联动残留
+- 交付物：snapshot/20260909094359.zip（改前快照）、patch/20260909095132.patch（本轮改动）、download/graph-db-model-editor.zip（106 文件）
+- 截图：docs/screenshots/edge-related-light.png、edge-related-dark.png

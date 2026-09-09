@@ -115,6 +115,9 @@ onMounted(() => {
 })
 onBeforeUnmount(() => {
   ro?.disconnect()
+  // 卡片可能因隐藏/删除/视口裁剪而卸载：若卸载时仍处于悬停态，mouseleave 不一定触发，
+  // 需主动清理，否则 hoveredTableId 残留会让关联导航线一直保持联动高亮
+  if (canvas.hoveredTableId === props.tableId) canvas.setHoveredTable('')
 })
 </script>
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onBeforeUnmount } from 'vue'
 import type { TableNavigate } from '@/types/model'
 import { useCanvasStore } from '@/stores/canvas'
 import { useModelStore } from '@/stores/model'
@@ -139,11 +139,20 @@ const tipText = computed(() => {
 
 const isHovered = computed(() => canvas.hoveredNavigateId === nav.value.id)
 const isSelected = computed(() => canvas.selectedNavigateId === nav.value.id)
-/** 悬停卡片时，其关联线段联动高亮 */
-const isRelated = computed(() => {
+/** 悬停卡片时，其关联线段联动切换到悬停风格（含 NN 中间表） */
+const isRelatedHover = computed(() => {
   const h = canvas.hoveredTableId
-  return Boolean(h) && (h === nav.value.self || h === nav.value.target)
+  return Boolean(h) && isEndpoint(h)
 })
+/** 选中卡片（单选/多选/框选）时，其关联线段联动切换到选中风格（含 NN 中间表） */
+const isRelatedSelected = computed(() => {
+  const sel = canvas.selectedIds
+  return sel.length > 0 && sel.some(isEndpoint)
+})
+/** 线段的关联端点：两端表 + NN 经由的中间表（线段同样“连着”它） */
+function isEndpoint(tableId: string): boolean {
+  return tableId === nav.value.self || tableId === nav.value.target || tableId === nav.value.mappingTable
+}
 
 const tipWidth = computed(() => tipText.value.length * 7.6 + 20)
 
@@ -172,6 +181,13 @@ function onContext(e: MouseEvent) {
 function showMappingTable() {
   if (nav.value.mappingTable) canvas.showTable(nav.value.mappingTable)
 }
+
+/* 卸载时清理自身悬停/选中态：线段可能因端点表隐藏/删除/导航删除而卸载，
+   若不清理，重新渲染后会残留悬停/选中样式 */
+onBeforeUnmount(() => {
+  if (canvas.hoveredNavigateId === nav.value.id) canvas.setHoveredNavigate('')
+  if (canvas.selectedNavigateId === nav.value.id) canvas.setSelectedNavigate(nav.value.id)
+})
 </script>
 
 <template>
@@ -179,7 +195,12 @@ function showMappingTable() {
     <g
       v-if="geo"
       class="edge"
-      :class="{ hovered: isHovered, selected: isSelected, related: isRelated }"
+      :class="{
+        hovered: isHovered,
+        selected: isSelected,
+        'related-hover': isRelatedHover,
+        'related-selected': isRelatedSelected,
+      }"
       :data-navigate-id="nav.id"
       @pointerenter.stop="onEnter"
       @pointerleave.stop="onLeave"
@@ -331,10 +352,10 @@ function showMappingTable() {
     }
   }
 
-  /* 悬停（含悬停卡片时关联线联动高亮）：
-     保持实线，颜色为主题色但透明度较低、线宽较细 —— 与选中样式有明显但克制的区别 */
+  /* 悬停 + 悬停卡片时关联线联动：保持实线，颜色为主题色但透明度较低、线宽较细
+     —— 与选中样式有明显但克制的区别（卡片悬停 → 线段悬停风格） */
   &.hovered,
-  &.related {
+  &.related-hover {
     .edge-line {
       stroke: var(--edge-hover);
       stroke-width: 2.8;
@@ -345,8 +366,11 @@ function showMappingTable() {
     }
   }
 
-  /* 选中：实线（不用虚线）、主题色加粗 + 光晕 + 标记描边强调 */
-  &.selected {
+  /* 选中 + 选中卡片时关联线联动（卡片选中 → 线段选中风格）：
+     实线（不用虚线）、主题色加粗 + 光晕 + 标记描边强调；
+     写在悬停规则之后，叠加时选中风格优先 */
+  &.selected,
+  &.related-selected {
     .edge-line {
       stroke: var(--primary);
       stroke-width: 3.4;
