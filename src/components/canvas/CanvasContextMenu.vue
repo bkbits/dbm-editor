@@ -268,6 +268,19 @@ onBeforeUnmount(() => {
   border-radius: var(--radius-m);
   box-shadow: var(--shadow-pop);
   padding: 4px;
+  /* 弹出过渡：淡入 + 轻微上移，避免生硬闪现 */
+  animation: ctx-menu-in 0.14s ease both;
+}
+
+@keyframes ctx-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .ctx-item {
@@ -283,6 +296,7 @@ onBeforeUnmount(() => {
   font-size: 12.5px;
   cursor: pointer;
   text-align: left;
+  transition: background-color 0.12s ease, color 0.12s ease;
 
   .icon-spacer {
     width: 13px;

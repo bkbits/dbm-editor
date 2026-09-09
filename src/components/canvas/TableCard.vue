@@ -231,7 +231,7 @@ onBeforeUnmount(() => {
   box-shadow: var(--card-shadow);
   font-size: 12px;
   z-index: 2;
-  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+  transition: box-shadow 0.18s ease, border-color 0.18s ease;
 
   &:hover {
     box-shadow: var(--card-shadow-hover);
@@ -254,7 +254,8 @@ onBeforeUnmount(() => {
   }
 }
 
-/* 连接点 */
+/* 连接点：常驻渲染，默认透明缩小且不拦截事件；卡片悬停/选中时淡入放大
+   （用 opacity + scale 过渡代替 display 切换；translate/scale 独立属性避免与定位变换冲突） */
 .connector {
   position: absolute;
   width: 16px;
@@ -263,11 +264,16 @@ onBeforeUnmount(() => {
   background: var(--bg-panel);
   border: 1.5px solid var(--card-conn);
   color: var(--text-3);
-  display: none;
+  display: flex;
   align-items: center;
   justify-content: center;
   cursor: crosshair;
   z-index: 3;
+  opacity: 0;
+  scale: 0.55;
+  pointer-events: none;
+  transition: opacity 0.16s ease, scale 0.16s ease, background-color 0.12s ease,
+    border-color 0.12s ease, color 0.12s ease;
 
   &:hover {
     background: var(--primary);
@@ -278,33 +284,36 @@ onBeforeUnmount(() => {
 
 .table-card:hover .connector,
 .table-card.selected .connector {
-  display: flex;
+  opacity: 1;
+  scale: 1;
+  pointer-events: auto;
 }
 
-/* 隐藏按钮：卡片悬停时显示（与连接点同规则） */
+/* 隐藏按钮：卡片悬停时淡入（与连接点同规则；常驻占位保持表头布局稳定） */
 .table-card:hover .head-hide-btn {
-  display: inline-flex;
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .conn-n {
   left: 50%;
   top: -8px;
-  transform: translateX(-50%);
+  translate: -50% 0;
 }
 .conn-s {
   left: 50%;
   bottom: -8px;
-  transform: translateX(-50%);
+  translate: -50% 0;
 }
 .conn-e {
   top: 50%;
   right: -8px;
-  transform: translateY(-50%);
+  translate: 0 -50%;
 }
 .conn-w {
   top: 50%;
   left: -8px;
-  transform: translateY(-50%);
+  translate: 0 -50%;
 }
 
 /* 表头 */
@@ -356,9 +365,9 @@ onBeforeUnmount(() => {
     flex-shrink: 0;
   }
 
-  /* 隐藏按钮：默认隐藏，卡片悬停时显示（悬停规则在顶层 .table-card:hover 中） */
+  /* 隐藏按钮：常驻占位但透明不可点，卡片悬停时淡入（悬停规则在顶层 .table-card:hover 中） */
   .head-hide-btn {
-    display: none;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
     width: 18px;
@@ -371,6 +380,9 @@ onBeforeUnmount(() => {
     background: transparent;
     color: var(--text-3);
     cursor: pointer;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.16s ease, background-color 0.12s ease, color 0.12s ease;
 
     &:hover {
       background: var(--danger-weak);
@@ -399,6 +411,7 @@ onBeforeUnmount(() => {
   gap: 5px;
   padding: 2.5px 10px;
   min-height: 22px;
+  transition: background-color 0.12s ease;
 
   &:hover {
     background: var(--card-row-hover);
@@ -486,6 +499,7 @@ onBeforeUnmount(() => {
   cursor: pointer;
   border-radius: var(--radius-s);
   border: 1px dashed var(--border);
+  transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
 
   &:hover {
     color: var(--primary-text);
@@ -595,6 +609,7 @@ onBeforeUnmount(() => {
     .nav-target {
       color: var(--primary-text);
       cursor: pointer;
+      transition: color 0.12s ease;
 
       &:hover {
         text-decoration: underline;

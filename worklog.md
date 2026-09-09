@@ -62,3 +62,35 @@ Stage Summary:
 - 最终状态：亮色主题、10 可见表+3 隐藏中间表、10 导航、0 控制台错误
 - 截图存于 docs/screenshots/（编辑器亮/暗、表编辑对话框、模板视图）
 - 交付物：README.md（vp 启动说明）+ 源码 ZIP
+
+---
+Task ID: 3
+Agent: main (Super Z)
+Task: Eta 模板代码高亮（highlights-eta 插件）+ 导航线悬停样式修正（实线且与选中可区分）+ 画布元素悬停/选中全面过渡
+
+Work Log:
+- 依赖：bun add highlightjs-eta@0.1.0（eta-dev 官方插件）；发现其 package.json browser 字段指向 dist/eta.min.js（依赖全局 hljs 的浏览器脚本，无 ESM 导出，构建报 MISSING_EXPORT），改为深路径导入 ESM 源码 highlightjs-eta/src/languages/eta.js（类型声明补在 src/env.d.ts，LanguageFn）
+- highlight.ts：注册 eta 语言；官方 grammar 未区分 <%# %> 注释，在其 contains 头部增补 hljs.COMMENT('<%#','%>')（需置于标签模式之前以优先命中）；languageOfFileName 增加 .eta/.ejs 映射；新增 highlightTemplateSource()
+- TemplateView.vue：模板编辑器从裸 textarea 升级为「高亮覆盖层编辑器」——pre.code-overlay（v-html 高亮结果）置于透明 textarea 之下，两层字体/字号/行高/内边距/white-space: pre/tab-size 完全一致逐字符对齐；textarea 文字透明 + caret-color 可见 + ::placeholder/::selection 独立配色；@scroll 同步 scrollTop/scrollLeft 到覆盖层；尾行补偿（内容以 \n 结尾时补 \n 保证滚动高度一致）；wrap="off" 关闭软换行
+- NavigateEdge.vue 样式重构：
+  * 悬停（含 related 联动）：实线（移除虚线可能性）、--edge-hover 主色、2.8px、stroke-opacity 0.85、无光晕
+  * 选中：实线（移除 stroke-dasharray: 7 4）、--primary 全不透明、3.4px、drop-shadow 光晕（新增 --edge-select-glow 亮/暗变量）、基数标记描边 + NN 胶囊描边强调
+  * 区分度：线宽 2.8↔3.4、透明度 0.85↔1、光晕无↔有、标记文本色↔文本+描边（克制但可辨）
+- 过渡效果全覆盖：.edge-line（stroke/stroke-width/stroke-opacity/filter 0.18s）、edge-mark rect/text、nn-pill rect/label/plus、edge-tip 淡入动画（edge-tip-in）、table-card 阴影/边框、.connector 由 display 切换改为 opacity+scale 淡入缩放（translate/scale 独立变换属性避免与四向定位冲突，pointer-events 联动）、head-hide-btn 同规则（常驻占位布局稳定）、col-row 背景行悬停、cols-toggle/索引切换三属性、nav-target 颜色、右键菜单项颜色 + ctx-menu-in 弹出动画（淡入+上移）
+- 变量：variables.scss 亮暗两套各新增 --edge-select-glow
+- 验证（agent-browser 实测）：
+  * 悬停导航线：class=hovered、主色 2.8px、dasharray=none（实线）、opacity 0.85、无光晕、tooltip 出现、transition 已注册 —— 亮/暗双主题均通过
+  * 单击选中：3.4px、dasharray=none、opacity 1、drop-shadow(主色 4px) 光晕、标记描边主色 —— 亮/暗双主题均通过
+  * 卡片悬停：连接点 opacity/scale=1 + pointer-events auto + 过渡注册；隐藏按钮 opacity 1
+  * Eta 编辑器：覆盖层与 textarea 长度逐字符一致（1387=1387）；标签内 JS 令牌（keyword/string/property/function）正确着色；<%# %> 注释令牌即时高亮；输入实时同步；滚动同步（scrollTop 120=120）；亮暗双主题截图
+  * 回归：双击卡片（合成 dblclick 处理器链路）→ 编辑表对话框打开；右键菜单打开且弹出动画生效（ctx-menu-in）；实时预览照常渲染；控制台 0 错误
+  * 注：CDP 合成双击无 clickCount 无法触发浏览器原生 dblclick（上轮已知限制，非回归）
+- vue-tsc 类型检查通过；vite build 通过（2.54s）
+- 重新打包 download/graph-db-model-editor.zip（2.3MB / 84 文件，含顶层目录；清理首次打包误入的 zip-stage 残留）；download/README.md 同步为最新项目 README
+- README.md 更新：技术栈表加 highlights-eta；画布功能加悬停/选中样式与过渡说明；模板管理加 Eta 语法高亮编辑器说明
+
+Stage Summary:
+- 三项需求全部完成并经真实浏览器验证：eta 高亮编辑器（插件 + 注释扩展 + 覆盖层同步）、导航线悬停实线且与选中可区分、画布元素全面过渡
+- 关键决策：插件 dist 版不可 ESM 导入故深路径引源码；<%# %> 注释模式为官方 grammar 的本地增补；连接点/隐藏按钮用 opacity+scale+pointer-events 替代 display 切换实现平滑过渡
+- 截图：docs/screenshots/template-eta-highlight(.|-dark).png、edge-selected-solid.png、edge-dark-hover-select.png
+- 交付物：download/graph-db-model-editor.zip + download/README.md

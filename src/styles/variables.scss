@@ -73,6 +73,7 @@
   /* 导航线 */
   --edge: #7b8692;
   --edge-hover: var(--primary);
+  --edge-select-glow: rgba(13, 148, 136, 0.4);
   --edge-label-bg: #ffffff;
   --edge-label-text: #4d5761;
   --edge-pill-bg: #ffffff;
@@ -142,6 +143,7 @@
 
   --edge: #66707c;
   --edge-hover: var(--primary);
+  --edge-select-glow: rgba(45, 212, 191, 0.5);
   --edge-label-bg: #20262e;
   --edge-label-text: #aab3bd;
   --edge-pill-bg: #232a33;

@@ -257,7 +257,10 @@ function showMappingTable() {
     stroke-width: 2;
     vector-effect: non-scaling-stroke;
     pointer-events: none;
-    transition: stroke 0.15s ease;
+    /* 悬停/选中均为实线：颜色/粗细/透明度/光晕平滑过渡（虚线仅用于连线草稿） */
+    transition: stroke 0.18s ease, stroke-width 0.18s ease, stroke-opacity 0.18s ease,
+      filter 0.18s ease;
+    filter: drop-shadow(0 0 0 rgba(0, 0, 0, 0));
   }
 
   .edge-mark {
@@ -267,12 +270,14 @@ function showMappingTable() {
       stroke: var(--edge-pill-border);
       stroke-width: 1;
       vector-effect: non-scaling-stroke;
+      transition: stroke 0.18s ease;
     }
     text {
       font-size: 11px;
       font-family: var(--font-mono);
       fill: var(--edge-label-text);
       font-weight: 600;
+      transition: fill 0.18s ease;
     }
   }
 
@@ -286,20 +291,24 @@ function showMappingTable() {
       stroke: var(--edge-pill-border);
       stroke-width: 1;
       vector-effect: non-scaling-stroke;
+      transition: stroke 0.18s ease, fill 0.18s ease;
     }
     .pill-label {
       font-size: 11px;
       font-family: var(--font-mono);
       fill: var(--edge-label-text);
+      transition: fill 0.18s ease;
     }
     .pill-plus-bg {
       fill: var(--primary-weak);
       stroke: none;
+      transition: fill 0.18s ease;
     }
     .pill-plus {
       stroke: var(--primary-text);
       stroke-width: 1.6;
       vector-effect: non-scaling-stroke;
+      transition: stroke 0.18s ease;
     }
     &:hover {
       rect {
@@ -313,6 +322,8 @@ function showMappingTable() {
 
   .edge-tip {
     pointer-events: none;
+    /* 提示层淡入，避免悬停/选中时突兀弹出 */
+    animation: edge-tip-in 0.16s ease both;
     rect {
       fill: var(--bg-panel);
       stroke: var(--border-strong);
@@ -331,22 +342,27 @@ function showMappingTable() {
     }
   }
 
+  /* 悬停（含悬停卡片时关联线联动高亮）：
+     保持实线，颜色为主题色但透明度较低、线宽较细 —— 与选中样式有明显但克制的区别 */
   &.hovered,
   &.related {
     .edge-line {
       stroke: var(--edge-hover);
-      stroke-width: 2.6;
+      stroke-width: 2.8;
+      stroke-opacity: 0.85;
     }
     .edge-mark text {
       fill: var(--primary-text);
     }
   }
 
+  /* 选中：实线（不用虚线）、主题色加粗 + 光晕 + 标记描边强调 */
   &.selected {
     .edge-line {
       stroke: var(--primary);
-      stroke-width: 3;
-      stroke-dasharray: 7 4;
+      stroke-width: 3.4;
+      stroke-opacity: 1;
+      filter: drop-shadow(0 0 4px var(--edge-select-glow));
     }
     .edge-mark rect {
       stroke: var(--primary);
@@ -354,6 +370,18 @@ function showMappingTable() {
     .edge-mark text {
       fill: var(--primary-text);
     }
+    .nn-pill rect {
+      stroke: var(--primary);
+    }
+  }
+}
+
+@keyframes edge-tip-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
   }
 }
 </style>
