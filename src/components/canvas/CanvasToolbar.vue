@@ -12,6 +12,7 @@ import {
   Upload,
   Eye,
   Plus,
+  WandSparkles,
 } from '@lucide/vue'
 import { useCanvasStore, MIN_ZOOM, MAX_ZOOM } from '@/stores/canvas'
 import { useModelStore } from '@/stores/model'
@@ -129,6 +130,11 @@ async function replace() {
       <a-tooltip title="适应画布">
         <a-button size="small" @click="canvas.fitAll()">
           <template #icon><Maximize2 :size="13" /></template>
+        </a-button>
+      </a-tooltip>
+      <a-tooltip title="自动美化：以导航关系为边自动规划每个表卡片的位置">
+        <a-button size="small" @click="canvas.autoLayout()">
+          <template #icon><WandSparkles :size="13" /></template>
         </a-button>
       </a-tooltip>
     </div>

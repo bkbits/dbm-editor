@@ -52,6 +52,17 @@ export function languageOfFileName(fileName: string): string {
 }
 
 /**
+ * 解析模板产物的有效高亮语言：
+ * 模板内通过 context.language 显式指定（如 <% context.language = 'java' %>）时优先，
+ * 未设置则按产物文件名后缀自动识别
+ */
+export function resolveLanguage(fileName: string, language?: string): string {
+  const explicit = String(language ?? '').trim().toLowerCase()
+  if (explicit) return explicit
+  return languageOfFileName(fileName)
+}
+
+/**
  * 模板源码高亮（Eta 语法：<% %> 逻辑 / <%= %> 输出 / <%# %> 注释，
  * 宿主文本与标签内表达式由 highlights-eta 插件 grammar 区分着色）
  */

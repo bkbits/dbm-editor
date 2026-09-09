@@ -114,6 +114,8 @@ export interface TemplateContext {
   basePackage: string // 基础包名
   fileName: string // 文件名
   filePath: string // 文件路径
+  /** 显式指定 highlight.js 高亮语言（如 java/sql/xml/javascript）；未设置时按文件名后缀自动识别 */
+  language?: string
   table: TableVO // 当前表信息
 }
 

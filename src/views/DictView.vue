@@ -40,12 +40,18 @@ function newList() {
 const draft = ref<Dict>({ id: '', dictKey: '', label: '', comment: '', values: [] })
 const dirty = reactive({ saving: false })
 
-watch(selectedId, (id) => {
-  const dict = dictStore.dicts.find((d) => d.id === id)
-  if (dict) {
-    draft.value = JSON.parse(JSON.stringify(dict))
-  }
-})
+watch(
+  selectedId,
+  (id) => {
+    const dict = dictStore.dicts.find((d) => d.id === id)
+    if (dict) {
+      draft.value = JSON.parse(JSON.stringify(dict))
+    }
+  },
+  // immediate：页面以 v-if 切换时组件会重新挂载，selectedId 来自 store 不会变化，
+  // 普通 watch 不会触发，导致编辑区停留在空白草稿（显示「暂无字典值」）——挂载时立即同步一次
+  { immediate: true },
+)
 
 watch(
   () => dictStore.loaded,

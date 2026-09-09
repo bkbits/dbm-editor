@@ -72,9 +72,19 @@ export function unionRects(rects: Rect[], padding = 0): Rect | null {
   }
 }
 
-/** 两矩形是否相交（用于框选） */
+/** 两矩形是否相交（边界接触不算） */
 export function rectsIntersect(a: Rect, b: Rect): boolean {
   return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y
+}
+
+/** 矩形 outer 是否完整包含矩形 inner（框选语义：整卡完全被框住才算选中） */
+export function rectContains(outer: Rect, inner: Rect): boolean {
+  return (
+    inner.x >= outer.x &&
+    inner.y >= outer.y &&
+    inner.x + inner.w <= outer.x + outer.w &&
+    inner.y + inner.h <= outer.y + outer.h
+  )
 }
 
 /** 点是否在矩形内 */

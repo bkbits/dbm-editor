@@ -65,6 +65,7 @@ export function renderTemplate(
     basePackage: basePackage || '',
     fileName: '',
     filePath: '',
+    language: '',
     table,
   }
   try {
@@ -76,7 +77,7 @@ export function renderTemplate(
     context.result = `⚠ 模板渲染失败：${msg}`
     return { ...context, error: msg }
   }
-  // 模板未设置文件名/路径时给默认值
+  // 模板未设置文件名/路径时给默认值（language 由模板内赋值，未赋值时由展示层按后缀自动识别）
   if (!context.fileName) {
     context.fileName = `${toCamelCase(table.className || table.tableName, true)}_${templateName}.txt`
   }

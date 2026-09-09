@@ -5,7 +5,7 @@ import { Plus, Trash2, FileCode, Save } from '@lucide/vue'
 import type { CodeTemplate } from '@/types/model'
 import { useTemplateStore } from '@/stores/template'
 import { useModelStore } from '@/stores/model'
-import { highlightCode, languageOfFileName, highlightTemplateSource } from '@/utils/highlight'
+import { highlightCode, resolveLanguage, highlightTemplateSource } from '@/utils/highlight'
 
 const templateStore = useTemplateStore()
 const model = useModelStore()
@@ -49,11 +49,12 @@ const tableOptions = computed(() =>
   model.tables.map((t) => ({ value: t.id, label: `${t.tableName}${t.comment ? `（${t.comment}）` : ''}` })),
 )
 
-const previewState = reactive<{ output: string; fileName: string; filePath: string; error: string }>({
+const previewState = reactive<{ output: string; fileName: string; filePath: string; error: string; language: string }>({
   output: '',
   fileName: '',
   filePath: '',
   error: '',
+  language: '',
 })
 
 let previewTimer: ReturnType<typeof setTimeout> | null = null
@@ -66,23 +67,27 @@ function runPreview() {
   if (!draft.value.name && !draft.value.content) {
     previewState.output = ''
     previewState.error = ''
+    previewState.language = ''
     return
   }
   if (!previewTableId.value) {
     previewState.output = '请先在编辑器中创建表，或从数据库导入表结构。'
     previewState.error = ''
+    previewState.language = ''
     return
   }
   const out = templateStore.renderFor(draft.value, previewTableId.value)
   if (!out) {
     previewState.output = ''
     previewState.error = '渲染目标不存在'
+    previewState.language = ''
     return
   }
   previewState.output = out.result || ''
   previewState.fileName = out.fileName
   previewState.filePath = out.filePath
   previewState.error = out.error || ''
+  previewState.language = out.language || ''
 }
 
 watch(() => draft.value.content, schedulePreview)
@@ -112,7 +117,12 @@ watch(
 )
 
 const highlighted = computed(() =>
-  highlightCode(previewState.output, languageOfFileName(previewState.fileName)),
+  highlightCode(previewState.output, resolveLanguage(previewState.fileName, previewState.language)),
+)
+
+/** 实际生效的高亮语言（显式指定优先，否则按后缀自动识别） */
+const effectiveLanguage = computed(() =>
+  previewState.error ? '' : resolveLanguage(previewState.fileName, previewState.language),
 )
 
 /* ==================== 模板编辑器：Eta 语法高亮覆盖层 ==================== */
@@ -259,7 +269,14 @@ const isEdit = computed(() => Boolean(draft.value.id))
 
         <div class="tpl-preview">
           <div class="pane-head preview-head">
-            <span>实时预览</span>
+            <span class="preview-title">实时预览</span>
+            <span
+              v-if="effectiveLanguage"
+              class="lang-chip mono"
+              title="高亮语言：模板内 context.language 显式指定，未设置时按文件后缀自动识别"
+            >
+              {{ effectiveLanguage }}
+            </span>
             <a-select
               v-model:value="previewTableId"
               :options="tableOptions"
@@ -283,6 +300,7 @@ const isEdit = computed(() => Boolean(draft.value.id))
             <p><code>context.templateName</code> 模板名称</p>
             <p><code>context.basePackage</code> 基础包名（表所属分类）</p>
             <p><code>context.fileName / filePath</code> 产物文件名/路径（模板内赋值）</p>
+            <p><code>context.language</code> 显式指定预览高亮语言，如 <code>&lt;% context.language = 'java' %&gt;</code>（未设置时按文件后缀自动识别）</p>
             <p><code>context.table.tableName / className / comment</code> 表信息</p>
             <p><code>context.table.columns</code> 字段数组（columnName/propertyName/type/javaType/comment/notNull/primaryKey/dict）</p>
             <p><code>context.table.indexes</code> 索引数组（indexName/type/columns/comment）</p>
@@ -462,6 +480,21 @@ const isEdit = computed(() => Boolean(draft.value.id))
 
 .preview-head {
   gap: 8px;
+}
+
+.preview-title {
+  flex-shrink: 0;
+}
+
+.lang-chip {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--primary-text);
+  background: var(--primary-weak);
+  border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent);
+  border-radius: 4px;
+  padding: 0 6px;
+  line-height: 18px;
 }
 
 /* ============ 高亮覆盖层编辑器 ============

@@ -1,6 +1,38 @@
 # 工作日志
 
 ---
+Task ID: 5
+Agent: main (Super Z)
+Task: 快照/patch 留档 + TemplateContext.language + 字典页签切换修复 + 框选完全包含 + 导航线悬停单行提示 + 自动美化布局 + 右键对齐分布菜单
+
+Work Log:
+- 修改前快照：scripts/snapshot.sh → snapshot/20260909083424.zip（94 文件）；.gitignore 新增 snapshot/、patch/
+- TemplateContext.language：types 增 language?: string；render.ts 初始化空串并在渲染后随 fileName/filePath 一并回读（模板内 `<% context.language = 'java' %>` 赋值）；highlight.ts 新增 resolveLanguage(fileName, language?)（显式优先、回退后缀识别）；CodePreviewModal/TemplateView 预览高亮全部改用 resolveLanguage 并新增语言徽标 chip；模板帮助面板补充 context.language 文档
+- 字典页签切换修复：DictView 的 watch(selectedId) 加 immediate —— 页面 v-if 卸载重挂后 selectedId 来自 store 不变、普通 watch 不触发，draft 停留空草稿导致「暂无字典值」；挂载即同步恢复
+- 框选完全包含：geometry 新增 rectContains(outer, inner)；canvas.onPointerUp select 分支由 rectsIntersect 改为 rectContains(worldRect, card)（整卡完全被框住才选中）；顺带修复 cardRectsOf 与 id 序号错位隐患（新增 cardRectOf(id) 单卡查询）
+- beginSelect 即刻捕获指针：修复框选拖拽首个 move 出画布时选框卡在起点的问题（延迟捕获对 select 不必要——空白画布无 click/dblclick 目标语义；卡片/连线的延迟捕获保留不动）
+- 导航线悬停提示改单行：去掉第一行（表名+基数线型），仅保留 `属性 ⇄ 属性（关系说明）`，关系说明（如（多对多））置于末尾；提示框 38px→26px、宽度按单行计算；清理无用的 selfTable/targetTable
+- 自动美化（src/utils/layout.ts 新增）：FR 力导向（点对斥力 k²/d + 2.2k 截断、边弹簧 FR 二次引力 d²/k 钳 5k、质心重力 0.08、温度冷却至 2%）+ 初值过大时等比缩入虚拟画布 + 按卡片实际尺寸去重叠（30 轮沿小穿透轴推开至最小间距）+ 20px 网格对齐归一化到 (40,40)；NN 且中间表可见时布局边拆为 self↔中间表↔target 两段；调参两轮（初版重力 0.03/线性弹簧导致整体膨胀至 9000px+，改截断+FR 二次引力后 10 表收敛 2828×3141、0 可见重叠、关联表间距 ~650-860）
+- canvas store：autoLayout()/alignSelection(mode) 动作（AlignMode 8 种；历史快照捕获 + persistTables 持久化 + layoutAnimating 标记 500ms）；布局中开始拖拽立即终止过渡
+- 对齐/分布右键菜单：CanvasContextMenu 增 MenuItem.header 分组小标题渲染分支 + 8 个 lucide 图标（AlignStartHorizontal/CenterHorizontal/EndHorizontal/StartVertical/CenterVertical/EndVertical/HorizontalDistributeCenter/VerticalDistributeCenter）；选中 ≥2 张时卡片菜单与空白菜单均追加「对齐与分布」分组（均匀分布需 ≥3，不足禁用 + title 提示）；菜单垂直裁剪改按 items 估算高度动态计算；空白菜单新增「自动美化布局」(WandSparkles)，工具栏缩放组同步新增魔法棒按钮
+- 位置过渡动画：TableCard 增 layout-animating 类（left/top 0.46s cubic-bezier 过渡），ModelCanvas 视口裁剪在动画期间放宽 margin 400→2400 防止滑动途中被卸载
+- patch 留档：scripts/patch.sh（git add -N src/ 与新脚本后 git diff）→ patch/20260909085822.patch（19 文件 52K）；package.sh 排除 snapshot/patch 后重新打包（102 文件 3.3M）
+- 验证（agent-browser 真实输入事件）：
+  * 框选：部分交叉 sys_user 角落 → 0 选中；完全包含 → 选中；含出画布终点的快速框选（捕获修复后）→ 3 张正确选中
+  * 自动美化：10 可见表布局后 0 可见重叠（唯一重叠对为隐藏中间表与 sys_role，不可见无影响）、关联表间距合理、位置持久化 localStorage、卡片 layout-animating 过渡类出现并于 500ms 后移除
+  * 对齐：选中 3 张 → 左对齐 x 全等 1000；垂直均匀分布中间卡 y=787（等间距 486 精确符合公式）；卡片右键与空白右键均出现 8 项分组；Ctrl+Z 两次还原布局
+  * 导航线悬停（亮/暗双主题）：tooltip 单行「user ⇄ articles（多对一）」、rect 高 26、仅 1 个 text
+  * 字典：选 user_type（3 值）→ 切模板页 → 切回：选中与 3 值全部恢复、无「暂无字典值」空态
+  * language：sql 模板徽标 sql（后缀自动）；注入 `<% context.language = 'javascript' %>` 后徽标 javascript 且产物按 JS grammar 着色（72 token，文件名仍 .sql 证明显式优先）；代码预览弹窗徽标 java（后缀自动）
+  * 回归：双击 sys_user → 编辑表对话框、右键菜单项可点击、控制台 0 错误
+- vue-tsc 通过；vite build 通过（2.49s）
+
+Stage Summary:
+- 八项需求全部完成并经真实浏览器验证；交付物：snapshot/20260909083424.zip（改前快照）、patch/20260909085822.patch（本次全部改动）、download/graph-db-model-editor.zip（102 文件）
+- 关键决策：框选语义改「完全包含」并同步修复指针捕获出界卡死；力导向三段式（模拟→去重叠→网格对齐）保证无重叠且贴网格；对齐/分布以 selection 为作用域同时挂在卡片与空白两种右键菜单；TemplateContext.language 走模板内赋值回读（与 fileName/filePath 同机制），展示层统一 resolveLanguage 兜底
+- 截图：docs/screenshots/auto-layout(.|-dark).png、align-context-menu.png
+
+---
 Task ID: 2
 Agent: main (Super Z)
 Task: 交互缺陷修复（右键菜单/双击卡片/双击导航线/NN 胶囊点击均无效）+ 新功能（卡片隐藏按钮、树形表选项）

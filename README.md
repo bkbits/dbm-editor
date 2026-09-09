@@ -47,16 +47,18 @@ bun run typecheck
 
 ### 画布（模型编辑器）
 
-- **无限画布**：左键拖拽空白处框选（`Ctrl/Shift` 追加）、中键或 `空格+左键` 拖拽平移、滚轮以光标为中心缩放（25% ~ 500%）
+- **无限画布**：左键拖拽空白处框选（整卡完全被框住才选中，仅交叉不选中；`Ctrl/Shift` 追加）、中键或 `空格+左键` 拖拽平移、滚轮以光标为中心缩放（25% ~ 500%）
 - **网格**：间距随缩放联动，线宽恒定 1px 不随缩放变化
 - **小地图**：右下角缩略图，点击/拖拽快速定位视口
 - **表卡片**：表名/注释/中间表图标 + 字段列表（默认折叠 6 个）+ 索引（默认隐藏）+ 隐藏导航摘要
-- **导航线段**：一对一 `-1----1-`、一对多 `-1----N-`、多对一 `-N----1-`、多对多 `-N----N-`；悬停/选中均为实线（悬停较细且半透明，选中加粗 + 光晕，二者可区分）、双击编辑、右键菜单
+- **导航线段**：一对一 `-1----1-`、一对多 `-1----N-`、多对一 `-N----1-`、多对多 `-N----N-`；悬停/选中均为实线（悬停较细且半透明，选中加粗 + 光晕，二者可区分）、悬停提示单行展示「属性 ⇄ 属性（关系说明）」、双击编辑、右键菜单
 - **悬停/选中过渡**：卡片阴影、连接点淡入缩放、隐藏按钮淡入、导航线颜色/粗细/光晕、标记描边、NN 胶囊、右键菜单弹出等全部带平滑过渡动画
 - **多对多中间表**：默认完全隐藏，线上显示 `中间表名 +` 胶囊，点击展开；对中间表执行隐藏则彻底隐藏（非透明）
 - **任一端表隐藏**：导航线不渲染，改为在可见端卡片底部显示「隐藏导航摘要」（类型 + 关联表名）
+- **自动美化**：工具栏「魔法棒」按钮 / 空白右键菜单「自动美化布局」，以导航关系为边做力导向布局自动规划每个表卡片的位置（相关联的表彼此靠近、孤立表散开不重叠，结果按 20px 网格对齐），卡片平滑滑动到新位置并自动适应画布
+- **对齐与分布**：选中 ≥ 2 张表后，卡片右键 / 空白右键菜单出现「对齐与分布」分组——左对齐/右对齐/顶部对齐/底部对齐（边缘对齐）、水平对齐/垂直对齐（中心线对齐）、水平/垂直均匀分布（首尾不动等间距，需 ≥ 3 张）
 - **拖拽创建导航**：卡片上下左右四个连接点拖至目标表；两表间已有导航时丢弃并提示
-- **右键菜单**：卡片（编辑/复制/隐藏/删除）、线段（编辑/删除）、空白（新增表/粘贴/适应画布/重置缩放）
+- **右键菜单**：卡片（编辑/复制/隐藏/对齐分布/删除）、线段（编辑/删除）、空白（新增表/粘贴/自动美化/适应画布/重置缩放/对齐分布）
 - **快捷键**：`Ctrl+Z` 撤销、`Ctrl+Shift+Z` / `Ctrl+Y` 重做、`Ctrl+C` 复制、`Ctrl+V` 粘贴、`Delete` 删除选中表、`Esc` 取消选择
 
 ### 左侧表格大纲
@@ -76,6 +78,7 @@ bun run typecheck
 - 字典（键/标签/注释）与字典值（值键/标签/类型/注释/自定义颜色）完整 CRUD
 - 值类型 `I/S/W/D` 对应 Info/Success/Warning/Danger 风格色，自定义颜色优先
 - 模糊搜索覆盖字典键、标签、注释及值的键、标签、注释，命中自动跳转并高亮
+- 切换页面后返回时保留选中字典与编辑内容（页面 v-if 卸载重挂后自动恢复）
 - 字段编辑时可关联字典键，卡片字段行显示字典小徽标
 
 ### 模板管理与代码生成
@@ -95,9 +98,12 @@ interface TemplateContext {
   basePackage: string     // 基础包名（表所属分类）
   fileName: string        // 文件名（模板内赋值）
   filePath: string        // 文件路径（模板内赋值）
+  language?: string       // 显式指定预览高亮语言（模板内赋值，如 <% context.language = 'java' %>）
   table: TableVO          // 当前表（columns/indexes/navigates）
 }
 ```
+
+> 预览/代码生成结果的高亮语言：`context.language` 显式指定优先（如 `java` / `sql` / `xml` / `javascript`），未设置时按产物文件名后缀自动识别，工具栏语言徽标实时显示实际生效语言。
 
 | 工具 | 说明 |
 | --- | --- |
@@ -155,7 +161,9 @@ POST /api/codegen/settings/update   # 更新设置（列默认类型规则，正
 ├─ vite.config.ts          # Vite 8 配置（@ 别名 / 端口 3000）
 ├─ tsconfig.json
 ├─ docs/screenshots/       # 界面截图
-├─ scripts/                # 开发辅助脚本（Eta 冒烟测试）
+├─ scripts/                # 开发辅助脚本（Eta 冒烟测试 / 快照 / patch / 打包）
+├─ snapshot/               # 源码快照存档（scripts/snapshot.sh 生成，gitignore）
+├─ patch/                  # 修改补丁存档（scripts/patch.sh 生成，gitignore）
 └─ src/
    ├─ main.ts              # 入口（注册 Pinia / antdv-next / 主题）
    ├─ App.vue              # v-if 页面切换 + ConfigProvider 暗色算法
@@ -164,7 +172,7 @@ POST /api/codegen/settings/update   # 更新设置（列默认类型规则，正
    ├─ mock/                # 种子数据 + Mock 数据库（localStorage 持久化）
    ├─ stores/              # Pinia：model / canvas / dict / template / theme / ui / history / settings
    ├─ types/               # 数据模型类型（与规格说明书一致）
-   ├─ utils/               # 字符串 / Java 类型映射 / 导航推导 / 几何 / Eta 渲染 / 高亮
+   ├─ utils/               # 字符串 / Java 类型映射 / 导航推导 / 几何 / 力导向布局 / Eta 渲染 / 高亮
    ├─ styles/              # CSS 变量（亮暗双主题）/ 全局样式 / hljs 配色
    ├─ views/               # EditorView / DictView / TemplateView / SettingsView
    └─ components/
@@ -186,6 +194,10 @@ POST /api/codegen/settings/update   # 更新设置（列默认类型规则，正
 | --- | --- |
 | ![亮色](docs/screenshots/editor-final-light.png) | ![暗色](docs/screenshots/editor-dark.png) |
 
+| 自动美化布局（力导向） | 对齐与分布右键菜单 |
+| --- | --- |
+| ![自动美化](docs/screenshots/auto-layout.png) | ![对齐菜单](docs/screenshots/align-context-menu.png) |
+
 | 表编辑对话框（拖拽手柄排序） | 系统设置 · 列默认类型 |
 | --- | --- |
 | ![表编辑](docs/screenshots/table-columns-drag-handle.png) | ![设置](docs/screenshots/settings-column-rules.png) |
@@ -193,3 +205,14 @@ POST /api/codegen/settings/update   # 更新设置（列默认类型规则，正
 | 模板管理（实时预览） |
 | --- |
 | ![模板](docs/screenshots/template-view-fixed.png) |
+
+## 源码快照与修改补丁
+
+开发过程中可在任意时点留档：
+
+```bash
+bash scripts/snapshot.sh   # 快照当前源码到 snapshot/[年月日时分秒].zip
+bash scripts/patch.sh      # 保存当前修改的 patch 到 patch/[年月日时分秒].patch
+```
+
+`patch/` 中的补丁为 git 工作区相对最近一次提交的源码 diff（新增源文件以 intent-to-add 纳入），可用 `git apply patch/xxx.patch` 复现改动。`snapshot/` 与 `patch/` 已加入 `.gitignore`，不会影响版本管理与源码打包。

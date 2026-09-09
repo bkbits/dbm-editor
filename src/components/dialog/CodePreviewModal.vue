@@ -5,7 +5,7 @@ import { Copy } from '@lucide/vue'
 import { useUiStore } from '@/stores/ui'
 import { useModelStore } from '@/stores/model'
 import { useTemplateStore } from '@/stores/template'
-import { highlightCode, languageOfFileName } from '@/utils/highlight'
+import { highlightCode, resolveLanguage } from '@/utils/highlight'
 
 const ui = useUiStore()
 const model = useModelStore()
@@ -54,13 +54,19 @@ const renderOutput = computed(() => {
 const renderedHtml = computed(() => {
   const out = renderOutput.value
   if (!out) return ''
-  return highlightCode(out.result || '', languageOfFileName(out.fileName))
+  return highlightCode(out.result || '', resolveLanguage(out.fileName, out.language))
 })
 
 const meta = computed(() => {
   const out = renderOutput.value
   if (!out) return null
-  return { fileName: out.fileName, filePath: out.filePath, error: out.error }
+  return {
+    fileName: out.fileName,
+    filePath: out.filePath,
+    error: out.error,
+    /** 实际生效的高亮语言（显式指定优先，否则按后缀自动识别） */
+    language: resolveLanguage(out.fileName, out.language),
+  }
 })
 
 async function copyCode() {
@@ -97,6 +103,9 @@ async function copyCode() {
       <span v-if="meta" class="file-path mono" :title="meta.filePath">
         {{ meta.filePath || meta.fileName }}
       </span>
+      <span v-if="meta && !meta.error" class="lang-chip mono" title="高亮语言（模板内 context.language 显式指定，未设置时按文件后缀自动识别）">
+        {{ meta.language }}
+      </span>
       <a-button size="small" @click="copyCode">
         <template #icon><Copy :size="12" /></template>
         复制代码
@@ -126,6 +135,17 @@ async function copyCode() {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .lang-chip {
+    flex-shrink: 0;
+    font-size: 10px;
+    color: var(--primary-text);
+    background: var(--primary-weak);
+    border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent);
+    border-radius: 4px;
+    padding: 0 6px;
+    line-height: 18px;
   }
 }
 

@@ -32,7 +32,8 @@ const visibleNavigates = computed(() =>
 /** 视口内的卡片（渲染范围裁剪，保证 100+ 卡片流畅） */
 const viewportWorld = computed(() => canvas.viewportWorldRect)
 const visibleCards = computed(() => {
-  const margin = 400 / canvas.zoom // 预留边缘缓冲
+  // 布局动画期间放宽裁剪缓冲：卡片滑向新位置途中不因离开视口而被卸载
+  const margin = (canvas.layoutAnimating ? 2400 : 400) / canvas.zoom
   const rect = viewportWorld.value
   return canvas.visibleTableIds.filter((id) => {
     const t = model.tableById(id)

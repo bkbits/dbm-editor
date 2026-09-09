@@ -128,19 +128,13 @@ const pill = computed(() => {
   }
 })
 
-const selfTable = computed(() => model.tableById(nav.value.self))
-const targetTable = computed(() => model.tableById(nav.value.target))
 const typeLabel = computed(() => NAVIGATE_TYPE_LABEL[nav.value.type])
 
+/** 悬停/选中提示（单行）：关联属性对 + 末尾附导航关系说明（如 多对多） */
 const tipText = computed(() => {
-  const s = selfTable.value?.tableName ?? '?'
-  const t = targetTable.value?.tableName ?? '?'
-  return `${s} -${selfMark.value}----${targetMark.value}- ${t}（${typeLabel.value}）`
-})
-const tipSub = computed(() => {
   const a = nav.value.selfPropertyName
   const b = nav.value.targetPropertyName
-  return `${a} ⇄ ${b}`
+  return `${a} ⇄ ${b}（${typeLabel.value}）`
 })
 
 const isHovered = computed(() => canvas.hoveredNavigateId === nav.value.id)
@@ -151,7 +145,7 @@ const isRelated = computed(() => {
   return Boolean(h) && (h === nav.value.self || h === nav.value.target)
 })
 
-const tipWidth = computed(() => Math.max(tipText.value.length, tipSub.value.length) * 7.4 + 20)
+const tipWidth = computed(() => tipText.value.length * 7.6 + 20)
 
 function onEnter() {
   canvas.setHoveredNavigate(nav.value.id)
@@ -218,11 +212,10 @@ function showMappingTable() {
         />
       </g>
 
-      <!-- 悬停信息提示 -->
+      <!-- 悬停信息提示（单行：属性对 ⇄ 属性对 +（关系说明）） -->
       <g v-if="isHovered || isSelected" class="edge-tip">
-        <rect :x="geo.mid.x - tipWidth / 2" :y="geo.mid.y - 46" :width="tipWidth" height="38" rx="6" />
-        <text class="tip-main" :x="geo.mid.x" :y="geo.mid.y - 31" text-anchor="middle">{{ tipText }}</text>
-        <text class="tip-sub" :x="geo.mid.x" :y="geo.mid.y - 15" text-anchor="middle">{{ tipSub }}</text>
+        <rect :x="geo.mid.x - tipWidth / 2" :y="geo.mid.y - 36" :width="tipWidth" height="26" rx="6" />
+        <text class="tip-main" :x="geo.mid.x" :y="geo.mid.y - 18" text-anchor="middle">{{ tipText }}</text>
       </g>
     </g>
   </svg>
@@ -332,13 +325,9 @@ function showMappingTable() {
       filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.12));
     }
     .tip-main {
-      font-size: 11px;
-      fill: var(--text-1);
-    }
-    .tip-sub {
       font-size: 10.5px;
-      fill: var(--text-3);
       font-family: var(--font-mono);
+      fill: var(--text-2);
     }
   }
 

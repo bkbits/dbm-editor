@@ -19,6 +19,8 @@ rsync -a --delete \
   --exclude 'download' \
   --exclude 'upload' \
   --exclude 'agent-ctx' \
+  --exclude 'snapshot' \
+  --exclude 'patch' \
   --exclude '*.log' \
   --exclude '.DS_Store' \
   ./ "$STAGE/graph-db-model-editor/"

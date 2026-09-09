@@ -123,7 +123,7 @@ onBeforeUnmount(() => {
     v-if="table"
     ref="elRef"
     class="table-card"
-    :class="{ selected: isSelected, hovered: isHovered, 'connect-target': isConnectTarget, mapping: isMapping }"
+    :class="{ selected: isSelected, hovered: isHovered, 'connect-target': isConnectTarget, mapping: isMapping, 'layout-animating': canvas.layoutAnimating }"
     :data-table-id="tableId"
     :style="{ left: `${table.x ?? 0}px`, top: `${table.y ?? 0}px`, width: `${CARD_WIDTH}px`, '--cat-color': catColor }"
     @pointerdown.stop="onPointerDown"
@@ -232,6 +232,15 @@ onBeforeUnmount(() => {
   font-size: 12px;
   z-index: 2;
   transition: box-shadow 0.18s ease, border-color 0.18s ease;
+
+  /* 自动美化/对齐后的位置过渡：left/top 平滑滑动到新坐标 */
+  &.layout-animating {
+    transition:
+      box-shadow 0.18s ease,
+      border-color 0.18s ease,
+      left 0.46s cubic-bezier(0.22, 0.61, 0.36, 1),
+      top 0.46s cubic-bezier(0.22, 0.61, 0.36, 1);
+  }
 
   &:hover {
     box-shadow: var(--card-shadow-hover);
