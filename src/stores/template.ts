@@ -1,12 +1,12 @@
 /**
  * 模板仓库：代码模板 CRUD + 代码生成（zip 打包下载 / 上传替换）
+ * 模板读写经 ManagerApi（Template.templateName ↔ 应用内部 CodeTemplate.name 适配）
  */
 import { defineStore } from 'pinia'
 import { message } from 'antdv-next'
 import JSZip from 'jszip'
-import type { CodeTemplate, GeneratedFile, TableVO } from '@/types/model'
-import { templateApi, codegenApi } from '@/api/modules'
-import { extractErrorMessage } from '@/api/http'
+import type { CodeTemplate, GeneratedFile, TableVO, Template } from '@/types/model'
+import { getManagerApi, errorMessageOf } from '@/api/manager-api'
 import { renderTemplate } from '@/utils/render'
 import { uid } from '@/utils/id'
 import { useModelStore } from './model'
@@ -38,36 +38,42 @@ export const useTemplateStore = defineStore('template', {
       if (this.loaded || this.loading) return
       this.loading = true
       try {
-        this.templates = (await templateApi.query()).map(clone)
+        this.templates = getManagerApi()
+          .getTemplates()
+          .map((t) => ({ id: t.id, name: t.templateName, content: t.content }))
         this.loaded = true
       } catch (e) {
-        message.error(extractErrorMessage(e, '模板加载失败'))
+        message.error(errorMessageOf(e, '模板加载失败'))
       } finally {
         this.loading = false
       }
     },
     async saveTemplate(draft: CodeTemplate) {
       try {
+        const api = getManagerApi()
         if (draft.id) {
-          const updated = await templateApi.update(draft)
+          const spec: Template = { id: draft.id, templateName: draft.name, content: draft.content }
+          api.updateTemplate(spec)
           const idx = this.templates.findIndex((t) => t.id === draft.id)
-          if (idx >= 0) this.templates[idx] = clone(updated)
-          return updated
+          if (idx >= 0) this.templates[idx] = clone({ ...draft })
+          return draft
         }
-        const created = await templateApi.add(draft)
+        const spec: Template = { id: uid('tpl-'), templateName: draft.name, content: draft.content }
+        api.addTemplate(spec)
+        const created: CodeTemplate = { id: spec.id, name: draft.name, content: draft.content }
         this.templates.push(clone(created))
         return created
       } catch (e) {
-        message.error(extractErrorMessage(e, '模板保存失败'))
+        message.error(errorMessageOf(e, '模板保存失败'))
         throw e
       }
     },
     async removeTemplate(id: string) {
       try {
-        await templateApi.remove(id)
+        getManagerApi().removeTemplate(id)
         this.templates = this.templates.filter((t) => t.id !== id)
       } catch (e) {
-        message.error(extractErrorMessage(e, '模板删除失败'))
+        message.error(errorMessageOf(e, '模板删除失败'))
         throw e
       }
     },
@@ -161,7 +167,8 @@ export const useTemplateStore = defineStore('template', {
       }
     },
 
-    /** 代码替换：调用 /api/codegen/replace 上传 zip（调用前必须经用户确认） */
+    /** 代码替换：构建 zip 并经 ManagerApi.replace 上传（调用前必须经用户确认）
+     *  （结果反馈由 api 实现自行处理，demo 实现展示替换文件数） */
     async replaceWithGenerated(tableIds: string[]) {
       if (!this.templates.length) {
         message.warning('请先在「模板管理」中创建代码模板')
@@ -173,14 +180,8 @@ export const useTemplateStore = defineStore('template', {
         return null
       }
       const zip = await this.buildZip(files)
-      try {
-        const result = await codegenApi.replace(zip)
-        message.success(result.message || `代码替换完成（${result.files} 个文件）`)
-        return result
-      } catch (e) {
-        message.error(extractErrorMessage(e, '代码替换失败'))
-        return null
-      }
+      getManagerApi().replace(zip)
+      return true
     },
 
     newTemplateId(): string {

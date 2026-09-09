@@ -1,34 +1,34 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { message } from 'antdv-next'
-import type { DBTableDef } from '@/types/model'
+import type { DBTable } from '@/types/model'
 import { useUiStore } from '@/stores/ui'
 import { useModelStore } from '@/stores/model'
 import { useCanvasStore } from '@/stores/canvas'
 import { useSettingsStore } from '@/stores/settings'
-import { tableApi } from '@/api/modules'
-import { extractErrorMessage } from '@/api/http'
+import { useManagerApi, errorMessageOf } from '@/api/manager-api'
 import { getJavaTypeByType } from '@/utils/javaType'
 
 const ui = useUiStore()
 const model = useModelStore()
 const canvas = useCanvasStore()
 const settingsStore = useSettingsStore()
+const api = useManagerApi()
 
 const dialogOpen = computed(() => ui.importDB.open)
 
 const loading = reactive({ fetching: false, importing: false })
-const dbTables = ref<DBTableDef[]>([])
+const dbTables = ref<DBTable[]>([])
 const selected = reactive(new Set<string>())
 const categoryId = ref('')
 
 async function fetchDefs() {
   loading.fetching = true
   try {
-    dbTables.value = await tableApi.queryFromDB()
+    dbTables.value = api.value.importFromDB()
     selected.clear()
   } catch (e) {
-    message.error(extractErrorMessage(e, '查询数据库结构失败'))
+    message.error(errorMessageOf(e, '查询数据库结构失败'))
   } finally {
     loading.fetching = false
   }
@@ -60,13 +60,19 @@ function previewJavaType(type: string): string {
   return settingsStore.matchJavaType(type) ?? getJavaTypeByType(type)
 }
 
-function columnPreview(t: DBTableDef): string {
-  return t.columns
-    .map((c) => {
-      const jt = previewJavaType(c.type)
-      return jt ? `${c.columnName}  ${c.type} → ${jt}` : `${c.columnName}  ${c.type}`
-    })
-    .join('\n')
+/** 悬停预览：字段推导 + 索引归一化结果 */
+function columnPreview(t: DBTable): string {
+  const lines = t.columns.map((c) => {
+    const jt = previewJavaType(c.type)
+    return jt ? `${c.columnName}  ${c.type} → ${jt}` : `${c.columnName}  ${c.type}`
+  })
+  const types = settingsStore.indexTypeOptions
+  for (const idx of t.indexes || []) {
+    const raw = String(idx.type || '').trim().toUpperCase()
+    const normalized = types.includes(raw) ? raw : types[0]
+    lines.push(`[索引] ${idx.indexName}  ${idx.type} → ${normalized}（${idx.columns.join(', ')}）`)
+  }
+  return lines.join('\n')
 }
 
 async function doImport() {
@@ -80,15 +86,11 @@ async function doImport() {
     canvas.setSelection(ids)
     if (ids.length) canvas.fitAll()
   } catch (e) {
-    message.error(extractErrorMessage(e, '导入失败'))
+    message.error(errorMessageOf(e, '导入失败'))
   } finally {
     loading.importing = false
   }
 }
-
-onMounted(() => {
-  // 预取（无弹窗时保持空数据）
-})
 </script>
 
 <template>
@@ -116,7 +118,7 @@ onMounted(() => {
       </div>
 
       <div class="import-tip">
-        字段 Java 类型默认值由「系统设置 → 列默认类型」规则依序正则匹配推导（悬停查看各字段推导结果）；未命中时回退内置类型映射。
+        字段 Java 类型默认值由「系统设置 → 列默认类型」规则依序正则匹配推导（悬停查看各字段推导结果）；未命中时回退内置类型映射。索引类型不在设置列表时归一为列表首项，悬停可预览归一化结果。
       </div>
 
       <div class="db-table-list">
@@ -133,7 +135,7 @@ onMounted(() => {
             <div class="db-comment">{{ t.comment }}</div>
           </div>
           <div class="db-cols mono" :title="columnPreview(t)">
-            {{ t.columns.length }} 个字段
+            {{ t.columns.length }} 个字段<template v-if="t.indexes?.length"> / {{ t.indexes.length }} 索引</template>
           </div>
         </div>
         <a-empty v-if="!dbTables.length && !loading.fetching" description="未查询到表结构" />

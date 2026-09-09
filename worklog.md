@@ -214,3 +214,49 @@ Stage Summary:
 - 根因并非点击失效而是"显示在屏幕外"：点击胶囊链路（延迟捕获修复）一直有效，表确实解除隐藏，但种子布局的 cms_article_tag 在视口外导致用户看不到任何变化
 - 关键决策：ensureTableVisible 采用最小偏移平移而非 centerOnTable 强制居中——表已可见时零干扰、仅在出界方向滚动刚好够的距离、保持用户缩放；顺带修复大纲眼睛的同源隐患
 - 交付物：patch/20260909103653.patch、download/graph-db-model-editor.zip（107 文件）；截图 docs/screenshots/pill-show-mapping.png
+
+---
+Task ID: 8
+Agent: main (Super Z)
+Task: 页面封装为 DBManagerView.vue（api?: ManagerApi 属性 + provide/inject 注入）+ 当前 demo 逻辑实现为 DemoManagerApi + 设置新增索引类型列表管理
+
+Work Log:
+- 修改前快照：snapshot/20260909151406.zip（104 文件）
+- 类型层（src/types/model.ts）：按规格新增 DBColumn（notNull 为 demo 扩展可选字段）/DBIndex/DBTable/Template/TypeMapping/Settings/LoadResultVO/ManagerTable（规格 Table 完整语义 = Table + columns + indexes）/ManagerApi（14 方法 + resetDemo? 可选扩展）；移除 DBTableDef/AppSettings/ColumnTypeRule/ReplaceResult/IndexType；TableIndex.type 放宽为 string（可选列表由设置驱动）
+- manager-api.ts：MANAGER_API_KEY（InjectionKey<ComputedRef<ManagerApi>>，响应式引用保证 prop 切换可传导）+ sharedDemoApi 共享单例 + setActiveApi/getManagerApi（store 桥接，activeApiRef 为 shallowRef）+ useManagerApi()（inject 工厂回退 getManagerApi，第三参 treatDefaultAsFactory）+ errorMessageOf（替代原 axios 错误提取）
+- demo-manager-api.ts：DemoManagerApi 类（原 axios mock handler 逻辑同步化迁移）——getSettings/saveSettings（正则校验 + 索引类型去重归一 + sort 重编号）、importFromDB（SEED_DB_TABLES 克隆）、load/save（全量装配/校验写入：表名/字段名/索引名唯一、分类存在、导航 self/target/mappingTable 引用完整、类型枚举）、字典与模板 CRUD（Template.templateName ↔ CodeTemplate.name 适配、id 由调用方生成）、replace（void 契约 + JSZip 异步内部解析 + message 自反馈）、resetDemo 扩展
+- db.ts 瘦身：移除 handlers/mockDispatch/MockError/组装 TableVO 逻辑，仅保留 MockDB 状态 + loadDB（旧 columnTypeRules 形态读取时迁移为 typeMappings+indexTypes 并立即归一落盘）+ getDB/persistDB/resetDB；let db 声明与赋值分离修复 TDZ
+- seed.ts：SEED_SETTINGS 新形态（indexTypes: UNIQUE/NORMAL/FULLTEXT + typeMappings 14 条 sort 0-13）；SEED_DB_TABLES 改 DBTable（5 表新增 6 个索引种子：uk_tag_name/uk_blog_tag/idx_publish_time/uk_stat_date/idx_uv 等）
+- stores 全部改经 getManagerApi()：
+  * model：init 走 load() + applyTables 展平；persist() 全量 save；全部变更动作改为「先改本地 → persist 失败回滚快照并抛错」（createTable/saveTable/removeTables/add-update-removeNavigate/saveCategory/removeCategory/importFromDB/pasteTable 统一模式）；createTable 客户端生成表 id（NavigateEditDialog 中间表创建依赖返回值）；importFromDB 适配 DBTable（notNull ?? false + 索引映射：类型不在设置列表归一为列表首项 + 空索引名过滤）；persistTables 签名保留（canvas 三处调用不变）改全量语义；resetDemoData 调 api.resetDemo?.() 并重置全部四仓库 loaded 后重载（dict/template 动态 import 避免模块环）
+  * history：resync 差量同步（120 行）删除，restore 简化为 applySnapshot + persist（失败回滚）
+  * dict：getDicts/addDict/updateDict/removeDict；新增字典 id 客户端生成
+  * template：getTemplates 适配映射；saveTemplate 新增走 addTemplate（id 客户端生成）；replaceWithGenerated 调 api.replace（反馈由实现自理）
+  * settings：state 改 indexTypes + typeMappings；compiledRules 按 sort 升序；save(settings) 走 saveSettings；新增 indexTypeOptions getter（空时兜底三常规类型）
+- DBManagerView.vue（src/views/）：a-config-provider + a-app + 页面壳 + 页面 watch 全部自 App.vue 迁入；apiRef = computed(props.api ?? sharedDemoApi)；provide(MANAGER_API_KEY, apiRef) + setActiveApi immediate；api 切换时清空四仓库 loaded + history.clear + canvas 复位 + 重载当前页；App.vue 瘦身为单组件渲染（含自定义 api 用法注释）
+- SettingsView 重写：列默认类型卡片（TypeMappingDraft 带 uid key 保拖拽/输入焦点稳定，拖拽后 sort 重编号，测试面板保留）+ 索引类型卡片（chip 列表 + 回车/按钮添加、自动转大写、去重校验、可删除）+ 统一保存条（脏状态合并计算、正则/空类型校验禁用保存）
+- 对话框接线：TableEditDialog 索引类型选项改 computed(settingsStore.indexTypeOptions) + 打开时 settingsStore.init() 预载 + 错误提示简化；ImportDBDialog 用 useManagerApi() 调 api.importFromDB()（inject 路径）+ 行显示"N 字段 / M 索引" + 悬停预览索引归一化；ReplaceConfirmModal 用 useManagerApi() 调 api.replace(zip)（inject 路径）+ 文案更新
+- 删除 src/api/http.ts + src/api/modules.ts，bun remove axios
+- README：新增「页面封装与数据能力注入」章节（注入链路说明 + ManagerApi 接口清单 + DemoManagerApi 说明 + 自定义 api 示例）；技术栈表 axios → ManagerApi 体系；Mock API 章节移除；设置/编辑对话框/导入/替换章节同步更新；项目结构与截图表格更新
+- 验证（agent-browser 真实浏览器，1920×1080）：
+  * 初始加载：10 卡片/10 导航线/0 控制台错误
+  * 旧数据迁移：注入 columnTypeRules 旧形态 → 刷新 → settings 迁移为 typeMappings(sort 0/1) + 默认 indexTypes 且立即归一落盘
+  * 真实拖拽卡片 → 全量 save 持久化（localStorage 9 键结构完整）
+  * 设置页：2 条迁移规则 + 3 索引 chip；添加 "spatial" → 自动转大写 SPATIAL + dirty 提示 → 保存 → localStorage 持久化 + "全部更改已保存"
+  * 表编辑对话框索引下拉：UNIQUE/NORMAL/FULLTEXT/SPATIAL 四选项（动态列表生效）；合成 dblclick 打开「编辑表 · sys_user」验证
+  * 数据库导入：api.importFromDB() 5 表（含索引计数显示）；导入 t_blog+t_stat_daily → 12 卡片；索引持久化（uk_stat_date UNIQUE/idx_uv NORMAL/idx_publish_time NORMAL）
+  * 代码替换：确认弹窗（ManagerApi.replace 文案）→ 确认 → 关闭 + "已接收 zip 并替换 8 个代码文件（demo 行为）"
+  * 撤销/重做：Ctrl+Z 15→13 表、Ctrl+Y 13→15 表、localStorage 同步
+  * 自定义 api 注入：App.vue 临时传原型链包装 api（getSettings→HASH/BTREE、importFromDB→t_custom_marker）→ 设置页显示 HASH/BTREE chip + 1 规则、导入对话框显示 t_custom_marker（provide/inject 与 setActiveApi 双通道均生效）→ 还原正式 App.vue
+  * 重置演示数据：13 表/14 规则/3 索引类型/5 字典/4 模板全部还原种子
+  * 增/改/删表：新增 t_verify_create（默认 id 字段）→ 编辑注释保存（"验证编辑"持久化）→ 选中+Delete 确认删除（14→13 表）
+  * 字典页 5 字典加载、模板页 4 模板 + 1387 字符预览正常
+  * 亮暗双主题截图：dbmanager-light/dark.png、settings-index-types-dark.png；0 控制台错误
+- vue-tsc 通过；vite build 通过（2.46s）
+- patch 留档：patch/20260909153429.patch（18 文件 120K）；重新打包 download/graph-db-model-editor.zip（110 文件 4.5M）
+
+Stage Summary:
+- 三项需求全部完成并经真实浏览器验证：页面封装为 DBManagerView（api 属性 + provide/inject + store 桥接 + api 热切换重载）、demo 逻辑迁移为同步 DemoManagerApi（原 axios mock 层整体退役删除）、设置新增索引类型列表管理（驱动表编辑下拉与导入归一化）
+- 关键决策：提供 ComputedRef 注入（api prop 切换可传导）；store 经全局激活实例桥接（inject 与 getManagerApi 双通道）；模型变更统一「本地先行 + persist 失败回滚」事务模式；全量 save 语义取代原 13 个细粒度 REST 端点；localStorage v2 不升版本、旧设置读取时迁移并归一落盘；DBColumn.notNull 作为 demo 扩展可选字段保持导入体验
+- 交付物：snapshot/20260909151406.zip（改前快照）、patch/20260909153429.patch（本次改动）、download/graph-db-model-editor.zip（110 文件）+ download/README.md
+- 截图：docs/screenshots/dbmanager-light.png、dbmanager-dark.png、settings-index-types-dark.png

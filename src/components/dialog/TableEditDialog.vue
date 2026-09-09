@@ -7,6 +7,7 @@ import { useUiStore } from '@/stores/ui'
 import { useModelStore } from '@/stores/model'
 import { useDictStore } from '@/stores/dict'
 import { useCanvasStore } from '@/stores/canvas'
+import { useSettingsStore } from '@/stores/settings'
 import { toCamelCase } from '@/utils/string'
 import { getJavaTypeByType, COMMON_DB_TYPES, COMMON_JAVA_TYPES } from '@/utils/javaType'
 import { uid } from '@/utils/id'
@@ -17,6 +18,7 @@ const ui = useUiStore()
 const model = useModelStore()
 const dictStore = useDictStore()
 const canvas = useCanvasStore()
+const settingsStore = useSettingsStore()
 
 type DraftColumn = TableColumn & { _propTouched?: boolean; _javaTouched?: boolean }
 type DraftIndex = TableIndex
@@ -50,6 +52,8 @@ const dialogOpen = computed(() => ui.tableEdit.open)
 watch(dialogOpen, (open) => {
   if (!open) return
   dictStore.init()
+  // 索引类型选项来自应用设置（首次打开时预载）
+  settingsStore.init()
   const state = ui.tableEdit
   if (state.tableId) {
     const t = model.tableById(state.tableId)
@@ -159,11 +163,7 @@ function addIndex() {
 function removeIndex(idx: number) {
   draft.indexes.splice(idx, 1)
 }
-const indexTypeOptions = [
-  { value: 'UNIQUE', label: 'UNIQUE（唯一）' },
-  { value: 'NORMAL', label: 'NORMAL（普通）' },
-  { value: 'FULLTEXT', label: 'FULLTEXT（全文）' },
-]
+const indexTypeOptions = computed(() => settingsStore.indexTypeOptions.map((v) => ({ value: v, label: v })))
 const columnSelectOptions = computed(() =>
   draft.columns
     .filter((c) => c.columnName.trim())
@@ -296,8 +296,7 @@ async function save() {
     }
     ui.closeTableEdit()
   } catch (e: unknown) {
-    const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
-    message.error(msg || (e as Error)?.message || '保存失败')
+    message.error((e as Error)?.message || '保存失败')
   } finally {
     saving.loading = false
   }

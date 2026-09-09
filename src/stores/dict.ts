@@ -1,11 +1,11 @@
 /**
  * 字典仓库：数据字典 CRUD + 模糊搜索
+ * 数据读写经 ManagerApi（新增字典的 id 由本地生成后随载荷提交）
  */
 import { defineStore } from 'pinia'
 import { message } from 'antdv-next'
 import type { Dict } from '@/types/model'
-import { dictApi } from '@/api/modules'
-import { extractErrorMessage } from '@/api/http'
+import { getManagerApi, errorMessageOf } from '@/api/manager-api'
 import { uid } from '@/utils/id'
 
 function clone<T>(v: T): T {
@@ -68,41 +68,44 @@ export const useDictStore = defineStore('dict', {
       if (this.loaded || this.loading) return
       this.loading = true
       try {
-        this.dicts = (await dictApi.query()).map(clone)
+        this.dicts = getManagerApi().getDicts().map(clone)
         this.loaded = true
         if (!this.selectedDictId && this.dicts.length) this.selectedDictId = this.dicts[0].id
       } catch (e) {
-        message.error(extractErrorMessage(e, '字典加载失败'))
+        message.error(errorMessageOf(e, '字典加载失败'))
       } finally {
         this.loading = false
       }
     },
     async saveDict(draft: Dict) {
       try {
+        const dict = clone(draft)
+        if (!dict.id) dict.id = uid('dict-')
+        const api = getManagerApi()
         if (draft.id) {
-          const updated = await dictApi.update(draft)
+          api.updateDict(dict)
           const idx = this.dicts.findIndex((d) => d.id === draft.id)
-          if (idx >= 0) this.dicts[idx] = clone(updated)
-          return updated
+          if (idx >= 0) this.dicts[idx] = clone(dict)
+        } else {
+          api.addDict(dict)
+          this.dicts.push(clone(dict))
+          this.selectedDictId = dict.id
         }
-        const created = await dictApi.add(draft)
-        this.dicts.push(clone(created))
-        this.selectedDictId = created.id
-        return created
+        return dict
       } catch (e) {
-        message.error(extractErrorMessage(e, '字典保存失败'))
+        message.error(errorMessageOf(e, '字典保存失败'))
         throw e
       }
     },
     async removeDict(id: string) {
       try {
-        await dictApi.remove(id)
+        getManagerApi().removeDict(id)
         this.dicts = this.dicts.filter((d) => d.id !== id)
         if (this.selectedDictId === id) {
           this.selectedDictId = this.dicts[0]?.id ?? ''
         }
       } catch (e) {
-        message.error(extractErrorMessage(e, '字典删除失败'))
+        message.error(errorMessageOf(e, '字典删除失败'))
         throw e
       }
     },

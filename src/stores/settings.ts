@@ -1,15 +1,14 @@
 /**
- * 设置仓库：列默认类型规则（从数据库导入时的 Java 类型默认映射）
+ * 设置仓库：索引类型列表 + 列类型映射规则（从数据库导入时的 Java 类型默认映射）
  *
- * 匹配语义：对列类型（如 VARCHAR(255)、Decimal(6, 4)）按规则顺序依次
- * 进行正则表达式匹配（忽略大小写），取第一条命中规则的 javaType；
- * 全部未命中时由调用方回退内置类型映射表
+ * 匹配语义：对列类型（如 VARCHAR(255)、Decimal(6, 4)）按 typeMappings 的
+ * sort 升序（越小越优先）进行正则表达式匹配（忽略大小写），取第一条命中
+ * 规则的 javaType；全部未命中时由调用方回退内置类型映射表
  */
 import { defineStore } from 'pinia'
 import { message } from 'antdv-next'
-import type { ColumnTypeRule } from '@/types/model'
-import { settingsApi } from '@/api/modules'
-import { extractErrorMessage } from '@/api/http'
+import type { Settings, TypeMapping } from '@/types/model'
+import { getManagerApi, errorMessageOf } from '@/api/manager-api'
 import { uid } from '@/utils/id'
 
 function clone<T>(v: T): T {
@@ -35,22 +34,29 @@ export const useSettingsStore = defineStore('settings', {
   state: () => ({
     loaded: false,
     loading: false,
-    columnTypeRules: [] as ColumnTypeRule[],
+    indexTypes: [] as string[],
+    typeMappings: [] as TypeMapping[],
   }),
 
   getters: {
-    /** 编译后的规则（跳过空/非法正则），保留原始序号用于回显 */
+    /** 索引类型选项（空时兜底三常规类型，避免设置未加载时无可选项） */
+    indexTypeOptions(): string[] {
+      return this.indexTypes.length ? this.indexTypes : ['UNIQUE', 'NORMAL', 'FULLTEXT']
+    },
+    /** 编译后的规则（按 sort 升序、跳过空/非法正则），保留原始序号用于回显 */
     compiledRules(): Array<{ re: RegExp; javaType: string; index: number }> {
       const out: Array<{ re: RegExp; javaType: string; index: number }> = []
-      this.columnTypeRules.forEach((r, index) => {
-        const pattern = String(r.pattern ?? '').trim()
-        if (!pattern) return
-        try {
-          out.push({ re: new RegExp(pattern, 'i'), javaType: r.javaType, index })
-        } catch {
-          /* 非法正则跳过（保存前 UI 已拦截） */
-        }
-      })
+      ;[...this.typeMappings]
+        .sort((a, b) => a.sort - b.sort)
+        .forEach((r, index) => {
+          const pattern = String(r.pattern ?? '').trim()
+          if (!pattern) return
+          try {
+            out.push({ re: new RegExp(pattern, 'i'), javaType: r.javaType, index })
+          } catch {
+            /* 非法正则跳过（保存前 UI 已拦截） */
+          }
+        })
       return out
     },
   },
@@ -60,19 +66,22 @@ export const useSettingsStore = defineStore('settings', {
       if (this.loaded || this.loading) return
       this.loading = true
       try {
-        const settings = await settingsApi.query()
-        this.columnTypeRules = (settings.columnTypeRules || []).map(clone)
+        const settings = getManagerApi().getSettings()
+        this.indexTypes = (settings.indexTypes || []).map(String)
+        this.typeMappings = (settings.typeMappings || []).map(clone)
         this.loaded = true
       } catch (e) {
-        message.error(extractErrorMessage(e, '设置加载失败'))
+        message.error(errorMessageOf(e, '设置加载失败'))
       } finally {
         this.loading = false
       }
     },
 
-    async save(rules: ColumnTypeRule[]) {
-      const saved = await settingsApi.update({ columnTypeRules: rules.map(clone) })
-      this.columnTypeRules = (saved.columnTypeRules || []).map(clone)
+    async save(settings: Settings) {
+      const saved = clone(settings)
+      getManagerApi().saveSettings(saved)
+      this.indexTypes = (saved.indexTypes || []).map(String)
+      this.typeMappings = (saved.typeMappings || []).map(clone)
       this.loaded = true
       return saved
     },
@@ -90,9 +99,14 @@ export const useSettingsStore = defineStore('settings', {
       return null
     },
 
-    /** 新建规则草稿行 */
-    newRuleDraft(): ColumnTypeRule {
-      return { id: uid('rule-'), pattern: '', javaType: 'String' }
+    /** 新建规则草稿行（sort 暂为末尾占位，保存时统一按序重编号） */
+    newMappingDraft(): TypeMapping {
+      return { sort: this.typeMappings.length, pattern: '', javaType: 'String' }
+    },
+
+    /** 生成客户端拖拽/编辑用的草稿行（带稳定 key，保存时剥离） */
+    draftKey(): string {
+      return uid('mapping-')
     },
   },
 })

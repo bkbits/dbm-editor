@@ -1,41 +1,50 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { message } from 'antdv-next'
-import { Plus, Trash2, GripVertical, Settings, FlaskConical } from '@lucide/vue'
-import type { ColumnTypeRule } from '@/types/model'
+import { Plus, Trash2, GripVertical, Settings, FlaskConical, Layers, X } from '@lucide/vue'
+import type { TypeMapping } from '@/types/model'
 import { useSettingsStore, SETTINGS_JAVA_TYPES } from '@/stores/settings'
+import { errorMessageOf } from '@/api/manager-api'
 import { useDragSort } from '@/composables/useDragSort'
+import { uid } from '@/utils/id'
 import { getJavaTypeByType, COMMON_DB_TYPES } from '@/utils/javaType'
 
 const settingsStore = useSettingsStore()
 
-/* ==================== 规则草稿（保存前本地编辑） ==================== */
+/* ==================== 规则草稿（保存前本地编辑，带稳定 key） ==================== */
 
-const rules = ref<ColumnTypeRule[]>([])
+interface TypeMappingDraft extends TypeMapping {
+  key: string // 客户端稳定 key（拖拽/编辑期间保持 DOM 复用，保存时剥离）
+}
+
+const rules = ref<TypeMappingDraft[]>([])
 
 watch(
-  () => settingsStore.columnTypeRules,
+  () => settingsStore.typeMappings,
   (v) => {
-    rules.value = (v || []).map((r) => ({ ...r }))
+    rules.value = (v || []).map((m) => ({ ...m, key: uid('mapping-') }))
   },
   { immediate: true },
 )
 
-/* 规则顺序即匹配优先级，拖拽手柄排序（复用字段拖拽排序逻辑） */
-const drag = useDragSort(() => rules.value)
+/* 规则顺序即匹配优先级（sort 升序），拖拽手柄排序后按位置重编号 */
+const drag = useDragSort(() => rules.value, () => {
+  rules.value.forEach((m, i) => (m.sort = i))
+})
 
 function addRule() {
-  rules.value.push(settingsStore.newRuleDraft())
+  rules.value.push({ ...settingsStore.newMappingDraft(), key: uid('mapping-') })
 }
 function removeRule(idx: number) {
   rules.value.splice(idx, 1)
+  rules.value.forEach((m, i) => (m.sort = i))
 }
 
 const javaTypeOptions = SETTINGS_JAVA_TYPES.map((t) => ({ value: t, label: t }))
 
 /* ==================== 正则校验 ==================== */
 
-function regexError(rule: ColumnTypeRule): string | null {
+function regexError(rule: TypeMapping): string | null {
   const pattern = String(rule.pattern ?? '').trim()
   if (!pattern) return '正则不能为空'
   try {
@@ -84,14 +93,53 @@ function rowMatch(idx: number): boolean {
 /** 回退结果（无任何命中时导入将使用内置映射） */
 const fallbackType = computed(() => (testRaw.value ? getJavaTypeByType(testRaw.value) : ''))
 
-/* ==================== 保存 / 放弃 ==================== */
+/* ==================== 索引类型草稿 ==================== */
+
+const indexTypes = ref<string[]>([])
+const newIndexType = ref('')
+
+watch(
+  () => settingsStore.indexTypes,
+  (v) => {
+    indexTypes.value = (v || []).map(String)
+  },
+  { immediate: true },
+)
+
+function addIndexType() {
+  const v = newIndexType.value.trim().toUpperCase()
+  if (!v) {
+    message.warning('索引类型不能为空')
+    return
+  }
+  if (indexTypes.value.includes(v)) {
+    message.warning(`索引类型已存在：${v}`)
+    return
+  }
+  indexTypes.value.push(v)
+  newIndexType.value = ''
+}
+
+function removeIndexType(idx: number) {
+  indexTypes.value.splice(idx, 1)
+}
+
+const indexTypeInvalid = computed(() => indexTypes.value.length === 0)
+
+/* ==================== 保存 / 放弃（设置整体） ==================== */
 
 const saving = reactive({ loading: false })
 
-const dirty = computed(() => JSON.stringify(rules.value) !== JSON.stringify(settingsStore.columnTypeRules))
+const dirty = computed(
+  () =>
+    JSON.stringify(rules.value.map(({ key: _key, ...m }) => m)) !==
+      JSON.stringify(settingsStore.typeMappings) ||
+    JSON.stringify(indexTypes.value) !== JSON.stringify(settingsStore.indexTypes),
+)
 
 function resetDraft() {
-  rules.value = settingsStore.columnTypeRules.map((r) => ({ ...r }))
+  rules.value = settingsStore.typeMappings.map((m) => ({ ...m, key: uid('mapping-') }))
+  indexTypes.value = settingsStore.indexTypes.map(String)
 }
 
 async function save() {
@@ -99,13 +147,19 @@ async function save() {
     message.warning(`存在 ${invalidCount.value} 条空或无效的正则表达式，请修正后再保存`)
     return
   }
+  if (indexTypeInvalid.value) {
+    message.warning('索引类型列表不能为空，至少保留一个类型')
+    return
+  }
   saving.loading = true
   try {
-    await settingsStore.save(rules.value.map((r) => ({ ...r, pattern: r.pattern.trim() })))
+    await settingsStore.save({
+      indexTypes: indexTypes.value.map(String),
+      typeMappings: rules.value.map(({ key: _key, ...m }) => ({ ...m, pattern: m.pattern.trim() })),
+    })
     message.success('设置已保存')
   } catch (e: unknown) {
-    const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
-    message.error(msg || (e as Error)?.message || '保存失败')
+    message.error(errorMessageOf(e, '保存失败'))
   } finally {
     saving.loading = false
   }
@@ -134,7 +188,7 @@ async function save() {
           <code class="mono">VARCHAR(255)</code>、<code class="mono">Decimal(6, 4)</code>）按下列规则
           <b>自上而下依次</b>进行正则表达式匹配（忽略大小写），取<b>第一条命中</b>规则的 Java
           类型作为该字段的默认 Java 类型；全部未命中时回退内置类型映射表（仍无映射则为
-          String）。规则顺序即优先级，可拖拽调整。
+          String）。规则顺序（sort）即优先级，可拖拽调整。
         </div>
 
         <div class="rules-table">
@@ -149,7 +203,7 @@ async function save() {
           <div class="r-body">
             <div
               v-for="(rule, idx) in rules"
-              :key="rule.id"
+              :key="rule.key"
               class="r-row r-grid"
               :data-idx="idx"
               :class="drag.rowClass(idx)"
@@ -236,25 +290,71 @@ async function save() {
             <span v-else class="test-placeholder">输入数据库类型后实时预览匹配结果（含未保存修改）</span>
           </div>
         </div>
+      </section>
 
-        <div class="card-foot">
-          <span class="dirty-tip" :class="{ dirty }">
-            {{ invalidCount ? `存在 ${invalidCount} 条无效规则，保存已禁用` : dirty ? '有未保存的修改' : '全部更改已保存' }}
+      <section class="settings-card">
+        <div class="card-head">
+          <span class="card-title"><Layers :size="13" /> 索引类型</span>
+          <span class="card-sub">表编辑与数据库导入中索引类型的可选列表</span>
+        </div>
+
+        <div class="card-intro">
+          管理索引类型选项（如 <code class="mono">UNIQUE</code> / <code class="mono">NORMAL</code> /
+          <code class="mono">FULLTEXT</code>）。保存后「编辑表」对话框的索引类型下拉选项将使用该列表；
+          从数据库导入表时，不在列表中的索引类型将归一为列表第一项。至少保留一个类型。
+        </div>
+
+        <div class="index-types">
+          <span v-for="(t, i) in indexTypes" :key="t" class="index-chip mono">
+            {{ t }}
+            <button class="chip-close" type="button" title="移除类型" @click="removeIndexType(i)">
+              <X :size="10" />
+            </button>
           </span>
-          <div class="foot-actions">
-            <a-button size="small" :disabled="!dirty" @click="resetDraft">放弃修改</a-button>
-            <a-button
-              size="small"
-              type="primary"
-              :loading="saving.loading"
-              :disabled="!dirty || Boolean(invalidCount)"
-              @click="save"
-            >
-              保存设置
-            </a-button>
-          </div>
+          <span v-if="!indexTypes.length" class="index-empty">索引类型列表为空，保存前请至少添加一个类型</span>
+        </div>
+
+        <div class="index-add">
+          <a-input
+            v-model:value="newIndexType"
+            size="small"
+            class="mono index-input"
+            placeholder="如 SPATIAL（回车添加，自动转大写）"
+            spellcheck="false"
+            @keydown.enter="addIndexType"
+          />
+          <a-button size="small" @click="addIndexType">
+            <template #icon><Plus :size="12" /></template>
+            添加
+          </a-button>
         </div>
       </section>
+
+      <div class="settings-foot">
+        <span class="dirty-tip" :class="{ dirty }">
+          {{
+            invalidCount
+              ? `存在 ${invalidCount} 条无效规则，保存已禁用`
+              : indexTypeInvalid
+                ? '索引类型列表为空，保存已禁用'
+                : dirty
+                  ? '有未保存的修改'
+                  : '全部更改已保存'
+          }}
+        </span>
+        <div class="foot-actions">
+          <a-button size="small" :disabled="!dirty" @click="resetDraft">放弃修改</a-button>
+          <a-button
+            size="small"
+            type="primary"
+            :loading="saving.loading"
+            :disabled="!dirty || Boolean(invalidCount) || indexTypeInvalid"
+            @click="save"
+          >
+            保存设置
+          </a-button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -310,6 +410,7 @@ async function save() {
   border: 1px solid var(--border);
   border-radius: var(--radius-l);
   padding: 14px 16px;
+  margin-bottom: 14px;
 }
 
 .card-head {
@@ -319,6 +420,9 @@ async function save() {
   margin-bottom: 8px;
 
   .card-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
     font-size: 13.5px;
     font-weight: 600;
     color: var(--text-1);
@@ -373,7 +477,7 @@ async function save() {
   }
 
   .r-body {
-    max-height: calc(100vh - 420px);
+    max-height: calc(100vh - 460px);
     min-height: 120px;
     overflow-y: auto;
     padding: 6px 2px;
@@ -575,12 +679,76 @@ async function save() {
   }
 }
 
-.card-foot {
+/* ==================== 索引类型卡片 ==================== */
+
+.index-types {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  min-height: 30px;
+
+  .index-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--primary-text);
+    background: var(--primary-weak);
+    border: 1px solid transparent;
+    border-radius: var(--radius-m);
+    padding: 2px 4px 2px 9px;
+    transition: border-color 0.15s ease, background 0.15s ease;
+
+    &:hover {
+      border-color: var(--primary);
+    }
+
+    .chip-close {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 16px;
+      height: 16px;
+      border: none;
+      border-radius: 4px;
+      background: transparent;
+      color: var(--text-3);
+      cursor: pointer;
+      transition: background 0.15s ease, color 0.15s ease;
+
+      &:hover {
+        background: var(--danger-weak);
+        color: var(--danger);
+      }
+    }
+  }
+
+  .index-empty {
+    font-size: 12px;
+    color: var(--warning);
+  }
+}
+
+.index-add {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+
+  .index-input {
+    width: 260px;
+  }
+}
+
+/* ==================== 统一保存条 ==================== */
+
+.settings-foot {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: 12px;
-  padding-top: 10px;
+  margin-top: 2px;
+  padding: 10px 4px 0;
   border-top: 1px solid var(--border);
 
   .dirty-tip {

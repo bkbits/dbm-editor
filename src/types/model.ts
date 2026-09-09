@@ -8,9 +8,6 @@ export type NavigateType = '11' | '1N' | 'N1' | 'NN'
 /** 级联操作 */
 export type NavigateCascade = 'AUTO' | 'NO_ACTION' | 'SET_NULL' | 'DELETE'
 
-/** 索引类型 */
-export type IndexType = 'UNIQUE' | 'NORMAL' | 'FULLTEXT'
-
 /** 表分类 */
 export interface TableCategory {
   id: string // 分类ID
@@ -64,7 +61,7 @@ export interface TableIndex {
   id: string // 索引ID
   tableId: string // 所属表ID
   indexName: string // 索引名称(唯一)
-  type: IndexType // 索引类型
+  type: string // 索引类型（可选列表由应用设置 indexTypes 管理）
   columns: string[] // 字段名列表
   comment?: string // 索引注释
 }
@@ -134,19 +131,6 @@ export interface TableAddPayload extends Omit<Table, 'id'> {
   rawNavigates?: TableNavigate[]
 }
 
-/** 从真实数据库查询到的表结构（用于导入） */
-export interface DBTableDef {
-  tableName: string
-  comment?: string
-  columns: Array<{
-    columnName: string
-    type: string
-    notNull: boolean
-    primaryKey: boolean
-    comment?: string
-  }>
-}
-
 /* ==================== 字典 ==================== */
 
 /** 字典值标签类型：I=Info S=Success W=Warning D=Danger */
@@ -174,7 +158,14 @@ export interface Dict {
 
 /* ==================== 模板 ==================== */
 
-/** 代码模板 */
+/** 代码模板（ManagerApi 契约形态：模板名称字段为 templateName） */
+export interface Template {
+  id: string // 模板ID
+  templateName: string // 模板名称(唯一)
+  content: string // 模板脚本(Eta 语法)
+}
+
+/** 应用内部使用的模板形态（name 即 templateName） */
 export interface CodeTemplate {
   id: string // 模板ID
   name: string // 模板名称(唯一)
@@ -190,27 +181,115 @@ export interface GeneratedFile {
   content: string
 }
 
-/** 代码替换接口响应 */
-export interface ReplaceResult {
-  success: boolean
-  files: number
-  message: string
-}
-
-/* ==================== 设置 ==================== */
+/* ==================== 设置（ManagerApi 契约形态） ==================== */
 
 /**
- * 列默认类型规则：从数据库导入时，对列类型（如 VARCHAR(255)、Decimal(6, 4)）
- * 按列表顺序依次进行正则表达式匹配（忽略大小写），取第一条命中规则的 javaType
- * 作为导入字段的 Java 类型默认值
+ * 列类型映射规则：从数据库导入列时，按 sort 升序（越小越优先）依次
+ * 对列类型进行正则表达式匹配（忽略大小写），取第一条命中的 javaType
  */
-export interface ColumnTypeRule {
-  id: string // 规则ID
-  pattern: string // 列类型正则表达式(忽略大小写)
-  javaType: string // 命中后的默认 Java 类型
+export interface TypeMapping {
+  sort: number // 排序序号(升序，越小越优先)
+  pattern: string // 列类型正则表达式
+  javaType: string // 目标 Java 类型
 }
 
 /** 应用设置 */
-export interface AppSettings {
-  columnTypeRules: ColumnTypeRule[] // 列默认类型规则（有序，越靠前优先级越高）
+export interface Settings {
+  indexTypes: string[] // 索引类型列表
+  typeMappings: TypeMapping[] // 列类型映射规则列表
+}
+
+/* ==================== 数据库导入（ManagerApi 契约形态） ==================== */
+
+/** 数据库列定义：从真实数据库导入的表列信息 */
+export interface DBColumn {
+  columnName: string // 列名
+  type: string // 数据库类型
+  primaryKey: boolean // 是否主键
+  comment?: string // 列注释
+  /** demo 扩展：是否非空（真实实现可不提供，缺省视为可空） */
+  notNull?: boolean
+}
+
+/** 数据库索引定义：从真实数据库导入的表索引信息 */
+export interface DBIndex {
+  indexName: string // 索引名称
+  type: string // 索引类型（UNIQUE/NORMAL/FULLTEXT 等）
+  columns: string[] // 索引包含的列名列表
+  comment?: string // 索引注释
+}
+
+/** 数据库表定义：从真实数据库导入的完整表结构 */
+export interface DBTable {
+  tableName: string // 表名
+  comment?: string // 表注释
+  columns: DBColumn[] // 列列表
+  indexes: DBIndex[] // 索引列表
+}
+
+/** 模型加载结果：分类、表与导航关系的完整模型 */
+export interface LoadResultVO {
+  categories: TableCategory[] // 表分类列表
+  tables: ManagerTable[] // 表列表（含字段与索引）
+  navigates: TableNavigate[] // 导航关系列表
+}
+
+/**
+ * 完整表定义：规格中 Table 的完整语义（元信息 + 字段 + 索引），
+ * 用于 ManagerApi.load / save 的全量模型读写
+ */
+export interface ManagerTable extends Table {
+  columns: TableColumn[] // 字段列表
+  indexes: TableIndex[] // 索引列表
+}
+
+/** 本地管理能力接口：设置、数据库导入、模型全量加载/保存、字典与模板管理、代码替换 */
+export interface ManagerApi {
+  /** 获取应用设置 */
+  getSettings(): Settings
+
+  /** 保存应用设置 */
+  saveSettings(settings: Settings): void
+
+  /** 从真实数据库读取表结构（用于导入建模） */
+  importFromDB(): DBTable[]
+
+  /** 加载完整模型（分类/表/导航） */
+  load(): LoadResultVO
+
+  /** 全量保存模型（分类/表/导航） */
+  save(categories: TableCategory[], tables: ManagerTable[], navigates: TableNavigate[]): void
+
+  /** 获取全部字典 */
+  getDicts(): Dict[]
+
+  /** 新增字典 */
+  addDict(dict: Dict): void
+
+  /** 更新字典 */
+  updateDict(dict: Dict): void
+
+  /** 删除字典 */
+  removeDict(dictId: string): void
+
+  /** 获取全部代码模板 */
+  getTemplates(): Template[]
+
+  /** 新增代码模板 */
+  addTemplate(template: Template): void
+
+  /** 更新代码模板 */
+  updateTemplate(template: Template): void
+
+  /** 删除代码模板 */
+  removeTemplate(templateId: string): void
+
+  /** 上传 zip 产物代码，直接替换对应源码文件 */
+  replace(zipFile: Blob): void
+
+  /**
+   * demo 扩展：重置为内置演示数据（仅 DemoManagerApi 提供，
+   * 正式实现无需实现该方法）
+   */
+  resetDemo?(): void
 }

@@ -3,10 +3,10 @@
  * （系统管理 / 内容管理 / 商城 三个分类，含一对一、一对多、多对多及中间表）
  */
 import type {
-  AppSettings,
   CodeTemplate,
-  DBTableDef,
+  DBTable,
   Dict,
+  Settings,
   TableColumn,
   TableCategory,
   TableIndex,
@@ -617,8 +617,8 @@ CREATE TABLE \`<%= context.table.tableName %>\` (
   },
 ]
 
-/* ============ 模拟真实数据库（queryFromDB 用） ============ */
-export const SEED_DB_TABLES: DBTableDef[] = [
+/* ============ 模拟真实数据库（importFromDB 用） ============ */
+export const SEED_DB_TABLES: DBTable[] = [
   {
     tableName: 't_blog',
     comment: '博客主表',
@@ -629,6 +629,9 @@ export const SEED_DB_TABLES: DBTableDef[] = [
       { columnName: 'content', type: 'LONGTEXT', notNull: false, primaryKey: false, comment: '正文' },
       { columnName: 'publish_time', type: 'DATETIME', notNull: false, primaryKey: false, comment: '发布时间' },
     ],
+    indexes: [
+      { indexName: 'idx_publish_time', type: 'NORMAL', columns: ['publish_time'], comment: '发布时间检索' },
+    ],
   },
   {
     tableName: 't_blog_tag',
@@ -636,6 +639,9 @@ export const SEED_DB_TABLES: DBTableDef[] = [
     columns: [
       { columnName: 'id', type: 'BIGINT', notNull: true, primaryKey: true, comment: '主键' },
       { columnName: 'tag_name', type: 'VARCHAR(50)', notNull: true, primaryKey: false, comment: '标签名' },
+    ],
+    indexes: [
+      { indexName: 'uk_tag_name', type: 'UNIQUE', columns: ['tag_name'], comment: '标签名唯一' },
     ],
   },
   {
@@ -645,6 +651,9 @@ export const SEED_DB_TABLES: DBTableDef[] = [
       { columnName: 'id', type: 'BIGINT', notNull: true, primaryKey: true, comment: '主键' },
       { columnName: 'blog_id', type: 'BIGINT', notNull: true, primaryKey: false, comment: '博客ID' },
       { columnName: 'tag_id', type: 'BIGINT', notNull: true, primaryKey: false, comment: '标签ID' },
+    ],
+    indexes: [
+      { indexName: 'uk_blog_tag', type: 'UNIQUE', columns: ['blog_id', 'tag_id'], comment: '联合唯一' },
     ],
   },
   {
@@ -657,6 +666,7 @@ export const SEED_DB_TABLES: DBTableDef[] = [
       { columnName: 'reply', type: 'VARCHAR(500)', notNull: false, primaryKey: false, comment: '管理员回复' },
       { columnName: 'created_at', type: 'DATETIME', notNull: true, primaryKey: false, comment: '留言时间' },
     ],
+    indexes: [],
   },
   {
     tableName: 't_stat_daily',
@@ -667,30 +677,35 @@ export const SEED_DB_TABLES: DBTableDef[] = [
       { columnName: 'pv', type: 'INT', notNull: true, primaryKey: false, comment: '访问量' },
       { columnName: 'uv', type: 'INT', notNull: true, primaryKey: false, comment: '独立访客' },
     ],
+    indexes: [
+      { indexName: 'uk_stat_date', type: 'UNIQUE', columns: ['stat_date'], comment: '日期唯一' },
+      { indexName: 'idx_uv', type: 'NORMAL', columns: ['uv'], comment: '' },
+    ],
   },
 ]
 
 /* ============ 设置 ============ */
 /**
- * 种子设置：列默认类型规则（有序，导入时依序正则匹配，取第一条命中）
+ * 种子设置：索引类型列表 + 列类型映射规则（按 sort 升序，导入时依序正则匹配，取第一条命中）
  * 注意顺序依赖：bigint 先于 int、datetime/timestamp 先于 time/date、
  * char(1) 先于 char，否则前缀类类型会被宽泛规则抢先命中
  */
-export const SEED_SETTINGS: AppSettings = {
-  columnTypeRules: [
-    { id: 'rule-char-1', pattern: '^\\s*char\\s*\\(\\s*1\\s*\\)', javaType: 'Character' },
-    { id: 'rule-char', pattern: 'char', javaType: 'String' },
-    { id: 'rule-text', pattern: 'text', javaType: 'String' },
-    { id: 'rule-json-enum-set', pattern: 'json|enum|set', javaType: 'String' },
-    { id: 'rule-bigint', pattern: 'bigint', javaType: 'Long' },
-    { id: 'rule-int', pattern: 'int', javaType: 'Integer' },
-    { id: 'rule-decimal', pattern: 'decimal|numeric', javaType: 'BigDecimal' },
-    { id: 'rule-float', pattern: 'float', javaType: 'Float' },
-    { id: 'rule-double', pattern: 'double|real', javaType: 'Double' },
-    { id: 'rule-datetime', pattern: 'datetime', javaType: 'LocalDateTime' },
-    { id: 'rule-timestamp', pattern: 'timestamp', javaType: 'Timestamp' },
-    { id: 'rule-time', pattern: '^\\s*time', javaType: 'LocalTime' },
-    { id: 'rule-date', pattern: 'date', javaType: 'LocalDate' },
-    { id: 'rule-year', pattern: 'year', javaType: 'Integer' },
+export const SEED_SETTINGS: Settings = {
+  indexTypes: ['UNIQUE', 'NORMAL', 'FULLTEXT'],
+  typeMappings: [
+    { sort: 0, pattern: '^\\s*char\\s*\\(\\s*1\\s*\\)', javaType: 'Character' },
+    { sort: 1, pattern: 'char', javaType: 'String' },
+    { sort: 2, pattern: 'text', javaType: 'String' },
+    { sort: 3, pattern: 'json|enum|set', javaType: 'String' },
+    { sort: 4, pattern: 'bigint', javaType: 'Long' },
+    { sort: 5, pattern: 'int', javaType: 'Integer' },
+    { sort: 6, pattern: 'decimal|numeric', javaType: 'BigDecimal' },
+    { sort: 7, pattern: 'float', javaType: 'Float' },
+    { sort: 8, pattern: 'double|real', javaType: 'Double' },
+    { sort: 9, pattern: 'datetime', javaType: 'LocalDateTime' },
+    { sort: 10, pattern: 'timestamp', javaType: 'Timestamp' },
+    { sort: 11, pattern: '^\\s*time', javaType: 'LocalTime' },
+    { sort: 12, pattern: 'date', javaType: 'LocalDate' },
+    { sort: 13, pattern: 'year', javaType: 'Integer' },
   ],
 }

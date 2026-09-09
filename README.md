@@ -16,11 +16,54 @@
 | 状态管理 | Pinia |
 | 模板引擎 | Eta（代码生成） |
 | 样式 | Sass（scss 标准） |
-| 网络请求 | Axios（自定义 adapter 转发至 Mock） |
+| 数据能力 | ManagerApi 接口体系（内置 DemoManagerApi 演示实现，可注入自定义实现） |
 | 代码高亮 | highlight.js + highlights-eta（Eta 模板语法） |
 | 打包下载 | JSZip |
 
 > 页面切换不使用 `vue-router`，通过 `v-if` 状态管理（见 `src/stores/ui.ts`）。
+
+## 页面封装与数据能力注入（DBManagerView / ManagerApi）
+
+整个应用页面封装为 `src/views/DBManagerView.vue`，可通过属性注入自定义数据能力实现：
+
+```ts
+import DBManagerView from '@/views/DBManagerView.vue'
+import type { ManagerApi } from '@/types/model'
+
+const myApi: ManagerApi = {
+  // 实现全部 14 个方法：设置读写 / 数据库导入 / 模型全量加载与保存 /
+  // 字典与模板 CRUD / 代码替换（详见 src/types/model.ts 的 ManagerApi 接口）
+  ...
+}
+```
+
+```vue
+<DBManagerView :api="myApi" />
+<!-- 不传 api 时使用内置 DemoManagerApi 演示实现（内存 + localStorage） -->
+```
+
+注入链路：
+
+- **DBManagerView** 解析 `api` 属性（缺省共享 `sharedDemoApi` 单例），`provide` 注入子组件并 `setActiveApi` 写入全局激活实例；切换 api 时自动全量重载各仓库数据
+- **子组件**（如数据库导入 / 代码替换对话框）通过 `useManagerApi()`（`src/api/manager-api.ts`）注入响应式引用，在合适位置直接调用 `api.importFromDB()` / `api.replace(zip)` 等方法
+- **Pinia store** 无法使用 inject，统一经 `getManagerApi()` 读取全局激活实例；所有模型变更通过 `ManagerApi.save` 全量持久化（变更先改本地状态，持久化失败自动回滚快照）
+
+### ManagerApi 接口清单
+
+| 方法 | 说明 |
+| --- | --- |
+| `getSettings() / saveSettings(settings)` | 应用设置读写（索引类型列表 + 列类型映射规则） |
+| `importFromDB()` | 从真实数据库读取表结构（含字段与索引，用于导入建模） |
+| `load() / save(categories, tables, navigates)` | 完整模型全量加载 / 保存 |
+| `getDicts() / addDict / updateDict / removeDict` | 字典 CRUD |
+| `getTemplates() / addTemplate / updateTemplate / removeTemplate` | 代码模板 CRUD |
+| `replace(zipFile)` | 上传 zip 产物代码，直接替换对应源码文件 |
+
+> `DBColumn.notNull` 为 demo 扩展字段（真实实现可不提供，缺省视为可空）；`resetDemo()` 为 DemoManagerApi 的扩展方法（重置为内置演示数据），正式实现无需提供。
+
+### DemoManagerApi（内置演示实现）
+
+`src/api/demo-manager-api.ts`：数据存于内存（`src/mock/db.ts`）并持久化到 `localStorage`（`gdbme:db:v2`）；除 `replace` 的 zip 解析外全部同步完成，校验失败抛出含中文业务提示的 `Error`。数据重置：左下大纲面板「重置演示数据」按钮。
 
 ## 快速开始
 
@@ -70,9 +113,9 @@ bun run typecheck
 
 ### 编辑对话框
 
-- **表编辑**：双击卡片/大纲表名或右键菜单触发；字段（增删改/拖拽手柄排序/类型自动映射 Java 类型/字典关联）、索引（UNIQUE/NORMAL/FULLTEXT）、导航列表（跳转编辑/删除）
+- **表编辑**：双击卡片/大纲表名或右键菜单触发；字段（增删改/拖拽手柄排序/类型自动映射 Java 类型/字典关联）、索引（类型下拉选项来自「系统设置 → 索引类型」）、导航列表（跳转编辑/删除）
 - **导航编辑**：四种类型、两端关联属性、属性名、级联操作（自动/无动作/删除/设为Null，双向独立配置）、NN 中间表（自动创建或选择已有表）、一键反转方向
-- **从数据库导入**：`GET /api/codegen/table/queryFromDB` 模拟真实库表结构，勾选导入；字段 Java 类型默认值由「系统设置 → 列默认类型」规则依序正则匹配推导（悬停可预览各字段推导结果），未命中回退内置类型映射
+- **从数据库导入**：经 `ManagerApi.importFromDB()` 读取库表结构（含索引），勾选导入；字段 Java 类型默认值由「系统设置 → 列默认类型」规则依序正则匹配推导（悬停可预览各字段与索引归一化结果），未命中回退内置类型映射；导入的索引类型不在设置列表时归一为列表首项
 
 ### 字典管理
 
@@ -87,7 +130,7 @@ bun run typecheck
 - 模板列表 + 实时编辑预览：左侧模板脚本（Eta 语法高亮编辑器，`<% %> / <%= %> / <%~ %>` 标签与 `<%# %>` 注释区分着色，输入实时同步）、右侧选择目标表实时渲染
 - **代码预览**：选中单表 → 切换模板标签页查看生成代码（highlight.js 高亮、可复制）
 - **代码生成**：选中分类 / 选中表 / 不选中（全部）→ 触发下载 zip（JSZip 按模板内 `filePath` 建目录）
-- **代码替换**：同上范围 → 弹出确认（含文件清单）→ 调用 `multipart/form-data /api/codegen/replace` 上传 zip
+- **代码替换**：同上范围 → 弹出确认（含文件清单）→ 经 `ManagerApi.replace(zip)` 上传 zip（结果反馈由 api 实现自行处理）
 
 模板内置变量与工具：
 
@@ -121,39 +164,16 @@ Eta 语法：`<% %>` 逻辑、`<%= %>` 输出、`<%# %>` 自定义注释标签�
 
 ### 系统设置
 
-- **列默认类型**：从数据库导入时的 Java 类型默认映射。对字段的数据库类型（如 `VARCHAR(255)`、`Decimal(6, 4)`）按规则列表**自上而下依次**进行正则表达式匹配（忽略大小写），取**第一条命中**规则的 Java 类型作为默认值；全部未命中时回退内置类型映射表
+- **列默认类型**：从数据库导入时的 Java 类型默认映射。对字段的数据库类型（如 `VARCHAR(255)`、`Decimal(6, 4)`）按规则列表**自上而下依次**（`sort` 升序，越小越优先）进行正则表达式匹配（忽略大小写），取**第一条命中**规则的 Java 类型作为默认值；全部未命中时回退内置类型映射表
 - 可选 Java 类型：`Character` / `String` / `Long` / `Integer` / `Float` / `Double` / `BigDecimal` / `LocalDateTime` / `LocalDate` / `LocalTime` / `Timestamp`
-- 规则顺序即优先级，拖拽手柄调整；非法正则即时标红并禁用保存；内置「规则测试」输入任意数据库类型实时预览命中结果（含未保存修改，区分「生效/命中被抢先」）
-- 设置保存后持久化（mock 接口 + localStorage）
+- 规则顺序即优先级，拖拽手柄调整（保存时按序重编号 `sort`）；非法正则即时标红并禁用保存；内置「规则测试」输入任意数据库类型实时预览命中结果（含未保存修改，区分「生效/命中被抢先」）
+- **索引类型**：索引类型列表管理（增删，自动转大写、去重校验）。「编辑表」对话框的索引类型下拉选项与数据库导入的索引类型归一化均使用该列表；至少保留一个类型
+- 设置保存后持久化（DemoManagerApi + localStorage），整页统一保存 / 放弃修改
 
 ### 主题
 
 - 全部颜色/间距/圆角/阴影通过 CSS 变量定义（`src/styles/variables.scss`），可在外部覆盖定制主题
 - 顶栏按钮切换亮色/暗色，同步根元素 `data-theme`，CSS 变量与 antdv-next 主题算法自动切换，偏好持久化
-
-## Mock API
-
-当前无后端对接，全部接口通过 Axios 自定义 adapter 转发至内存 Mock 并持久化到 `localStorage`（对接真实后端时删除 `src/api/http.ts` 中的 `adapter` 即可）：
-
-| 方法 | 路径 | 说明 |
-| --- | --- | --- |
-| GET | `/api/codegen/category/query` | 查询所有分类 |
-| POST | `/api/codegen/category/add` | 添加分类 |
-| POST | `/api/codegen/category/update` | 更新分类 |
-| POST | `/api/codegen/category/remove` | 删除分类 |
-| GET | `/api/codegen/table/queryFromDB` | 从真实数据库查询数据（mock 模拟） |
-| GET | `/api/codegen/table/query` | 查询表信息（`categoryId` 精确 / `tableName` 模糊，可选），返回 `TableVO` 列表 |
-| POST | `/api/codegen/table/add` | 添加表 |
-| POST | `/api/codegen/table/update` | 更新表（载荷附 `rawNavigates`：该表参与的原始导航，替换语义） |
-| POST | `/api/codegen/table/remove` | 删除表（级联清理字段/索引/导航） |
-| POST (multipart) | `/api/codegen/replace` | 上传 zip 替换代码文件（需确认后调用） |
-
-> 规范未定义字典/模板/设置接口，Mock 按相同 REST 风格扩展了 `/api/codegen/dict/*`、`/api/codegen/template/*` 与 `/api/codegen/settings/*`（`src/mock/db.ts` 有注明）。数据重置：左下大纲面板「重置演示数据」按钮。
-
-```bash
-GET  /api/codegen/settings/query    # 查询应用设置
-POST /api/codegen/settings/update   # 更新设置（列默认类型规则，正则合法性校验）
-```
 
 ## 项目结构
 
@@ -167,15 +187,15 @@ POST /api/codegen/settings/update   # 更新设置（列默认类型规则，正
 ├─ patch/                  # 修改补丁存档（scripts/patch.sh 生成，gitignore）
 └─ src/
    ├─ main.ts              # 入口（注册 Pinia / antdv-next / 主题）
-   ├─ App.vue              # v-if 页面切换 + ConfigProvider 暗色算法
-   ├─ api/                 # axios 实例（mock adapter）+ 接口模块
+   ├─ App.vue              # 根组件（渲染 DBManagerView，可传入自定义 api）
+   ├─ api/                 # ManagerApi 注入体系（manager-api）+ DemoManagerApi 演示实现
    ├─ composables/         # useDragSort 行拖拽排序（字段/设置规则共用）
-   ├─ mock/                # 种子数据 + Mock 数据库（localStorage 持久化）
+   ├─ mock/                # 种子数据 + demo 内存数据库（localStorage 持久化）
    ├─ stores/              # Pinia：model / canvas / dict / template / theme / ui / history / settings
-   ├─ types/               # 数据模型类型（与规格说明书一致）
+   ├─ types/               # 数据模型类型（含 ManagerApi 契约，与规格说明书一致）
    ├─ utils/               # 字符串 / Java 类型映射 / 导航推导 / 几何 / 力导向布局 / Eta 渲染 / 高亮
    ├─ styles/              # CSS 变量（亮暗双主题）/ 全局样式 / hljs 配色
-   ├─ views/               # EditorView / DictView / TemplateView / SettingsView
+   ├─ views/               # DBManagerView（页面封装）/ EditorView / DictView / TemplateView / SettingsView
    └─ components/
       ├─ layout/           # AppHeader
       ├─ outline/          # 左侧表格大纲
@@ -187,7 +207,7 @@ POST /api/codegen/settings/update   # 更新设置（列默认类型规则，正
 
 - 画布渲染带视口裁剪（仅渲染可视区附近卡片），支持 100+ 表卡片流畅操作
 - 兼容最新版 Chrome / Edge / Firefox
-- 撤销/重做基于模型快照（上限 50 步），恢复后经 API 差量同步 Mock
+- 撤销/重做基于模型快照（上限 50 步），恢复后经 `ManagerApi.save` 全量同步持久层
 
 ## 界面截图
 
@@ -203,9 +223,13 @@ POST /api/codegen/settings/update   # 更新设置（列默认类型规则，正
 | --- | --- |
 | ![表编辑](docs/screenshots/table-columns-drag-handle.png) | ![设置](docs/screenshots/settings-column-rules.png) |
 
-| 模板管理（实时预览） |
-| --- |
-| ![模板](docs/screenshots/template-view-fixed.png) |
+| 模板管理（实时预览） | 系统设置 · 索引类型（暗色） |
+| --- | --- |
+| ![模板](docs/screenshots/template-view-fixed.png) | ![索引类型](docs/screenshots/settings-index-types-dark.png) |
+
+| 页面封装 · DBManagerView（亮色） | 页面封装 · DBManagerView（暗色） |
+| --- | --- |
+| ![DBManager 亮](docs/screenshots/dbmanager-light.png) | ![DBManager 暗](docs/screenshots/dbmanager-dark.png) |
 
 ## 源码快照与修改补丁
 

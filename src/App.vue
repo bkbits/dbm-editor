@@ -1,60 +1,14 @@
 <script setup lang="ts">
-import { computed, watch } from 'vue'
-import { theme as antdTheme } from 'antdv-next'
-import { useThemeStore } from '@/stores/theme'
-import { useUiStore } from '@/stores/ui'
-import { useModelStore } from '@/stores/model'
-import { useDictStore } from '@/stores/dict'
-import { useTemplateStore } from '@/stores/template'
-import { useSettingsStore } from '@/stores/settings'
-import AppHeader from '@/components/layout/AppHeader.vue'
-import EditorView from '@/views/EditorView.vue'
-import DictView from '@/views/DictView.vue'
-import TemplateView from '@/views/TemplateView.vue'
-import SettingsView from '@/views/SettingsView.vue'
-
-const themeStore = useThemeStore()
-const ui = useUiStore()
-const model = useModelStore()
-const dict = useDictStore()
-const templateStore = useTemplateStore()
-const settingsStore = useSettingsStore()
-
-const antdThemeConfig = computed(() => ({
-  algorithm: themeStore.isDark ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
-}))
-
-// 页面切换使用 v-if（不使用 vue-router），进入页面时按需加载数据
-watch(
-  () => ui.page,
-  (page) => {
-    if (page === 'editor') model.init()
-    else if (page === 'dict') dict.init()
-    else if (page === 'template') templateStore.init()
-    else if (page === 'settings') settingsStore.init()
-  },
-  { immediate: true },
-)
+/**
+ * 应用根组件：渲染数据库模型管理页面（DBManagerView）
+ * 页面壳、主题与页面切换（v-if）均封装于 DBManagerView；
+ * 未传 api 属性时使用内置 DemoManagerApi 演示实现。
+ * 对接真实后端时在此传入自定义 ManagerApi 实现：
+ *   <DBManagerView :api="myManagerApi" />
+ */
+import DBManagerView from '@/views/DBManagerView.vue'
 </script>
 
 <template>
-  <a-config-provider :theme="antdThemeConfig">
-    <a-app class="app-provider">
-      <div class="app-shell">
-        <AppHeader />
-        <main class="app-main">
-          <EditorView v-if="ui.page === 'editor'" />
-          <DictView v-else-if="ui.page === 'dict'" />
-          <TemplateView v-else-if="ui.page === 'template'" />
-          <SettingsView v-else-if="ui.page === 'settings'" />
-        </main>
-      </div>
-    </a-app>
-  </a-config-provider>
+  <DBManagerView />
 </template>
-
-<style lang="scss">
-.app-provider {
-  height: 100%;
-}
-</style>

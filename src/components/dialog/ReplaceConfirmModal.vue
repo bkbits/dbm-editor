@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { computed, reactive } from 'vue'
-import { message } from 'antdv-next'
 import { AlertTriangle } from '@lucide/vue'
 import { useUiStore } from '@/stores/ui'
 import { useTemplateStore } from '@/stores/template'
-import { codegenApi } from '@/api/modules'
+import { useManagerApi } from '@/api/manager-api'
 
 const ui = useUiStore()
 const templateStore = useTemplateStore()
+const api = useManagerApi()
 
 const dialogOpen = computed(() => ui.replaceConfirm.open)
 const files = computed(() => ui.replaceConfirm.files)
@@ -19,12 +19,9 @@ async function confirmReplace() {
   loading.replacing = true
   try {
     const zip = await templateStore.buildZip(files.value)
-    const res = await codegenApi.replace(zip)
-    message.success(res.message || `代码替换完成（${res.files} 个文件）`)
+    // 结果反馈由 api 实现自行处理（demo 实现展示替换文件数）
+    api.value.replace(zip)
     ui.closeReplaceConfirm()
-  } catch (e: unknown) {
-    const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
-    message.error(msg || (e as Error)?.message || '代码替换失败')
   } finally {
     loading.replacing = false
   }
@@ -49,7 +46,7 @@ async function confirmReplace() {
     <div class="replace-warn">
       <AlertTriangle :size="16" />
       <div>
-        <p>即将调用 <span class="mono">/api/codegen/replace</span> 上传 zip 并<b>直接替换</b>对应的源码文件。</p>
+        <p>即将通过 <span class="mono">ManagerApi.replace</span> 上传 zip 并<b>直接替换</b>对应的源码文件。</p>
         <p>该操作影响面大，请谨慎确认！当前将替换 <b>{{ files.length }}</b> 个文件。</p>
       </div>
     </div>
