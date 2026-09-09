@@ -189,3 +189,28 @@ Stage Summary:
 - 关键决策：不在线段模板上 stop pointerdown（保留从线段上起拖的框选能力），改为 beginSelect 内按 target.closest('[data-navigate-id]') 判定空白与否；表选中与线段选中互斥的单一焦点语义；卡片/线段卸载时主动清理悬停态防联动残留
 - 交付物：snapshot/20260909094359.zip（改前快照）、patch/20260909095132.patch（本轮改动）、download/graph-db-model-editor.zip（106 文件）
 - 截图：docs/screenshots/edge-related-light.png、edge-related-dark.png
+
+---
+Task ID: 7
+Agent: main (Super Z)
+Task: 修复点击多对多导航线胶囊无法显示隐藏中间表的问题
+
+Work Log:
+- 复现诊断：真实浏览器逐个点击 3 个 NN 胶囊（elementFromPoint 命中验证 + 真实 mouse down/up），点击链路本身全部有效（表解除隐藏、胶囊消失）——Task 6 的延迟捕获修复未被破坏
+- 真正根因：中间表虽已解除隐藏，但可能落在当前视口之外——种子布局中 cms_article_tag 位于 (968,1169)，在 1080 高视口下方 89px；用户视口更小（笔记本/内嵌预览）时更甚。点击胶囊后屏幕上没有任何可见变化，用户感知即"点击无效"
+- canvas.ts 新增 ensureTableVisible(tableId)：卡片完整在视口内（含 60px 边距）则完全不动视口；否则按最小偏移计算平移量（四向出界分别判定，不平移多余距离、不强行居中、不改缩放），经 animateTo 平滑滚动；首版 dx/dy 与 pan 换算正负号写反（pan 是世界内容的屏幕偏移，视口扩展方向 = 内容反向移动），实测表被越推越远后修正为 pan -= 偏移×缩放
+- 接线两处「显示隐藏表」入口：NavigateEdge.showMappingTable（NN 胶囊展开中间表，主修复点）、OutlinePanel 眼睛「在画布中显示」按钮（同根因隐患顺带修复）；TableCard 隐藏导航摘要的 nav-target 点击本就跟随 centerOnTable 强制居中，无需改动
+- cardRectOf 对未挂载卡片用 268x140 兜底尺寸（实际 268x160），20px 误差由 60px 边距吸收，验证无碍
+- README「多对多中间表」条目补充视野保障说明
+- 验证（agent-browser 真实鼠标输入，1920×1080）：
+  * 屏幕外场景：默认视口点击 cms_article_tag 胶囊 → 表出现且完整可见（top=880/bottom=1040 ≤1080）、视口平滑滚动（world-layer transform (0,0)→(0,-289)）、胶囊消失
+  * 视口内场景：点击 sys_user_role 胶囊（表在 (568,509)）→ 表显示、transform 纹丝不动（(0,0,1) 不变）—— 已可见时零干扰
+  * 大纲眼睛：中键平移视口至空白区域（translate(-364,214)）后从大纲恢复 cms_article_tag → 平滑滚回（panY 214→-289）、表完整可见、x 方向不动（x 本就在视口内）
+  * 回归：线段单击选中（n-article-user selected 类）、合成 dblclick → 编辑导航对话框、控制台 0 错误
+- vue-tsc 通过；vite build 通过（2.58s）
+- patch 留档：patch/20260909103653.patch（4 文件 8K）；重新打包 download/graph-db-model-editor.zip（107 文件 4.1M）
+
+Stage Summary:
+- 根因并非点击失效而是"显示在屏幕外"：点击胶囊链路（延迟捕获修复）一直有效，表确实解除隐藏，但种子布局的 cms_article_tag 在视口外导致用户看不到任何变化
+- 关键决策：ensureTableVisible 采用最小偏移平移而非 centerOnTable 强制居中——表已可见时零干扰、仅在出界方向滚动刚好够的距离、保持用户缩放；顺带修复大纲眼睛的同源隐患
+- 交付物：patch/20260909103653.patch、download/graph-db-model-editor.zip（107 文件）；截图 docs/screenshots/pill-show-mapping.png

@@ -179,7 +179,12 @@ function onContext(e: MouseEvent) {
   })
 }
 function showMappingTable() {
-  if (nav.value.mappingTable) canvas.showTable(nav.value.mappingTable)
+  if (nav.value.mappingTable) {
+    canvas.showTable(nav.value.mappingTable)
+    // 中间表可能落在当前视口外（种子布局或用户曾拖远后隐藏）：
+    // 解除隐藏后将其带入视野，否则用户看不到任何变化，以为点击无效
+    canvas.ensureTableVisible(nav.value.mappingTable)
+  }
 }
 
 /* 卸载时清理自身悬停/选中态：线段可能因端点表隐藏/删除/导航删除而卸载，

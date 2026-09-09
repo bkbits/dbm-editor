@@ -217,6 +217,27 @@ export const useCanvasStore = defineStore('canvas', {
         panY: this.viewportH / 2 - c.y * zoom,
       })
     },
+    /**
+     * 确保指定表卡片完整进入视口（含 60px 边距）：
+     * 已可见则完全不动视口；否则按最小偏移平滑平移（保持当前缩放，不强行居中）。
+     * 用于「显示隐藏表」类操作（NN 胶囊展开中间表 / 大纲眼睛恢复显示），
+     * 避免表虽已解除隐藏但落在屏幕外 —— 用户以为点击无效
+     */
+    ensureTableVisible(tableId: string) {
+      const r = this.cardRectOf(tableId)
+      if (!r) return
+      const view = this.viewportWorldRect
+      const pad = 60
+      let dx = 0
+      let dy = 0
+      if (r.x < view.x + pad) dx = r.x - pad - view.x
+      else if (r.x + r.w > view.x + view.w - pad) dx = r.x + r.w + pad - (view.x + view.w)
+      if (r.y < view.y + pad) dy = r.y - pad - view.y
+      else if (r.y + r.h > view.y + view.h - pad) dy = r.y + r.h + pad - (view.y + view.h)
+      if (!dx && !dy) return
+      // dx/dy 为视口需要扩展的世界坐标量 → 世界内容需反向移动：屏幕平移 = -偏移 × 缩放
+      this.animateTo({ panX: this.panX - dx * this.zoom, panY: this.panY - dy * this.zoom })
+    },
     /** 平滑动画到目标视图 */
     animateTo(target: { zoom?: number; panX?: number; panY?: number }, duration = 220) {
       const from = { zoom: this.zoom, panX: this.panX, panY: this.panY }

@@ -218,7 +218,7 @@ watch(
               class="t-eye"
               type="button"
               title="在画布中显示"
-              @click.stop="canvas.showTable(t.id)"
+              @click.stop="canvas.showTable(t.id); canvas.ensureTableVisible(t.id)"
             >
               <EyeOff :size="12" />
             </button>
