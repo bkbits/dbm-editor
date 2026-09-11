@@ -354,3 +354,25 @@ Stage Summary:
 - Logger 统一日志器落地：六方法 + 六级别（DISABLED 全静默）+ 三种级别控制形态（setLevel/getLevel/level 存取器），时间戳前缀、参数透传保持可展开、通道映射规避 console.debug 的 DevTools 默认隐藏问题；DemoManagerApi 全部契约方法调用日志由 console 直写切换为 Logger（入参/返回 debug 级、抛错 error 级），运行时 setLevel 即可静默或全关
 - 关键决策：log() 无级别语义（级别清单无 LOG）；debug 走 console.log 保证默认可见；DEV/PROD 差异化默认级别；闭包变量存级别使解构调用安全
 - 交付物：patch/20260911071639.patch、download/graph-db-model-editor.zip（114 文件）；截图 docs/screenshots/logger-levels.png
+
+---
+Task ID: 11
+Agent: main (Super Z)
+Task: 完善 README.md（结构重组 + 新章节 + 自检工具）
+
+Work Log:
+- 改前快照：snapshot/20260911074949.zip（140 文件）
+- 结构重组：新增「目录」锚点导航（GitHub slug 规则）；「快速开始」从文档中部前置到技术栈之后，拆分为环境要求（bun ≥ 1.4.2 devEngines / vp CLI / 浏览器）+ 安装启动 + 常用命令速查表（11 条命令含三个留档脚本与 eta-smoke）
+- 功能总览：新增四页面导语（编辑器/字典/模板/设置）；画布快捷键由单行 bullet 改为 7 行表格；大纲小节补充「重置演示数据」按钮说明
+- 新章节「数据模型概览」：基于 src/types/model.ts 逐实体整理 11 行职责/唯一性约束表（TableCategory→ManagerApi 载荷），附实体关系与校验归属说明
+- 新章节「开发与调试」：ManagerApi 调用观测（含控制台动态 import 手工验证示例——已核对 updateTablePos 签名为坐标对象、t-sys-user 真实表 ID）、Logger 运行时调级示例、eta-smoke 冒烟、代码风格与提交检查（staged/fmt/lint 约定）
+- 新章节「常见问题 FAQ」：6 条（vp 命令缺失、日志静默、数据重置、localStorage key gdbme:db:v2、端口修改、旧数据自动迁移）
+- 截图增强：Logger/DemoManagerApi 章节内嵌 logger-levels.png 与 api-call-logs.png；截图表新增字典管理（dict-dark.png）与代码预览（code-preview.png）两行
+- 新增 scripts/check-readme.py：README 自检工具（图片/相对引用存在性、内部锚点按 GitHub slug 规则解析、表格列数一致性、代码块闭合），修正自身三处 bug 后通过（29 标题全解析）；已登记进常用命令速查表与项目结构注释
+- vp check 发现 README.md 受 fmt 覆盖（手工表格对齐不规范）→ `vp check --fix` 自动修正，复检通过（48 文件 lint 无告警）；vue-tsc 通过
+- patch 留档：首次生成缺 scripts/check-readme.py（patch.sh 的 intent-to-add 仅覆盖 src/）→ 手动 `git add -N` 纳入后重打 patch/20260911075402.patch（2 文件 32K）；重新打包 download/graph-db-model-editor.zip（115 文件 5.3M，含新 README 与自检脚本）
+
+Stage Summary:
+- README 从 281 行扩至 410 行：目录导航、快速开始前置化、数据模型概览、开发与调试、FAQ 三个新章节 + 命令速查/快捷键/环境要求三张新表，文档从「功能罗列」升级为「可导航的项目手册」；控制台验证示例均经源码核对（updateTablePos 坐标对象签名）
+- 关键决策：新增 check-readme.py 把 README 质量纳入可执行校验（锚点/引用/表格/代码块四类规则）；README 受 vp fmt 管束需 `vp check --fix` 保持表格对齐
+- 交付物：snapshot/20260911074949.zip、patch/20260911075402.patch（README.md + scripts/check-readme.py）、download/graph-db-model-editor.zip（115 文件）
