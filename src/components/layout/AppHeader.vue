@@ -25,9 +25,9 @@ function switchPage(key: PageName) {
 }
 
 /** 点击「保存所有」：走 ManagerApi.save() 全量保存契约（快捷键 Ctrl/Cmd + S 同效） */
-function saveAll() {
+async function saveAll() {
   try {
-    model.saveAll()
+    await model.saveAll()
     message.success('所有修改已保存')
   } catch (e: unknown) {
     message.error(errorMessageOf(e, '保存失败'))

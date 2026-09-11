@@ -38,9 +38,11 @@ export const useTemplateStore = defineStore('template', {
       if (this.loaded || this.loading) return
       this.loading = true
       try {
-        this.templates = getManagerApi()
-          .getTemplates()
-          .map((t) => ({ id: t.id, name: t.templateName, content: t.content }))
+        this.templates = (await getManagerApi().getTemplates()).map((t) => ({
+          id: t.id,
+          name: t.templateName,
+          content: t.content,
+        }))
         this.loaded = true
       } catch (e) {
         message.error(errorMessageOf(e, '模板加载失败'))
@@ -53,13 +55,13 @@ export const useTemplateStore = defineStore('template', {
         const api = getManagerApi()
         if (draft.id) {
           const spec: Template = { id: draft.id, templateName: draft.name, content: draft.content }
-          api.updateTemplate(spec)
+          await api.updateTemplate(spec)
           const idx = this.templates.findIndex((t) => t.id === draft.id)
           if (idx >= 0) this.templates[idx] = clone({ ...draft })
           return draft
         }
         const spec: Template = { id: uid('tpl-'), templateName: draft.name, content: draft.content }
-        api.addTemplate(spec)
+        await api.addTemplate(spec)
         const created: CodeTemplate = { id: spec.id, name: draft.name, content: draft.content }
         this.templates.push(clone(created))
         return created
@@ -70,7 +72,7 @@ export const useTemplateStore = defineStore('template', {
     },
     async removeTemplate(id: string) {
       try {
-        getManagerApi().removeTemplate(id)
+        await getManagerApi().removeTemplate(id)
         this.templates = this.templates.filter((t) => t.id !== id)
       } catch (e) {
         message.error(errorMessageOf(e, '模板删除失败'))
@@ -170,7 +172,7 @@ export const useTemplateStore = defineStore('template', {
     },
 
     /** 代码替换：构建 zip 并经 ManagerApi.replace 上传（调用前必须经用户确认）
-     *  （结果反馈由 api 实现自行处理，demo 实现展示替换文件数） */
+     *  （成功反馈由 api 实现自行处理，失败 reject 向上传播） */
     async replaceWithGenerated(tableIds: string[]) {
       if (!this.templates.length) {
         message.warning('请先在「模板管理」中创建代码模板')
@@ -182,7 +184,7 @@ export const useTemplateStore = defineStore('template', {
         return null
       }
       const zip = await this.buildZip(files)
-      getManagerApi().replace(zip)
+      await getManagerApi().replace(zip)
       return true
     },
 

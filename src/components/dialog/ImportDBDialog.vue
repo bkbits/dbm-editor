@@ -25,7 +25,7 @@ const categoryId = ref('')
 async function fetchDefs() {
   loading.fetching = true
   try {
-    dbTables.value = api.value.importFromDB()
+    dbTables.value = await api.value.importFromDB()
     selected.clear()
   } catch (e) {
     message.error(errorMessageOf(e, '查询数据库结构失败'))

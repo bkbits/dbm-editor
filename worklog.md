@@ -403,3 +403,35 @@ Stage Summary:
 - 契约演进：updateTablePos 单表签名 → UpdateTablePosDTO 批量签名，多选卡片同动时 UI 仅调用一次 api；Demo 实现保持 all-or-nothing 校验语义（先整体校验再写入，单次落盘）；persistTables 收口单次调用，拖拽/对齐/自动布局三条路径自动受益
 - 快捷键：Ctrl+A 全选（仅可见表）、Ctrl+D 取消选中（画布级，均在 ModelCanvas）、Ctrl+S 保存所有（AppHeader 全局监听，与按钮同函数）；均 preventDefault 抵御浏览器默认行为（全选/书签/保存页）
 - 交付物：snapshot/20260911081526.zip、patch/20260911081939.patch、download/graph-db-model-editor.zip（115 文件）
+---
+Task ID: 13
+Agent: main (Super Z)
+Task: ManagerApi 接口的所有函数全部改为异步函数（Promise 契约）
+
+Work Log:
+- 改前快照：snapshot/20260911082250.zip（141 文件）
+- types/model.ts：ManagerApi 全部 28 个方法（27 契约 + resetDemo 扩展）签名改 Promise 返回——getSettings(): Promise<Settings>、load(): Promise<LoadResultVO>、getTables(): Promise<ManagerTable[]> 等读方法返回数据 Promise，写方法（saveSettings/add*/update*/remove*/updateTablePos/save/replace）返回 Promise<void>；接口头注释补充异步契约语义（UI 侧 await 消费、对接真实后端无需调整调用链路、校验失败 reject 中文业务提示）
+- demo-manager-api.ts：全部方法 async 化（内部逻辑不变，微任务内 resolve；校验失败 reject）；withCallLogging Proxy 异步感知——方法返回 thenable 时 .then 等待落定后打印 resolved 真实值（而非 pending Promise 对象）、reject 时 error 级输出后原样透传拒绝，同步返回路径保留兜底；replace() 由「void 契约 + 内部 catch 自反馈」改为「await JSZip.loadAsync，解析失败 reject 由调用方捕获」（成功 message 反馈保留）；文件头与 withCallLogging 注释同步
+- stores/model.ts：全部 api 调用 await 化——init/refresh（load）、saveAll（save）、syncToApi（get 三组 + 全部 diff 写操作逐个 await，顺序语义保持：分类补齐→表删/加/改→导航 diff→分类删除收尾）、saveCategory/removeCategory（update/add/removeCategory）、createTable/saveTable/setTableHidden/pasteTable（add/updateTable）、persistTables（updateTablePos）、removeTables/importFromDB（for 循环逐个 await add/removeTable）、resetDemoData（await api.resetDemo?.()，删除冗余 as ManagerApi & {...} 类型断言与未使用的 ManagerApi type 导入）；「本地先行 → await api → 失败回滚快照」事务模式语义不变（await 位于 try 内，reject 触发回滚）
+- stores/settings.ts：init() 的在途 IIFE 内 await getSettings()；save() 改为 await saveSettings 成功后才更新本地状态（失败本地保持旧值）
+- stores/dict.ts：init（await getDicts）/saveDict（await update/addDict 后更新本地）/removeDict（await 后再改本地列表）
+- stores/template.ts：init（await getTemplates）/saveTemplate（await update/addTemplate）/removeTemplate/replaceWithGenerated（await replace，失败向上传播）
+- stores/history.ts：restore 中 await model.syncToApi()（恢复 diff 同步的 reject 仍被捕获并回滚本地）
+- AppHeader.vue：saveAll 改 async + await model.saveAll()（reject 进入 catch 提示「保存失败」，Ctrl+S 与按钮共用）
+- ImportDBDialog.vue：fetchDefs await api.importFromDB()（reject 捕获提示「查询数据库结构失败」）
+- ReplaceConfirmModal.vue：confirmReplace await api.value.replace(zip) + 新增 catch（message.error「代码替换失败」）——承接 replace 错误传播语义从 demo 内部 catch 移至调用方；补充 antdv-next message 导入
+- README.md 同步：自定义 api 示例注释改「实现全部异步方法（均返回 Promise）」；注入链路三条改 await 语义描述；ManagerApi 接口清单新增异步契约导语（Promise + reject 中文提示 + await 消费 + 对接后端零调整）与 replace 行补充（真实异步、失败 reject 调用方捕获）；DemoManagerApi 章节改「全部方法返回 Promise（内部同步完成后微任务 resolve）+ 日志等待落定后打印 resolved 值」；check-readme.py 通过
+- 验证（agent-browser 真实浏览器，localhost:3000，重启 dev server 后全量回归）：
+  * 启动：getSettings/load 入参与返回日志成对出现，返回为 resolved 真实值（{indexTypes: Array(3), typeMappings: Array(14)} / {categories: 3, tables: 13, navigates: 10}），时间戳差 ~84ms 证实 await 落定后打印；0 页面错误
+  * 单表拖拽：1 次 updateTablePos（返回 undefined 为 resolved 值）；Ctrl+A 全选 6 卡片 + 拖拽仍 1 次调用（多表 DTO）；Ctrl+D 选中归零；Ctrl+S → save() 日志 +「所有修改已保存」提示
+  * 错误路径：eval 调 updateTablePos({tables:[{tableId:'t-nonexistent',...}]}) → reject「表不存在: t-nonexistent」+ [ERROR] 日志（含真实堆栈）
+  * Ctrl+Z 撤销（异步 diff）：getCategories/getTables 落定后 13 个 updateTable 顺序 await 执行；导入 2 表后撤销 → removeTable ×2 await、卡片 12→10
+  * 页面链路：字典页（getDicts → 5 字典渲染）、模板页（getTemplates → 4 模板）、设置页保存（saveSettings →「设置已保存」，本地状态成功后才更新）、导入对话框（importFromDB → 5 表渲染、导入 2 表 addTable ×2 await）、刷新按钮（load）、重置演示数据（resetDemo → load/getDicts/getTemplates/getSettings 四路并发发起逐个落定、10 卡片）、分类新增/删除（addCategory/removeCategory await + 大纲同步 + 无表分类可删）
+  * 全程 agent-browser errors 为空
+- vue-tsc 通过；vp check --fix 修正 2 文件格式（demo-manager-api.ts/template.ts 新代码换行）后 48 文件 lint 无告警；vp build 通过（2.71s）；check-readme.py 通过
+- 留档：patch/20260911084001.patch（11 文件 44K）；重新打包 download/graph-db-model-editor.zip（115 文件 5.3M）
+
+Stage Summary:
+- 契约演进：ManagerApi 27 个契约方法 + resetDemo 扩展全部异步化（Promise 返回、校验失败 reject），UI 调用链路（4 store + 3 组件 + history restore）全量 await 适配，事务模式（本地先行 → await → 失败回滚）与顺序语义（syncToApi 分组 diff、逐表 await）完整保留；对接真实后端（HTTP/IPC）时零调整
+- 关键决策：① 日志 Proxy 异步感知——thenable 落定后打印 resolved 值/reject 时 error 级透传，保证可观测性不因异步化降级；② replace 错误处理语义上移——demo 内部 catch 改为 reject 向调用方传播（ReplaceConfirmModal 捕获提示），契约更符合「调用方决定如何反馈失败」；③ settings.save 改「api 成功后才更新本地」，消除异步下本地/持久层短暂不一致
+- 交付物：snapshot/20260911082250.zip、patch/20260911084001.patch（11 文件）、download/graph-db-model-editor.zip（115 文件）

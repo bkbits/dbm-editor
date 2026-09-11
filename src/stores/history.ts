@@ -50,7 +50,7 @@ export const useHistoryStore = defineStore('history', {
       model.applySnapshot(snap)
       try {
         // diff 同步：api 校验失败（如恢复到不一致状态）时回滚本地并中止
-        model.syncToApi()
+        await model.syncToApi()
       } catch (e) {
         model.applySnapshot(before)
         throw e

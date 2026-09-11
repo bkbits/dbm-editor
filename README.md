@@ -200,9 +200,9 @@ import DBManagerView from '@/views/DBManagerView.vue'
 import type { ManagerApi } from '@/types/model'
 
 const myApi: ManagerApi = {
-  // 实现全部方法：设置读写 / 数据库导入 / 模型加载与全量保存 /
-  // 分类・表・导航细粒度 CRUD / 字典与模板 CRUD / 代码替换
-  // （详见 src/types/model.ts 的 ManagerApi 接口）
+  // 实现全部异步方法（均返回 Promise）：设置读写 / 数据库导入 /
+  // 模型加载与全量保存 / 分类・表・导航细粒度 CRUD / 字典与模板
+  // CRUD / 代码替换（详见 src/types/model.ts 的 ManagerApi 接口）
   ...
 }
 ```
@@ -215,10 +215,12 @@ const myApi: ManagerApi = {
 注入链路：
 
 - **DBManagerView** 解析 `api` 属性（缺省共享 `sharedDemoApi` 单例），`provide` 注入子组件并 `setActiveApi` 写入全局激活实例；切换 api 时自动全量重载各仓库数据
-- **子组件**（如数据库导入 / 代码替换对话框）通过 `useManagerApi()`（`src/api/manager-api.ts`）注入响应式引用，在合适位置直接调用 `api.importFromDB()` / `api.replace(zip)` 等方法
-- **Pinia store** 无法使用 inject，统一经 `getManagerApi()` 读取全局激活实例；模型变更遵循细粒度契约——每次操作先改本地状态，再调用对应 api 方法（`addTable` / `updateTable` / `removeTable` / `updateTablePos` / `addNavigate` …）即时持久化，持久化失败自动回滚快照；撤销/重做恢复后通过 diff 同步（`syncToApi`）把持久层对齐到本地状态
+- **子组件**（如数据库导入 / 代码替换对话框）通过 `useManagerApi()`（`src/api/manager-api.ts`）注入响应式引用，在合适位置 `await` 调用 `api.importFromDB()` / `api.replace(zip)` 等异步方法
+- **Pinia store** 无法使用 inject，统一经 `getManagerApi()` 读取全局激活实例；模型变更遵循细粒度异步契约——每次操作先改本地状态，再 `await` 对应 api 方法（`addTable` / `updateTable` / `removeTable` / `updateTablePos` / `addNavigate` …）即时持久化，持久化失败（reject）自动回滚快照；撤销/重做恢复后通过 diff 同步（`syncToApi`）把持久层对齐到本地状态
 
 ### ManagerApi 接口清单
+
+全部方法均为**异步契约**（返回 `Promise`，校验失败 reject 中文业务提示），UI 侧统一 `await` 消费，对接真实后端（HTTP / IPC / 文件 IO）时无需再调整调用链路：
 
 | 方法                                                                  | 说明                                                                                                                                                     |
 | --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -231,7 +233,7 @@ const myApi: ManagerApi = {
 | `getNavigates() / addNavigate / updateNavigate / removeNavigate`      | 导航关系 CRUD                                                                                                                                            |
 | `getDicts() / addDict / updateDict / removeDict`                      | 字典 CRUD                                                                                                                                                |
 | `getTemplates() / addTemplate / updateTemplate / removeTemplate`      | 代码模板 CRUD                                                                                                                                            |
-| `replace(zipFile)`                                                    | 上传 zip 产物代码，直接替换对应源码文件                                                                                                                  |
+| `replace(zipFile)`                                                    | 上传 zip 产物代码，直接替换对应源码文件（zip 解析为真实异步，失败 reject 由调用方捕获）                                                                  |
 
 > 调用时机约定：应用视图启动即幂等预载 `getSettings()`（设置是编辑器/导入共用的全局配置）与 `load()`；此后各操作按细粒度契约即时调用对应方法。`DBColumn.notNull` 为 demo 扩展字段（真实实现可不提供，缺省视为可空）；`Table.hidden` 随模型数据持久化（隐藏态在刷新/重开后保持）；`resetDemo()` 为 DemoManagerApi 的扩展方法（重置为内置演示数据），正式实现无需提供。
 
@@ -257,9 +259,9 @@ Logger.setLevel('INFO') // 或 Logger.level = 'INFO' / Logger.getLevel()
 
 ### DemoManagerApi（内置演示实现）
 
-`src/api/demo-manager-api.ts`：数据存于内存（`src/mock/db.ts`）并持久化到 `localStorage`（`gdbme:db:v2`）；除 `replace` 的 zip 解析外全部同步完成，校验失败抛出含中文业务提示的 `Error`。数据重置：左下大纲面板「重置演示数据」按钮。
+`src/api/demo-manager-api.ts`：数据存于内存（`src/mock/db.ts`）并持久化到 `localStorage`（`gdbme:db:v2`）。按契约全部方法返回 `Promise`：除 `replace` 的 zip 解析为真实异步外，其余方法内部同步完成后在微任务内 resolve；校验失败 reject 含中文业务提示的 `Error`。数据重置：左下大纲面板「重置演示数据」按钮。
 
-所有方法经 Proxy 包装打印调用日志：每次契约调用输出 `[DemoManagerApi] <方法>() 入参` 与 `返回`（debug 级），抛错时以 error 级输出后原样抛出；内部辅助方法互调不打日志。联调时可在控制台按 `DemoManagerApi` 过滤，直接观测各契约方法的实际调用时机与参数（如应用启动即触发 `getSettings` / `load`）；`Logger.setLevel('INFO')` 可静默追踪噪音，`DISABLED` 可完全关闭。
+所有方法经 Proxy 包装打印调用日志：每次契约调用输出 `[DemoManagerApi] <方法>() 入参` 与 `返回`（debug 级，异步方法**等待落定后**打印 resolved 值，reject 时以 error 级输出后原样透传拒绝）；内部辅助方法互调不打日志。联调时可在控制台按 `DemoManagerApi` 过滤，直接观测各契约方法的实际调用时机与参数（如应用启动即触发 `getSettings` / `load`）；`Logger.setLevel('INFO')` 可静默追踪噪音，`DISABLED` 可完全关闭。
 
 ![DemoManagerApi 调用日志](docs/screenshots/api-call-logs.png)
 

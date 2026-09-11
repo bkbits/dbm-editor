@@ -3,7 +3,8 @@ import { computed, reactive } from 'vue'
 import { AlertTriangle } from '@lucide/vue'
 import { useUiStore } from '@/stores/ui'
 import { useTemplateStore } from '@/stores/template'
-import { useManagerApi } from '@/api/manager-api'
+import { useManagerApi, errorMessageOf } from '@/api/manager-api'
+import { message } from 'antdv-next'
 
 const ui = useUiStore()
 const templateStore = useTemplateStore()
@@ -19,9 +20,12 @@ async function confirmReplace() {
   loading.replacing = true
   try {
     const zip = await templateStore.buildZip(files.value)
-    // 结果反馈由 api 实现自行处理（demo 实现展示替换文件数）
-    api.value.replace(zip)
+    // 成功反馈由 api 实现自行处理（demo 实现展示替换文件数）；
+    // 异步契约下 zip 解析失败 reject 在此捕获提示
+    await api.value.replace(zip)
     ui.closeReplaceConfirm()
+  } catch (e: unknown) {
+    message.error(errorMessageOf(e, '代码替换失败'))
   } finally {
     loading.replacing = false
   }

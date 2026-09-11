@@ -77,7 +77,7 @@ export const useSettingsStore = defineStore('settings', {
         this.loading = true
         initInFlight = (async () => {
           try {
-            const settings = getManagerApi().getSettings()
+            const settings = await getManagerApi().getSettings()
             this.indexTypes = (settings.indexTypes || []).map(String)
             this.typeMappings = (settings.typeMappings || []).map(clone)
             this.loaded = true
@@ -94,7 +94,8 @@ export const useSettingsStore = defineStore('settings', {
 
     async save(settings: Settings) {
       const saved = clone(settings)
-      getManagerApi().saveSettings(saved)
+      // 异步契约：api 保存成功后才更新本地状态（失败时本地保持旧值）
+      await getManagerApi().saveSettings(saved)
       this.indexTypes = (saved.indexTypes || []).map(String)
       this.typeMappings = (saved.typeMappings || []).map(clone)
       this.loaded = true

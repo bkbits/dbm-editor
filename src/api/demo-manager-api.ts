@@ -2,15 +2,17 @@
  * DemoManagerApi：ManagerApi 的内置演示实现
  *
  * 由原 axios mock 分发层迁移而来：数据存于内存（src/mock/db.ts）并
- * 持久化到 localStorage（gdbme:db:v2）。除 replace 的 zip 解析外全部
- * 同步完成；校验失败抛出 Error（message 为中文业务提示）。
+ * 持久化到 localStorage（gdbme:db:v2）。按契约全部方法返回 Promise：
+ * 除 replace 的 zip 解析为真实异步外，其余方法内部同步完成后异步
+ * resolve（微任务内落定）；校验失败 reject（Error message 为中文业务提示）。
  *
  * 契约语义：
  * - 细粒度方法（addXxx/updateXxx/removeXxx/updateTablePos）即时写库并落盘
  * - save() 无参全量保存：demo 的内存即真相，等价于确认落盘
  * - removeTable 一并删除其字段、索引与关联导航
- * - 所有方法经 Proxy 包装，使用统一日志器（src/log/Logger.ts）打印入参与返回
- *   （debug 级）、抛错（error 级）；Logger.setLevel 可运行时调整输出级别
+ * - 所有方法经 Proxy 包装，使用统一日志器（src/log/Logger.ts）打印入参与
+ *   返回（debug 级，异步方法等落定后打印 resolved 值）、抛错（error 级）；
+ *   Logger.setLevel 可运行时调整输出级别
  */
 import JSZip from 'jszip'
 import { message } from 'antdv-next'
@@ -65,6 +67,9 @@ const NAVIGATE_TYPES = ['11', '1N', 'N1', 'NN']
  *   后续新增方法无需逐个插桩
  * - 入参/返回走 Logger.debug（开发构建默认 DEBUG 级全量可见；
  *   setLevel('INFO') 可静默追踪噪音），抛错走 Logger.error
+ * - 异步感知：方法返回 thenable（契约全部为 Promise）时等待落定后
+ *   再打印 resolved 值，reject 时以 error 级输出后原样透传拒绝，
+ *   保证日志始终呈现真实结果而非 pending 的 Promise 对象
  * - 包装函数以原始实例为 this 执行：内部 this.xxx 辅助互调不经过代理，
  *   每次外部调用仅产生「入参 + 返回」两条日志，内部装配过程不打扰
  * - 同名方法的包装结果缓存，保持方法引用稳定（proxy.load === proxy.load）
@@ -85,6 +90,22 @@ function withCallLogging<T extends object>(instance: T, label: string): T {
           Logger.debug(`[${label}] ${prop}() 入参`, args)
           try {
             const result = original.apply(target, args)
+            if (
+              typeof result === 'object' &&
+              result !== null &&
+              typeof (result as { then?: unknown }).then === 'function'
+            ) {
+              return (result as Promise<unknown>).then(
+                (resolved: unknown) => {
+                  Logger.debug(`[${label}] ${prop}() 返回`, resolved)
+                  return resolved
+                },
+                (e: unknown) => {
+                  Logger.error(`[${label}] ${prop}() 抛错`, e)
+                  throw e
+                },
+              )
+            }
             Logger.debug(`[${label}] ${prop}() 返回`, result)
             return result
           } catch (e) {
@@ -108,7 +129,7 @@ export class DemoManagerApi implements ManagerApi {
 
   /* ==================== 设置 ==================== */
 
-  getSettings(): Settings {
+  async getSettings(): Promise<Settings> {
     const db = getDB()
     const s = db.settings || ({ indexTypes: [], typeMappings: [] } as Settings)
     const typeMappings = (Array.isArray(s.typeMappings) ? s.typeMappings : [])
@@ -125,7 +146,7 @@ export class DemoManagerApi implements ManagerApi {
     return { indexTypes, typeMappings }
   }
 
-  saveSettings(settings: Settings): void {
+  async saveSettings(settings: Settings): Promise<void> {
     // 规则校验：非空 pattern + 合法正则；索引类型去重归一
     const typeMappings: TypeMapping[] = (settings.typeMappings || []).map((m, i) => {
       const pattern = String(m.pattern ?? '').trim()
@@ -151,14 +172,14 @@ export class DemoManagerApi implements ManagerApi {
 
   /* ==================== 数据库导入 ==================== */
 
-  importFromDB(): DBTable[] {
+  async importFromDB(): Promise<DBTable[]> {
     // 演示实现：返回内置模拟真实库表结构（正式实现对接真实数据库）
     return clone(SEED_DB_TABLES)
   }
 
   /* ==================== 模型全量加载 / 保存 ==================== */
 
-  load(): LoadResultVO {
+  async load(): Promise<LoadResultVO> {
     const db = getDB()
     return {
       categories: clone(db.categories),
@@ -168,17 +189,17 @@ export class DemoManagerApi implements ManagerApi {
   }
 
   /** 全量保存（无参契约）：demo 的每次细粒度操作已即时写库，此处确认整体落盘 */
-  save(): void {
+  async save(): Promise<void> {
     persistDB()
   }
 
   /* ==================== 分类 ==================== */
 
-  getCategories(): TableCategory[] {
+  async getCategories(): Promise<TableCategory[]> {
     return clone(getDB().categories)
   }
 
-  addCategory(category: TableCategory): void {
+  async addCategory(category: TableCategory): Promise<void> {
     const db = getDB()
     const name = requireStr(category?.name, 'name', '分类名称')
     requireStr(category?.basePackage, 'basePackage', '基础包路径')
@@ -190,7 +211,7 @@ export class DemoManagerApi implements ManagerApi {
     persistDB()
   }
 
-  updateCategory(category: TableCategory): void {
+  async updateCategory(category: TableCategory): Promise<void> {
     const db = getDB()
     const id = requireStr(category?.id, 'id', '分类ID')
     const target = db.categories.find((c) => c.id === id)
@@ -203,7 +224,7 @@ export class DemoManagerApi implements ManagerApi {
     persistDB()
   }
 
-  removeCategory(categoryId: string): void {
+  async removeCategory(categoryId: string): Promise<void> {
     const db = getDB()
     if (!db.categories.some((c) => c.id === categoryId)) return
     const held = db.tables.filter((t) => t.categoryId === categoryId)
@@ -218,11 +239,11 @@ export class DemoManagerApi implements ManagerApi {
 
   /* ==================== 表 ==================== */
 
-  getTables(): ManagerTable[] {
+  async getTables(): Promise<ManagerTable[]> {
     return this.assembleTables(getDB().tables.map((t) => t.id))
   }
 
-  addTable(table: ManagerTable): void {
+  async addTable(table: ManagerTable): Promise<void> {
     const db = getDB()
     const name = requireStr(table?.tableName, 'tableName', '表名')
     if (db.tables.some((t) => t.tableName === name)) throw new Error(`表名已存在: ${name}`)
@@ -240,7 +261,7 @@ export class DemoManagerApi implements ManagerApi {
     persistDB()
   }
 
-  updateTable(table: ManagerTable): void {
+  async updateTable(table: ManagerTable): Promise<void> {
     const db = getDB()
     const id = requireStr(table?.id, 'id', '表ID')
     const target = db.tables.find((t) => t.id === id)
@@ -262,7 +283,7 @@ export class DemoManagerApi implements ManagerApi {
   }
 
   /** 删除表（一并删除其字段、索引与关联导航） */
-  removeTable(tableId: string): void {
+  async removeTable(tableId: string): Promise<void> {
     const db = getDB()
     if (!db.tables.some((t) => t.id === tableId)) return
     db.tables = db.tables.filter((t) => t.id !== tableId)
@@ -279,7 +300,7 @@ export class DemoManagerApi implements ManagerApi {
    * 先整体校验再写入：任一表不存在则抛错且不落盘（all-or-nothing），
    * 全部命中后统一写库并单次落盘。
    */
-  updateTablePos(tablePoses: UpdateTablePosDTO): void {
+  async updateTablePos(tablePoses: UpdateTablePosDTO): Promise<void> {
     const db = getDB()
     const list = tablePoses?.tables ?? []
     if (!list.length) return
@@ -299,11 +320,11 @@ export class DemoManagerApi implements ManagerApi {
 
   /* ==================== 导航 ==================== */
 
-  getNavigates(): TableNavigate[] {
+  async getNavigates(): Promise<TableNavigate[]> {
     return clone(getDB().navigates)
   }
 
-  addNavigate(navigate: TableNavigate): void {
+  async addNavigate(navigate: TableNavigate): Promise<void> {
     const db = getDB()
     const nav = normalizeNavigate(navigate)
     if (db.navigates.some((n) => n.id === nav.id)) throw new Error(`导航 id 已存在: ${nav.id}`)
@@ -311,7 +332,7 @@ export class DemoManagerApi implements ManagerApi {
     persistDB()
   }
 
-  updateNavigate(navigate: TableNavigate): void {
+  async updateNavigate(navigate: TableNavigate): Promise<void> {
     const db = getDB()
     const nav = normalizeNavigate(navigate)
     const idx = db.navigates.findIndex((n) => n.id === nav.id)
@@ -320,7 +341,7 @@ export class DemoManagerApi implements ManagerApi {
     persistDB()
   }
 
-  removeNavigate(navigateId: string): void {
+  async removeNavigate(navigateId: string): Promise<void> {
     const db = getDB()
     if (!db.navigates.some((n) => n.id === navigateId)) return
     db.navigates = db.navigates.filter((n) => n.id !== navigateId)
@@ -329,11 +350,11 @@ export class DemoManagerApi implements ManagerApi {
 
   /* ==================== 字典 ==================== */
 
-  getDicts(): Dict[] {
+  async getDicts(): Promise<Dict[]> {
     return clone(getDB().dicts)
   }
 
-  addDict(dict: Dict): void {
+  async addDict(dict: Dict): Promise<void> {
     const db = getDB()
     const dictKey = requireStr(dict?.dictKey, 'dictKey', '字典键')
     if (db.dicts.some((d) => d.dictKey === dictKey)) throw new Error(`字典键已存在: ${dictKey}`)
@@ -343,7 +364,7 @@ export class DemoManagerApi implements ManagerApi {
     persistDB()
   }
 
-  updateDict(dict: Dict): void {
+  async updateDict(dict: Dict): Promise<void> {
     const db = getDB()
     const id = requireStr(dict?.id, 'id', '字典ID')
     const target = db.dicts.find((d) => d.id === id)
@@ -355,7 +376,7 @@ export class DemoManagerApi implements ManagerApi {
     persistDB()
   }
 
-  removeDict(dictId: string): void {
+  async removeDict(dictId: string): Promise<void> {
     const db = getDB()
     db.dicts = db.dicts.filter((d) => d.id !== dictId)
     persistDB()
@@ -363,11 +384,11 @@ export class DemoManagerApi implements ManagerApi {
 
   /* ==================== 模板 ==================== */
 
-  getTemplates(): Template[] {
+  async getTemplates(): Promise<Template[]> {
     return getDB().templates.map((t) => ({ id: t.id, templateName: t.name, content: t.content }))
   }
 
-  addTemplate(template: Template): void {
+  async addTemplate(template: Template): Promise<void> {
     const db = getDB()
     const name = requireStr(template?.templateName, 'templateName', '模板名称')
     if (db.templates.some((t) => t.name === name)) throw new Error(`模板名称已存在: ${name}`)
@@ -376,7 +397,7 @@ export class DemoManagerApi implements ManagerApi {
     persistDB()
   }
 
-  updateTemplate(template: Template): void {
+  async updateTemplate(template: Template): Promise<void> {
     const db = getDB()
     const id = requireStr(template?.id, 'id', '模板ID')
     const target = db.templates.find((t) => t.id === id)
@@ -389,7 +410,7 @@ export class DemoManagerApi implements ManagerApi {
     persistDB()
   }
 
-  removeTemplate(templateId: string): void {
+  async removeTemplate(templateId: string): Promise<void> {
     const db = getDB()
     db.templates = db.templates.filter((t) => t.id !== templateId)
     persistDB()
@@ -397,24 +418,17 @@ export class DemoManagerApi implements ManagerApi {
 
   /* ==================== 代码替换 ==================== */
 
-  replace(zipFile: Blob): void {
-    // void 契约：zip 解析为异步内部处理，结果由本实现自行反馈
-    void JSZip.loadAsync(zipFile)
-      .then((archive) => {
-        const files = Object.keys(archive.files).filter((name) => !archive.files[name].dir)
-        message.success(
-          `已接收 zip 并"替换" ${files.length} 个代码文件（demo 行为，未发生真实写入）`,
-        )
-      })
-      .catch((e: unknown) => {
-        message.error(`zip 文件解析失败: ${e instanceof Error ? e.message : String(e)}`)
-      })
+  async replace(zipFile: Blob): Promise<void> {
+    // 异步契约：zip 解析完成后 resolve；解析失败 reject 由调用方捕获处理
+    const archive = await JSZip.loadAsync(zipFile)
+    const files = Object.keys(archive.files).filter((name) => !archive.files[name].dir)
+    message.success(`已接收 zip 并"替换" ${files.length} 个代码文件（demo 行为，未发生真实写入）`)
   }
 
   /* ==================== demo 扩展 ==================== */
 
   /** 重置为内置演示数据（ManagerApi 契约之外，仅 demo 实现提供） */
-  resetDemo(): void {
+  async resetDemo(): Promise<void> {
     resetDB()
   }
 

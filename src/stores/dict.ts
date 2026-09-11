@@ -68,7 +68,7 @@ export const useDictStore = defineStore('dict', {
       if (this.loaded || this.loading) return
       this.loading = true
       try {
-        this.dicts = getManagerApi().getDicts().map(clone)
+        this.dicts = (await getManagerApi().getDicts()).map(clone)
         this.loaded = true
         if (!this.selectedDictId && this.dicts.length) this.selectedDictId = this.dicts[0].id
       } catch (e) {
@@ -83,11 +83,11 @@ export const useDictStore = defineStore('dict', {
         if (!dict.id) dict.id = uid('dict-')
         const api = getManagerApi()
         if (draft.id) {
-          api.updateDict(dict)
+          await api.updateDict(dict)
           const idx = this.dicts.findIndex((d) => d.id === draft.id)
           if (idx >= 0) this.dicts[idx] = clone(dict)
         } else {
-          api.addDict(dict)
+          await api.addDict(dict)
           this.dicts.push(clone(dict))
           this.selectedDictId = dict.id
         }
@@ -99,7 +99,7 @@ export const useDictStore = defineStore('dict', {
     },
     async removeDict(id: string) {
       try {
-        getManagerApi().removeDict(id)
+        await getManagerApi().removeDict(id)
         this.dicts = this.dicts.filter((d) => d.id !== id)
         if (this.selectedDictId === id) {
           this.selectedDictId = this.dicts[0]?.id ?? ''
