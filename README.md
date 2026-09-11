@@ -103,19 +103,22 @@ bun run dev
 - **对齐与分布**：选中 ≥ 2 张表后，卡片右键 / 空白右键菜单出现「对齐与分布」分组——左对齐/右对齐/顶部对齐/底部对齐（边缘对齐）、水平对齐/垂直对齐（中心线对齐）、水平/垂直均匀分布（首尾不动等间距，需 ≥ 3 张）
 - **拖拽创建导航**：卡片上下左右四个连接点拖至目标表；两表间已有导航时丢弃并提示
 - **右键菜单**：卡片（编辑/复制/隐藏/对齐分布/删除）、线段（编辑/删除）、空白（新增表/粘贴/自动美化/适应画布/重置缩放/对齐分布）
-- **保存与刷新**：顶栏「保存所有」按钮（走 `ManagerApi.save()` 全量保存契约）与「刷新」按钮（走 `ManagerApi.load()` 重新加载模型，放弃本地未保存状态并清空撤销栈）
+- **保存与刷新**：顶栏「保存所有」按钮（走 `ManagerApi.save()` 全量保存契约，全局快捷键 `Ctrl+S` 同效）与「刷新」按钮（走 `ManagerApi.load()` 重新加载模型，放弃本地未保存状态并清空撤销栈）；多选表卡片拖动结束时仅调用一次 `updateTablePos` 批量保存位置
 
-**画布快捷键**：
+**画布快捷键**（`Ctrl+S` 为全局快捷键，任意页面生效）：
 
-| 快捷键                    | 作用              |
-| ------------------------- | ----------------- |
-| `Ctrl+Z`                  | 撤销              |
-| `Ctrl+Shift+Z` / `Ctrl+Y` | 重做              |
-| `Ctrl+C` / `Ctrl+V`       | 复制 / 粘贴选中表 |
-| `Delete`                  | 删除选中表        |
-| `Esc`                     | 取消选择          |
-| 中键拖拽 / `空格 + 左键`  | 平移画布          |
-| 滚轮                      | 以光标为中心缩放  |
+| 快捷键                    | 作用                            |
+| ------------------------- | ------------------------------- |
+| `Ctrl+Z`                  | 撤销                            |
+| `Ctrl+Shift+Z` / `Ctrl+Y` | 重做                            |
+| `Ctrl+C` / `Ctrl+V`       | 复制 / 粘贴选中表               |
+| `Ctrl+A`                  | 全选所有表卡片（不含隐藏表）    |
+| `Ctrl+D`                  | 取消选中                        |
+| `Ctrl+S`（全局）          | 保存所有（`ManagerApi.save()`） |
+| `Delete`                  | 删除选中表                      |
+| `Esc`                     | 取消选择                        |
+| 中键拖拽 / `空格 + 左键`  | 平移画布                        |
+| 滚轮                      | 以光标为中心缩放                |
 
 ### 左侧表格大纲
 
@@ -217,18 +220,18 @@ const myApi: ManagerApi = {
 
 ### ManagerApi 接口清单
 
-| 方法                                                                  | 说明                                                                                                        |
-| --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `getSettings() / saveSettings(settings)`                              | 应用设置读写（索引类型列表 + 列类型映射规则）                                                               |
-| `importFromDB()`                                                      | 从真实数据库读取表结构（含字段与索引，用于导入建模）                                                        |
-| `load()`                                                              | 加载完整模型（分类/表/导航），初次进入与点击「刷新」按钮时使用                                              |
-| `save()`                                                              | 全量保存模型，仅在点击「保存所有」按钮时调用                                                                |
-| `getCategories() / addCategory / updateCategory / removeCategory`     | 分类 CRUD                                                                                                   |
-| `getTables() / addTable / updateTable / removeTable / updateTablePos` | 表 CRUD（含字段与索引；删除表一并删除其字段、索引与关联导航；拖动表卡片结束时用 `updateTablePos` 保存位置） |
-| `getNavigates() / addNavigate / updateNavigate / removeNavigate`      | 导航关系 CRUD                                                                                               |
-| `getDicts() / addDict / updateDict / removeDict`                      | 字典 CRUD                                                                                                   |
-| `getTemplates() / addTemplate / updateTemplate / removeTemplate`      | 代码模板 CRUD                                                                                               |
-| `replace(zipFile)`                                                    | 上传 zip 产物代码，直接替换对应源码文件                                                                     |
+| 方法                                                                  | 说明                                                                                                                                                     |
+| --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `getSettings() / saveSettings(settings)`                              | 应用设置读写（索引类型列表 + 列类型映射规则）                                                                                                            |
+| `importFromDB()`                                                      | 从真实数据库读取表结构（含字段与索引，用于导入建模）                                                                                                     |
+| `load()`                                                              | 加载完整模型（分类/表/导航），初次进入与点击「刷新」按钮时使用                                                                                           |
+| `save()`                                                              | 全量保存模型，点击「保存所有」按钮或按 `Ctrl+S` 时调用                                                                                                   |
+| `getCategories() / addCategory / updateCategory / removeCategory`     | 分类 CRUD                                                                                                                                                |
+| `getTables() / addTable / updateTable / removeTable / updateTablePos` | 表 CRUD（含字段与索引；删除表一并删除其字段、索引与关联导航；拖动表卡片结束时用 `updateTablePos` 批量保存位置——`UpdateTablePosDTO`，多表同动仅一次调用） |
+| `getNavigates() / addNavigate / updateNavigate / removeNavigate`      | 导航关系 CRUD                                                                                                                                            |
+| `getDicts() / addDict / updateDict / removeDict`                      | 字典 CRUD                                                                                                                                                |
+| `getTemplates() / addTemplate / updateTemplate / removeTemplate`      | 代码模板 CRUD                                                                                                                                            |
+| `replace(zipFile)`                                                    | 上传 zip 产物代码，直接替换对应源码文件                                                                                                                  |
 
 > 调用时机约定：应用视图启动即幂等预载 `getSettings()`（设置是编辑器/导入共用的全局配置）与 `load()`；此后各操作按细粒度契约即时调用对应方法。`DBColumn.notNull` 为 demo 扩展字段（真实实现可不提供，缺省视为可空）；`Table.hidden` 随模型数据持久化（隐藏态在刷新/重开后保持）；`resetDemo()` 为 DemoManagerApi 的扩展方法（重置为内置演示数据），正式实现无需提供。
 
@@ -325,7 +328,9 @@ Logger.setLevel('INFO') // 或 Logger.level = 'INFO' / Logger.getLevel()
 // 控制台执行：直接调用 demo api 验证契约行为
 const { sharedDemoApi } = await import('/src/api/manager-api.ts')
 await sharedDemoApi.getTables() // 返回全部表（含字段与索引）
-await sharedDemoApi.updateTablePos('t-sys-user', { x: 300, y: 200 }) // 体验校验与抛错路径
+await sharedDemoApi.updateTablePos({
+  tables: [{ tableId: 't-sys-user', pos: { x: 300, y: 200 } }],
+}) // 体验批量契约与抛错路径
 ```
 
 ### 运行时调整日志级别

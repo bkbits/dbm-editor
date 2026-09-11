@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Database, BookText, FileCode, Sun, Moon, Settings, SaveAll, RefreshCw } from '@lucide/vue'
+import { onBeforeUnmount, onMounted } from 'vue'
 import { message } from 'antdv-next'
 import { useThemeStore } from '@/stores/theme'
 import { useUiStore, type PageName } from '@/stores/ui'
@@ -23,7 +24,7 @@ function switchPage(key: PageName) {
   ui.setPage(key)
 }
 
-/** 点击「保存所有」：走 ManagerApi.save() 全量保存契约 */
+/** 点击「保存所有」：走 ManagerApi.save() 全量保存契约（快捷键 Ctrl/Cmd + S 同效） */
 function saveAll() {
   try {
     model.saveAll()
@@ -32,6 +33,17 @@ function saveAll() {
     message.error(errorMessageOf(e, '保存失败'))
   }
 }
+
+/** Ctrl/Cmd + S 全局保存（与「保存所有」按钮同逻辑；阻止浏览器保存页对话框） */
+function onGlobalKeyDown(e: KeyboardEvent) {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+    e.preventDefault()
+    saveAll()
+  }
+}
+
+onMounted(() => window.addEventListener('keydown', onGlobalKeyDown))
+onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKeyDown))
 
 /** 点击「刷新」：走 ManagerApi.load() 重新加载（放弃本地未保存状态） */
 async function refresh() {
@@ -69,7 +81,12 @@ async function refresh() {
 
     <div class="header-right">
       <template v-if="ui.page === 'editor'">
-        <button class="icon-btn" type="button" title="保存所有（全量保存模型）" @click="saveAll">
+        <button
+          class="icon-btn"
+          type="button"
+          title="保存所有（全量保存模型，Ctrl+S）"
+          @click="saveAll"
+        >
           <SaveAll :size="16" />
         </button>
         <button

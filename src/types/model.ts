@@ -132,6 +132,20 @@ export interface TableAddPayload extends Omit<Table, 'id'> {
   rawNavigates?: TableNavigate[]
 }
 
+/**
+ * 批量更新表位置请求：拖动表卡片结束时使用。
+ * 多张表卡片被选中并同时移动时，仅调用一次 api（tables 携带全部移动的表）。
+ */
+export interface UpdateTablePosDTO {
+  tables: Array<{
+    tableId: string
+    pos: {
+      x: number
+      y: number
+    }
+  }>
+}
+
 /* ==================== 字典 ==================== */
 
 /** 字典值标签类型：I=Info S=Success W=Warning D=Danger */
@@ -258,7 +272,7 @@ export interface ManagerApi {
   /** 加载完整模型（分类/表/导航），初次进入加载以及点击刷新按钮时使用它 */
   load(): LoadResultVO
 
-  /** 全量保存模型（分类/表/导航）,仅在 `点击保存所有` 时调用 */
+  /** 全量保存模型（分类/表/导航），点击「保存所有」按钮或按 `Ctrl+S` 时调用 */
   save(): void
 
   /* ---------- 分类 ---------- */
@@ -289,8 +303,8 @@ export interface ManagerApi {
   /** 删除表（一并删除其字段、索引与关联导航） */
   removeTable(tableId: string): void
 
-  /** 更新表位置（拖动表卡片结束时使用它进行保存） */
-  updateTablePos(tableId: string, pos: { x: number; y: number }): void
+  /** 批量更新表位置（拖动一个或多个表卡片结束时使用；多选同动时仅调用一次） */
+  updateTablePos(tablePoses: UpdateTablePosDTO): void
 
   /* ---------- 导航 ---------- */
 

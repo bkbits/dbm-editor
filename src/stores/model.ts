@@ -4,7 +4,7 @@
  * 本地状态为 UI 单一数据源；所有变更遵循 ManagerApi 细粒度契约：
  * - 每次操作先改本地状态，再调用对应 api 方法（add/update/remove）即时持久化，
  *   持久化失败回滚快照并抛错（事务模式）
- * - 拖动/对齐/布局等纯位置变更走 updateTablePos
+ * - 拖动/对齐/布局等纯位置变更走 updateTablePos 批量契约（一次调用保存全部移动的表）
  * - saveAll 对应 api.save()（点击「保存所有」）；refresh 对应 api.load()（点击「刷新」）
  * - 撤销/重做恢复后通过 diff 同步（syncToApi）将持久层对齐到本地状态
  */
@@ -406,14 +406,19 @@ export const useModelStore = defineStore('model', {
       }
     },
 
-    /** 持久化表位置（拖动卡片结束/对齐/布局后调用，走 updateTablePos 契约） */
+    /**
+     * 持久化表位置（拖动卡片结束/对齐/布局后调用）。
+     * 走 updateTablePos 批量契约：多张表卡片被选中并同时移动时，
+     * 仅调用一次 api（tables 携带全部移动的表与最终坐标）。
+     */
     async persistTables(ids: string[]) {
       const api = getManagerApi()
-      for (const id of ids) {
-        const t = this.tableById(id)
-        if (!t) continue
-        api.updateTablePos(id, { x: t.x ?? 0, y: t.y ?? 0 })
-      }
+      const tables = ids
+        .map((id) => this.tableById(id))
+        .filter((t): t is Table => !!t)
+        .map((t) => ({ tableId: t.id, pos: { x: t.x ?? 0, y: t.y ?? 0 } }))
+      if (!tables.length) return
+      api.updateTablePos({ tables })
     },
 
     async removeTables(ids: string[]) {

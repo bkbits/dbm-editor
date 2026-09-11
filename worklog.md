@@ -376,3 +376,30 @@ Stage Summary:
 - README 从 281 行扩至 410 行：目录导航、快速开始前置化、数据模型概览、开发与调试、FAQ 三个新章节 + 命令速查/快捷键/环境要求三张新表，文档从「功能罗列」升级为「可导航的项目手册」；控制台验证示例均经源码核对（updateTablePos 坐标对象签名）
 - 关键决策：新增 check-readme.py 把 README 质量纳入可执行校验（锚点/引用/表格/代码块四类规则）；README 受 vp fmt 管束需 `vp check --fix` 保持表格对齐
 - 交付物：snapshot/20260911074949.zip、patch/20260911075402.patch（README.md + scripts/check-readme.py）、download/graph-db-model-editor.zip（115 文件）
+
+---
+Task ID: 12
+Agent: main (Super Z)
+Task: updateTablePos 契约改为批量 DTO（UpdateTablePosDTO）+ Ctrl+A 全选 / Ctrl+D 取消选中 / Ctrl+S 保存所有快捷键
+
+Work Log:
+- 改前快照：snapshot/20260911081526.zip（141 文件）
+- types/model.ts：新增 UpdateTablePosDTO（tables: Array<{ tableId, pos: { x, y } }>）；ManagerApi.updateTablePos 签名改为 updateTablePos(tablePoses: UpdateTablePosDTO): void（多表卡片同动仅一次调用）；save() 注释补充 Ctrl+S 触发
+- demo-manager-api.ts：updateTablePos 批量实现——先整体校验（任一 tableId 不存在即抛「表不存在」且不落盘，all-or-nothing），全部命中后统一写库、单次 persistDB；空 tables 短路返回
+- stores/model.ts：persistTables(ids) 由逐表循环调用改为收集全部最终坐标后单次 api.updateTablePos({ tables })；头部契约注释同步（拖动/对齐/布局共用此路径，签名不变调用方零改动）
+- ModelCanvas.vue onKeyDown：Ctrl+A → canvas.setSelection(visibleTableIds)（全选可见卡片，隐藏表无卡片不参与，preventDefault 阻止浏览器全选）；Ctrl+D → clearSelection + closeMenu（同 Esc 语义，preventDefault 阻止书签快捷键）
+- AppHeader.vue：window 级 keydown 监听 Ctrl/Cmd+S → preventDefault + saveAll()（与「保存所有」按钮同一函数，任意页面生效；saveAll 直接委托 api.save() 无副作用）；按钮 title 补充 Ctrl+S 提示
+- README 同步：ManagerApi 清单两行说明更新（save 触发条件、updateTablePos 批量语义）、快捷键表新增 Ctrl+A/Ctrl+D/Ctrl+S（全局）三行、保存与刷新 bullet 补批量保存说明、开发与调试控制台示例改 DTO 形态
+- 验证（agent-browser 真实浏览器，localhost:3000）：
+  * Ctrl+A：10/10 可见卡片选中（13 表 - 3 隐藏中间表）
+  * 多选拖拽：全选状态下拖动一张卡片，控制台仅 1 条 updateTablePos 日志（改前逐表 10 条）；拖拽前后 getDB 坐标 diff 证实 10 张表同步位移（+270.49, +189.34）、3 张隐藏表坐标不变
+  * Ctrl+D：选中数归零；Ctrl+S：save() 入参/返回日志 + 「所有修改已保存」提示（快照文本确认）
+  * 错误路径：eval 调 updateTablePos({ tables: [{ tableId: 't-nonexistent', ... }] }) → 抛「表不存在: t-nonexistent」+ Logger.error 输出
+  * resetDemo + 重载回归：10 卡片、0 页面错误
+- vue-tsc 通过；vp check --fix 通过（48 文件 lint 无告警）；vp build 通过（2.73s）；check-readme.py 通过
+- patch 留档：patch/20260911081939.patch（6 文件 20K）；重新打包 download/graph-db-model-editor.zip（115 文件 5.3M）
+
+Stage Summary:
+- 契约演进：updateTablePos 单表签名 → UpdateTablePosDTO 批量签名，多选卡片同动时 UI 仅调用一次 api；Demo 实现保持 all-or-nothing 校验语义（先整体校验再写入，单次落盘）；persistTables 收口单次调用，拖拽/对齐/自动布局三条路径自动受益
+- 快捷键：Ctrl+A 全选（仅可见表）、Ctrl+D 取消选中（画布级，均在 ModelCanvas）、Ctrl+S 保存所有（AppHeader 全局监听，与按钮同函数）；均 preventDefault 抵御浏览器默认行为（全选/书签/保存页）
+- 交付物：snapshot/20260911081526.zip、patch/20260911081939.patch、download/graph-db-model-editor.zip（115 文件）

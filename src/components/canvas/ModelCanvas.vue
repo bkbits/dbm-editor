@@ -194,6 +194,19 @@ function onKeyDown(e: KeyboardEvent) {
     if (canvas.selectedIds.length) canvas.copySelection()
     return
   }
+  // Ctrl+A 全选所有表卡片（仅可见表，隐藏表无卡片不参与）
+  if (mod && e.key.toLowerCase() === 'a') {
+    e.preventDefault()
+    canvas.setSelection([...canvas.visibleTableIds])
+    return
+  }
+  // Ctrl+D 取消选中（同 Esc；阻止浏览器书签快捷键）
+  if (mod && e.key.toLowerCase() === 'd') {
+    e.preventDefault()
+    canvas.clearSelection()
+    canvas.closeMenu()
+    return
+  }
   if (mod && e.key.toLowerCase() === 'v') {
     if (canvas.hasClipboard()) {
       const center = canvas.screenToWorld({ x: canvas.viewportW / 2, y: canvas.viewportH / 2 })

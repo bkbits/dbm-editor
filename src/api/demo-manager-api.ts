@@ -30,6 +30,7 @@ import type {
   TableNavigate,
   Template,
   TypeMapping,
+  UpdateTablePosDTO,
 } from '@/types/model'
 import { getDB, persistDB, resetDB } from '@/mock/db'
 import { SEED_DB_TABLES } from '@/mock/seed'
@@ -273,13 +274,26 @@ export class DemoManagerApi implements ManagerApi {
     persistDB()
   }
 
-  /** 更新表位置（拖动表卡片结束时使用） */
-  updateTablePos(tableId: string, pos: { x: number; y: number }): void {
+  /**
+   * 批量更新表位置（拖动一个或多个表卡片结束时使用；多选同动仅一次调用）
+   * 先整体校验再写入：任一表不存在则抛错且不落盘（all-or-nothing），
+   * 全部命中后统一写库并单次落盘。
+   */
+  updateTablePos(tablePoses: UpdateTablePosDTO): void {
     const db = getDB()
-    const target = db.tables.find((t) => t.id === tableId)
-    if (!target) throw new Error(`表不存在: ${tableId}`)
-    target.x = Number(pos?.x) || 0
-    target.y = Number(pos?.y) || 0
+    const list = tablePoses?.tables ?? []
+    if (!list.length) return
+    for (const item of list) {
+      if (!db.tables.some((t) => t.id === item.tableId)) {
+        throw new Error(`表不存在: ${item.tableId}`)
+      }
+    }
+    for (const item of list) {
+      const target = db.tables.find((t) => t.id === item.tableId)
+      if (!target) continue
+      target.x = Number(item.pos?.x) || 0
+      target.y = Number(item.pos?.y) || 0
+    }
     persistDB()
   }
 
