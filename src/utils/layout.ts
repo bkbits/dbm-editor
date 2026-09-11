@@ -109,8 +109,8 @@ export function computeAutoLayout(
         let dist = Math.hypot(dx, dy)
         if (dist > CUTOFF) continue
         if (dist < 1) {
-          dx = ((i % 2 === 0 ? 1 : -1) * 0.6) + 0.01 * (i + 1)
-          dy = ((j % 2 === 0 ? 1 : -1) * 0.5) + 0.01 * (j + 1)
+          dx = (i % 2 === 0 ? 1 : -1) * 0.6 + 0.01 * (i + 1)
+          dy = (j % 2 === 0 ? 1 : -1) * 0.5 + 0.01 * (j + 1)
           dist = Math.hypot(dx, dy)
         }
         const f = (k * k) / dist

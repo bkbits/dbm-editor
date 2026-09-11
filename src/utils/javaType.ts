@@ -87,9 +87,14 @@ export const COMMON_JAVA_TYPES = [
 
 /** 根据数据库类型推导 Java 类型（不带列上下文） */
 export function getJavaTypeByType(dbType: string | null | undefined): string {
-  const raw = String(dbType ?? '').toLowerCase().trim()
+  const raw = String(dbType ?? '')
+    .toLowerCase()
+    .trim()
   if (!raw) return 'String'
-  const base = raw.replace(/\(.*\)/, '').replace(/\s+unsigned.*/, '').trim()
+  const base = raw
+    .replace(/\(.*\)/, '')
+    .replace(/\s+unsigned.*/, '')
+    .trim()
   if (base === 'tinyint' && /\(1\)/.test(raw)) return 'Boolean'
   return JAVA_TYPE_MAP[base] ?? 'String'
 }

@@ -6,19 +6,19 @@
 
 ## 技术栈
 
-| 分类 | 选型 |
-| --- | --- |
-| 包管理器 | [bun](https://bun.sh) |
-| 构建工具 | Vite 8（`vp` 启动脚本） |
-| 前端框架 | Vue 3（Composition API + `<script setup>`） |
-| UI 组件库 | antdv-next |
-| 图标库 | @lucide/vue |
-| 状态管理 | Pinia |
-| 模板引擎 | Eta（代码生成） |
-| 样式 | Sass（scss 标准） |
-| 数据能力 | ManagerApi 接口体系（内置 DemoManagerApi 演示实现，可注入自定义实现） |
-| 代码高亮 | highlight.js + highlights-eta（Eta 模板语法） |
-| 打包下载 | JSZip |
+| 分类      | 选型                                                                                                                               |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| 包管理器  | [bun](https://bun.sh)                                                                                                              |
+| 工具链    | [Vite+](https://viteplus.dev)（`vp` 统一 CLI：dev / build / lint / fmt，`vite-plus` 本地包 + `@voidzero-dev/vite-plus-core` 别名） |
+| 前端框架  | Vue 3（Composition API + `<script setup>`）                                                                                        |
+| UI 组件库 | antdv-next                                                                                                                         |
+| 图标库    | @lucide/vue                                                                                                                        |
+| 状态管理  | Pinia                                                                                                                              |
+| 模板引擎  | Eta（代码生成）                                                                                                                    |
+| 样式      | Sass（scss 标准）                                                                                                                  |
+| 数据能力  | ManagerApi 接口体系（内置 DemoManagerApi 演示实现，可注入自定义实现）                                                              |
+| 代码高亮  | highlight.js + highlights-eta（Eta 模板语法）                                                                                      |
+| 打包下载  | JSZip                                                                                                                              |
 
 > 页面切换不使用 `vue-router`，通过 `v-if` 状态管理（见 `src/stores/ui.ts`）。
 
@@ -31,8 +31,9 @@ import DBManagerView from '@/views/DBManagerView.vue'
 import type { ManagerApi } from '@/types/model'
 
 const myApi: ManagerApi = {
-  // 实现全部 14 个方法：设置读写 / 数据库导入 / 模型全量加载与保存 /
-  // 字典与模板 CRUD / 代码替换（详见 src/types/model.ts 的 ManagerApi 接口）
+  // 实现全部方法：设置读写 / 数据库导入 / 模型加载与全量保存 /
+  // 分类・表・导航细粒度 CRUD / 字典与模板 CRUD / 代码替换
+  // （详见 src/types/model.ts 的 ManagerApi 接口）
   ...
 }
 ```
@@ -46,20 +47,24 @@ const myApi: ManagerApi = {
 
 - **DBManagerView** 解析 `api` 属性（缺省共享 `sharedDemoApi` 单例），`provide` 注入子组件并 `setActiveApi` 写入全局激活实例；切换 api 时自动全量重载各仓库数据
 - **子组件**（如数据库导入 / 代码替换对话框）通过 `useManagerApi()`（`src/api/manager-api.ts`）注入响应式引用，在合适位置直接调用 `api.importFromDB()` / `api.replace(zip)` 等方法
-- **Pinia store** 无法使用 inject，统一经 `getManagerApi()` 读取全局激活实例；所有模型变更通过 `ManagerApi.save` 全量持久化（变更先改本地状态，持久化失败自动回滚快照）
+- **Pinia store** 无法使用 inject，统一经 `getManagerApi()` 读取全局激活实例；模型变更遵循细粒度契约——每次操作先改本地状态，再调用对应 api 方法（`addTable` / `updateTable` / `removeTable` / `updateTablePos` / `addNavigate` …）即时持久化，持久化失败自动回滚快照；撤销/重做恢复后通过 diff 同步（`syncToApi`）把持久层对齐到本地状态
 
 ### ManagerApi 接口清单
 
-| 方法 | 说明 |
-| --- | --- |
-| `getSettings() / saveSettings(settings)` | 应用设置读写（索引类型列表 + 列类型映射规则） |
-| `importFromDB()` | 从真实数据库读取表结构（含字段与索引，用于导入建模） |
-| `load() / save(categories, tables, navigates)` | 完整模型全量加载 / 保存 |
-| `getDicts() / addDict / updateDict / removeDict` | 字典 CRUD |
-| `getTemplates() / addTemplate / updateTemplate / removeTemplate` | 代码模板 CRUD |
-| `replace(zipFile)` | 上传 zip 产物代码，直接替换对应源码文件 |
+| 方法                                                                  | 说明                                                                                                        |
+| --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `getSettings() / saveSettings(settings)`                              | 应用设置读写（索引类型列表 + 列类型映射规则）                                                               |
+| `importFromDB()`                                                      | 从真实数据库读取表结构（含字段与索引，用于导入建模）                                                        |
+| `load()`                                                              | 加载完整模型（分类/表/导航），初次进入与点击「刷新」按钮时使用                                              |
+| `save()`                                                              | 全量保存模型，仅在点击「保存所有」按钮时调用                                                                |
+| `getCategories() / addCategory / updateCategory / removeCategory`     | 分类 CRUD                                                                                                   |
+| `getTables() / addTable / updateTable / removeTable / updateTablePos` | 表 CRUD（含字段与索引；删除表一并删除其字段、索引与关联导航；拖动表卡片结束时用 `updateTablePos` 保存位置） |
+| `getNavigates() / addNavigate / updateNavigate / removeNavigate`      | 导航关系 CRUD                                                                                               |
+| `getDicts() / addDict / updateDict / removeDict`                      | 字典 CRUD                                                                                                   |
+| `getTemplates() / addTemplate / updateTemplate / removeTemplate`      | 代码模板 CRUD                                                                                               |
+| `replace(zipFile)`                                                    | 上传 zip 产物代码，直接替换对应源码文件                                                                     |
 
-> `DBColumn.notNull` 为 demo 扩展字段（真实实现可不提供，缺省视为可空）；`resetDemo()` 为 DemoManagerApi 的扩展方法（重置为内置演示数据），正式实现无需提供。
+> `DBColumn.notNull` 为 demo 扩展字段（真实实现可不提供，缺省视为可空）；`Table.hidden` 随模型数据持久化（隐藏态在刷新/重开后保持）；`resetDemo()` 为 DemoManagerApi 的扩展方法（重置为内置演示数据），正式实现无需提供。
 
 ### DemoManagerApi（内置演示实现）
 
@@ -67,24 +72,34 @@ const myApi: ManagerApi = {
 
 ## 快速开始
 
-```bash
-# 安装依赖
-bun install
+前置：全局安装 Vite+ CLI（一次即可）
 
-# 启动开发服务器（vp 为 vite 别名脚本，见 package.json scripts）
-bun run vp
-# 或
+```bash
+# macOS / Linux
+curl -fsSL https://vite.plus | bash
+# Windows（PowerShell）
+irm https://vite.plus/ps1 | iex
+```
+
+```bash
+# 安装依赖（vp install / bun install 均可）
+vp install
+
+# 启动开发服务器（Vite+ 内置命令，读取 vite.config.ts 的 server 配置）
+vp dev
+# 或经 package.json scripts
 bun run dev
 
 # 生产构建 / 预览
-bun run build
-bun run preview
+vp build
+vp preview
 
-# 类型检查
-bun run typecheck
+# 类型检查 / 代码检查
+bun run typecheck   # vue-tsc --noEmit
+vp check            # 格式 + lint + 类型检查（Vite+ 内置）
 ```
 
-启动后访问 <http://localhost:3000>。首次打开会自动加载内置演示数据（3 个分类 / 13 张表 / 10 条导航 / 5 个字典 / 4 个代码模板）。
+启动后访问 <http://localhost:3000>（`server.host: 0.0.0.0`、`server.allowedHosts: true` 允许任意 Host / 内网 IP / 预览域名访问）。首次打开会自动加载内置演示数据（3 个分类 / 13 张表 / 10 条导航 / 5 个字典 / 4 个代码模板）。
 
 ## 功能总览
 
@@ -97,13 +112,14 @@ bun run typecheck
 - **导航线段**：一对一 `-1----1-`、一对多 `-1----N-`、多对一 `-N----1-`、多对多 `-N----N-`；悬停/选中均为实线（悬停较细且半透明，选中加粗 + 光晕，二者可区分）、悬停提示单行展示「属性 ⇄ 属性（关系说明）」、双击编辑、右键菜单
 - **卡片 ⇄ 导航线联动**：悬停卡片时其关联导航线（含 NN 经由的中间表）联动切换到悬停风格；选中卡片（单选/多选/框选）时关联线联动切换到选中风格（加粗 + 光晕）；表选中与线段选中互斥，画布同一时刻只有一种选中焦点
 - **悬停/选中过渡**：卡片阴影、连接点淡入缩放、隐藏按钮淡入、导航线颜色/粗细/光晕、标记描边、NN 胶囊、右键菜单弹出等全部带平滑过渡动画
-- **多对多中间表**：默认完全隐藏，线上显示 `中间表名 +` 胶囊，点击展开（若中间表落在当前视口外，画布会平滑滚动将其带入视野，保证展开后一定看得见）；左侧大纲眼睛恢复显示同样带视野保障；对中间表执行隐藏则彻底隐藏（非透明）
+- **多对多中间表**：默认完全隐藏（`Table.hidden` 随模型数据持久化，刷新/重开后保持），线上显示 `中间表名 +` 胶囊，点击展开（若中间表落在当前视口外，画布会平滑滚动将其带入视野，保证展开后一定看得见）；左侧大纲眼睛恢复显示同样带视野保障；对中间表执行隐藏则彻底隐藏（非透明）
 - **任一端表隐藏**：导航线不渲染，改为在可见端卡片底部显示「隐藏导航摘要」（类型 + 关联表名）
 - **自动美化**：工具栏「魔法棒」按钮 / 空白右键菜单「自动美化布局」，以导航关系为边做力导向布局自动规划每个表卡片的位置（相关联的表彼此靠近、孤立表散开不重叠，结果按 20px 网格对齐），卡片平滑滑动到新位置并自动适应画布
 - **对齐与分布**：选中 ≥ 2 张表后，卡片右键 / 空白右键菜单出现「对齐与分布」分组——左对齐/右对齐/顶部对齐/底部对齐（边缘对齐）、水平对齐/垂直对齐（中心线对齐）、水平/垂直均匀分布（首尾不动等间距，需 ≥ 3 张）
 - **拖拽创建导航**：卡片上下左右四个连接点拖至目标表；两表间已有导航时丢弃并提示
 - **右键菜单**：卡片（编辑/复制/隐藏/对齐分布/删除）、线段（编辑/删除）、空白（新增表/粘贴/自动美化/适应画布/重置缩放/对齐分布）
 - **快捷键**：`Ctrl+Z` 撤销、`Ctrl+Shift+Z` / `Ctrl+Y` 重做、`Ctrl+C` 复制、`Ctrl+V` 粘贴、`Delete` 删除选中表、`Esc` 取消选择
+- **保存与刷新**：顶栏「保存所有」按钮（走 `ManagerApi.save()` 全量保存契约）与「刷新」按钮（走 `ManagerApi.load()` 重新加载模型，放弃本地未保存状态并清空撤销栈）
 
 ### 左侧表格大纲
 
@@ -136,27 +152,27 @@ bun run typecheck
 
 ```ts
 interface TemplateContext {
-  templateName: string    // 模板名称
+  templateName: string // 模板名称
   templateContent: string // 模板内容
-  result?: string         // 生成结果
-  basePackage: string     // 基础包名（表所属分类）
-  fileName: string        // 文件名（模板内赋值）
-  filePath: string        // 文件路径（模板内赋值）
-  language?: string       // 显式指定预览高亮语言（模板内赋值，如 <% context.language = 'java' %>）
-  table: TableVO          // 当前表（columns/indexes/navigates）
+  result?: string // 生成结果
+  basePackage: string // 基础包名（表所属分类）
+  fileName: string // 文件名（模板内赋值）
+  filePath: string // 文件路径（模板内赋值）
+  language?: string // 显式指定预览高亮语言（模板内赋值，如 <% context.language = 'java' %>）
+  table: TableVO // 当前表（columns/indexes/navigates）
 }
 ```
 
 > 预览/代码生成结果的高亮语言：`context.language` 显式指定优先（如 `java` / `sql` / `xml` / `javascript`），未设置时按产物文件名后缀自动识别，工具栏语言徽标实时显示实际生效语言。
 
-| 工具 | 说明 |
-| --- | --- |
-| `utils.toCamelCase(str, firstLetterLowerCase?)` | 转驼峰 |
-| `utils.toSnakeCase(str)` | 转蛇形 |
-| `utils.getJavaType(column)` | 数据库类型映射 Java 类型 |
-| `utils.quote(content, condition?)` | 引号包裹 |
-| `utils.wrap(content, condition?)` | 括号包裹 |
-| `utils.isEmpty(str)` / `utils.isBlank(str)` | 判空 / 判空白 |
+| 工具                                            | 说明                     |
+| ----------------------------------------------- | ------------------------ |
+| `utils.toCamelCase(str, firstLetterLowerCase?)` | 转驼峰                   |
+| `utils.toSnakeCase(str)`                        | 转蛇形                   |
+| `utils.getJavaType(column)`                     | 数据库类型映射 Java 类型 |
+| `utils.quote(content, condition?)`              | 引号包裹                 |
+| `utils.wrap(content, condition?)`               | 括号包裹                 |
+| `utils.isEmpty(str)` / `utils.isBlank(str)`     | 判空 / 判空白            |
 
 Eta 语法：`<% %>` 逻辑、`<%= %>` 输出、`<%# %>` 自定义注释标签（渲染前剥离）。模板内可直接访问 `context` 与 `utils` 顶层标识（`useWith` 模式）。
 
@@ -179,7 +195,7 @@ Eta 语法：`<% %>` 逻辑、`<%= %>` 输出、`<%# %>` 自定义注释标签�
 
 ```
 ├─ index.html
-├─ vite.config.ts          # Vite 8 配置（@ 别名 / 端口 3000）
+├─ vite.config.ts          # Vite+ 配置（@ 别名 / 端口 3000 / allowedHosts / lint / fmt / staged）
 ├─ tsconfig.json
 ├─ docs/screenshots/       # 界面截图
 ├─ scripts/                # 开发辅助脚本（Eta 冒烟测试 / 快照 / patch / 打包）
@@ -207,28 +223,28 @@ Eta 语法：`<% %>` 逻辑、`<%= %>` 输出、`<%# %>` 自定义注释标签�
 
 - 画布渲染带视口裁剪（仅渲染可视区附近卡片），支持 100+ 表卡片流畅操作
 - 兼容最新版 Chrome / Edge / Firefox
-- 撤销/重做基于模型快照（上限 50 步），恢复后经 `ManagerApi.save` 全量同步持久层
+- 撤销/重做基于模型快照（上限 50 步），恢复后经 diff 同步（`syncToApi`）将持久层对齐到本地状态
 
 ## 界面截图
 
-| 亮色编辑器 | 暗色编辑器 |
-| --- | --- |
+| 亮色编辑器                                       | 暗色编辑器                                |
+| ------------------------------------------------ | ----------------------------------------- |
 | ![亮色](docs/screenshots/editor-final-light.png) | ![暗色](docs/screenshots/editor-dark.png) |
 
-| 自动美化布局（力导向） | 对齐与分布右键菜单 |
-| --- | --- |
+| 自动美化布局（力导向）                        | 对齐与分布右键菜单                                   |
+| --------------------------------------------- | ---------------------------------------------------- |
 | ![自动美化](docs/screenshots/auto-layout.png) | ![对齐菜单](docs/screenshots/align-context-menu.png) |
 
-| 表编辑对话框（拖拽手柄排序） | 系统设置 · 列默认类型 |
-| --- | --- |
+| 表编辑对话框（拖拽手柄排序）                              | 系统设置 · 列默认类型                               |
+| --------------------------------------------------------- | --------------------------------------------------- |
 | ![表编辑](docs/screenshots/table-columns-drag-handle.png) | ![设置](docs/screenshots/settings-column-rules.png) |
 
-| 模板管理（实时预览） | 系统设置 · 索引类型（暗色） |
-| --- | --- |
+| 模板管理（实时预览）                              | 系统设置 · 索引类型（暗色）                                 |
+| ------------------------------------------------- | ----------------------------------------------------------- |
 | ![模板](docs/screenshots/template-view-fixed.png) | ![索引类型](docs/screenshots/settings-index-types-dark.png) |
 
-| 页面封装 · DBManagerView（亮色） | 页面封装 · DBManagerView（暗色） |
-| --- | --- |
+| 页面封装 · DBManagerView（亮色）                      | 页面封装 · DBManagerView（暗色）                     |
+| ----------------------------------------------------- | ---------------------------------------------------- |
 | ![DBManager 亮](docs/screenshots/dbmanager-light.png) | ![DBManager 暗](docs/screenshots/dbmanager-dark.png) |
 
 ## 源码快照与修改补丁

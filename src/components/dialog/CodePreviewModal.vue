@@ -17,7 +17,10 @@ const tableId = ref('')
 const activeTemplate = ref('')
 
 const tableOptions = computed(() =>
-  model.tables.map((t) => ({ value: t.id, label: `${t.tableName}${t.comment ? `（${t.comment}）` : ''}` })),
+  model.tables.map((t) => ({
+    value: t.id,
+    label: `${t.tableName}${t.comment ? `（${t.comment}）` : ''}`,
+  })),
 )
 
 const templates = computed(() => templateStore.templates)
@@ -103,7 +106,11 @@ async function copyCode() {
       <span v-if="meta" class="file-path mono" :title="meta.filePath">
         {{ meta.filePath || meta.fileName }}
       </span>
-      <span v-if="meta && !meta.error" class="lang-chip mono" title="高亮语言（模板内 context.language 显式指定，未设置时按文件后缀自动识别）">
+      <span
+        v-if="meta && !meta.error"
+        class="lang-chip mono"
+        title="高亮语言（模板内 context.language 显式指定，未设置时按文件后缀自动识别）"
+      >
         {{ meta.language }}
       </span>
       <a-button size="small" @click="copyCode">

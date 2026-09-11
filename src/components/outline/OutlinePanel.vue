@@ -32,11 +32,13 @@ const filteredCategories = computed(() => {
   const cats = [...model.categories]
   if (!kw) return cats
   return cats.filter((c) => {
-    const inCat =
-      c.name.toLowerCase().includes(kw) || c.basePackage.toLowerCase().includes(kw)
+    const inCat = c.name.toLowerCase().includes(kw) || c.basePackage.toLowerCase().includes(kw)
     const inTables = model
       .tablesByCategory(c.id)
-      .some((t) => t.tableName.toLowerCase().includes(kw) || (t.comment || '').toLowerCase().includes(kw))
+      .some(
+        (t) =>
+          t.tableName.toLowerCase().includes(kw) || (t.comment || '').toLowerCase().includes(kw),
+      )
     return inCat || inTables
   })
 })
@@ -49,8 +51,17 @@ function tablesOf(categoryId: string) {
     (t) =>
       t.tableName.toLowerCase().includes(kw) ||
       (t.comment || '').toLowerCase().includes(kw) ||
-      model.categories.find((c) => c.id === categoryId)?.name.toLowerCase().includes(kw),
+      model.categories
+        .find((c) => c.id === categoryId)
+        ?.name.toLowerCase()
+        .includes(kw),
   )
+}
+
+/** 大纲眼睛：显示隐藏表并保证完整进入视野 */
+function revealTable(tableId: string) {
+  canvas.showTable(tableId)
+  canvas.ensureTableVisible(tableId)
 }
 
 function isExpanded(categoryId: string) {
@@ -78,7 +89,13 @@ function dblClickTable(tableId: string) {
 function contextTable(tableId: string, e: MouseEvent) {
   e.preventDefault()
   const local = canvas.localPoint(e)
-  canvas.openMenu({ kind: 'card', x: local.x, y: local.y, world: canvas.screenToWorld(local), tableId })
+  canvas.openMenu({
+    kind: 'card',
+    x: local.x,
+    y: local.y,
+    world: canvas.screenToWorld(local),
+    tableId,
+  })
 }
 
 function clickCategory(categoryId: string, e: MouseEvent) {
@@ -118,7 +135,6 @@ async function resetDemo() {
     onOk: async () => {
       await model.resetDemoData()
       useHistoryStore().clear()
-      canvas.resetHidden()
       canvas.setSelection([])
       canvas.fitAll(true)
       message.success('已重置为演示数据')
@@ -160,7 +176,12 @@ watch(
 
     <div class="outline-search">
       <Search :size="13" class="search-icon" />
-      <input v-model="keyword" type="text" placeholder="搜索分类 / 表名 / 注释" spellcheck="false" />
+      <input
+        v-model="keyword"
+        type="text"
+        placeholder="搜索分类 / 表名 / 注释"
+        spellcheck="false"
+      />
     </div>
 
     <div class="outline-tree">
@@ -204,7 +225,10 @@ watch(
             v-for="t in tablesOf(cat.id)"
             :key="t.id"
             class="table-row"
-            :class="{ selected: canvas.selectedIds.includes(t.id), hidden: canvas.hiddenTableIds.includes(t.id) }"
+            :class="{
+              selected: canvas.selectedIds.includes(t.id),
+              hidden: canvas.hiddenTableIds.includes(t.id),
+            }"
             :data-outline-table="t.id"
             @click="clickTable(t.id, $event)"
             @dblclick.stop="dblClickTable(t.id)"
@@ -212,17 +236,28 @@ watch(
           >
             <TableIcon :size="12" class="t-icon" />
             <span class="t-name mono">{{ t.tableName }}</span>
-            <Link2 v-if="model.isMappingTable(t.id)" :size="11" class="t-mapping" title="中间映射表" />
+            <Link2
+              v-if="model.isMappingTable(t.id)"
+              :size="11"
+              class="t-mapping"
+              title="中间映射表"
+            />
             <button
               v-if="canvas.hiddenTableIds.includes(t.id)"
               class="t-eye"
               type="button"
               title="在画布中显示"
-              @click.stop="canvas.showTable(t.id); canvas.ensureTableVisible(t.id)"
+              @click.stop="revealTable(t.id)"
             >
               <EyeOff :size="12" />
             </button>
-            <button v-else class="t-eye" type="button" title="在画布中隐藏" @click.stop="canvas.hideTable(t.id)">
+            <button
+              v-else
+              class="t-eye"
+              type="button"
+              title="在画布中隐藏"
+              @click.stop="canvas.hideTable(t.id)"
+            >
               <Eye :size="12" />
             </button>
           </div>

@@ -1,6 +1,16 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { Key, CircleCheck, CircleX, Plus, Link2, ChevronDown, EyeOff, ArrowDown, GitBranch } from '@lucide/vue'
+import {
+  Key,
+  CircleCheck,
+  CircleX,
+  Plus,
+  Link2,
+  ChevronDown,
+  EyeOff,
+  ArrowDown,
+  GitBranch,
+} from '@lucide/vue'
 import { useCanvasStore } from '@/stores/canvas'
 import { useModelStore } from '@/stores/model'
 import { useUiStore } from '@/stores/ui'
@@ -25,14 +35,18 @@ const isHidden = computed(() => canvas.hiddenTableIds.includes(props.tableId))
 
 const COLLAPSE_COUNT = 6
 const expanded = computed(() => canvas.isExpanded(props.tableId))
-const shownColumns = computed(() => (expanded.value ? columns.value : columns.value.slice(0, COLLAPSE_COUNT)))
+const shownColumns = computed(() =>
+  expanded.value ? columns.value : columns.value.slice(0, COLLAPSE_COUNT),
+)
 
 const showIndexes = computed(() => canvas.showIndexes(props.tableId))
 
 const isSelected = computed(() => canvas.selectedIds.includes(props.tableId))
 const isHovered = computed(() => canvas.hoveredTableId === props.tableId)
 const isConnectTarget = computed(
-  () => canvas.connectDraft?.hoverTableId === props.tableId && canvas.connectDraft.fromTableId !== props.tableId,
+  () =>
+    canvas.connectDraft?.hoverTableId === props.tableId &&
+    canvas.connectDraft.fromTableId !== props.tableId,
 )
 
 const catColor = computed(() => {
@@ -49,7 +63,8 @@ const hiddenNavs = computed(() => {
       if (!canvas.hiddenTableIds.includes(otherId)) return null
       const other = model.tableById(otherId)
       // 视角类型：若本表是 target，则类型翻转
-      const viewType = n.self === props.tableId ? n.type : n.type === '1N' ? 'N1' : n.type === 'N1' ? '1N' : n.type
+      const viewType =
+        n.self === props.tableId ? n.type : n.type === '1N' ? 'N1' : n.type === 'N1' ? '1N' : n.type
       return {
         id: n.id,
         label: NAVIGATE_TYPE_LABEL[viewType],
@@ -59,6 +74,12 @@ const hiddenNavs = computed(() => {
     })
     .filter(Boolean) as Array<{ id: string; label: string; otherName: string; otherId: string }>
 })
+
+/** 点击隐藏导航目标：显示对应表并平滑居中到它 */
+function revealHiddenNav(otherId: string) {
+  canvas.showTable(otherId)
+  canvas.centerOnTable(otherId)
+}
 
 function dictOf(dictKey: string) {
   return dictStore.dicts.find((d) => d.dictKey === dictKey)
@@ -126,9 +147,20 @@ onBeforeUnmount(() => {
     v-if="table"
     ref="elRef"
     class="table-card"
-    :class="{ selected: isSelected, hovered: isHovered, 'connect-target': isConnectTarget, mapping: isMapping, 'layout-animating': canvas.layoutAnimating }"
+    :class="{
+      selected: isSelected,
+      hovered: isHovered,
+      'connect-target': isConnectTarget,
+      mapping: isMapping,
+      'layout-animating': canvas.layoutAnimating,
+    }"
     :data-table-id="tableId"
-    :style="{ left: `${table.x ?? 0}px`, top: `${table.y ?? 0}px`, width: `${CARD_WIDTH}px`, '--cat-color': catColor }"
+    :style="{
+      left: `${table.x ?? 0}px`,
+      top: `${table.y ?? 0}px`,
+      width: `${CARD_WIDTH}px`,
+      '--cat-color': catColor,
+    }"
     @pointerdown.stop="onPointerDown"
     @dblclick.stop="onDblClick"
     @contextmenu.stop.prevent="onContext"
@@ -168,12 +200,19 @@ onBeforeUnmount(() => {
           <EyeOff :size="12" />
         </button>
       </div>
-      <div v-if="table.comment" class="head-comment" :title="table.comment">{{ table.comment }}</div>
+      <div v-if="table.comment" class="head-comment" :title="table.comment">
+        {{ table.comment }}
+      </div>
     </div>
 
     <!-- 字段列表（默认折叠为 6 个） -->
     <div class="card-columns">
-      <div v-for="col in shownColumns" :key="col.id" class="col-row" :class="{ pk: col.primaryKey }">
+      <div
+        v-for="col in shownColumns"
+        :key="col.id"
+        class="col-row"
+        :class="{ pk: col.primaryKey }"
+      >
         <span class="col-icons">
           <Key v-if="col.primaryKey" :size="11" class="icon-pk" title="主键" />
           <CircleCheck v-if="!col.notNull" :size="11" class="icon-null" title="可空" />
@@ -206,7 +245,9 @@ onBeforeUnmount(() => {
       <div v-for="idx in indexes" :key="idx.id" class="idx-row">
         <span class="idx-type" :class="idx.type.toLowerCase()">{{ idx.type }}</span>
         <span class="idx-name mono" :title="idx.columns.join(', ')">{{ idx.indexName }}</span>
-        <span class="idx-cols mono" :title="idx.columns.join(', ')">{{ idx.columns.join(', ') }}</span>
+        <span class="idx-cols mono" :title="idx.columns.join(', ')">{{
+          idx.columns.join(', ')
+        }}</span>
       </div>
       <div v-if="!indexes.length" class="idx-empty">暂无索引</div>
     </div>
@@ -219,7 +260,13 @@ onBeforeUnmount(() => {
       </div>
       <div v-for="h in hiddenNavs" :key="h.id" class="hidden-nav-row">
         <span class="nav-type">{{ h.label }}</span>
-        <span class="nav-target mono" :title="`点击定位到 ${h.otherName}`" @pointerdown.stop @click="canvas.showTable(h.otherId); canvas.centerOnTable(h.otherId)">{{ h.otherName }}</span>
+        <span
+          class="nav-target mono"
+          :title="`点击定位到 ${h.otherName}`"
+          @pointerdown.stop
+          @click="revealHiddenNav(h.otherId)"
+          >{{ h.otherName }}</span
+        >
       </div>
     </div>
   </div>
@@ -234,7 +281,9 @@ onBeforeUnmount(() => {
   box-shadow: var(--card-shadow);
   font-size: 12px;
   z-index: 2;
-  transition: box-shadow 0.18s ease, border-color 0.18s ease;
+  transition:
+    box-shadow 0.18s ease,
+    border-color 0.18s ease;
 
   /* 自动美化/对齐后的位置过渡：left/top 平滑滑动到新坐标 */
   &.layout-animating {
@@ -251,7 +300,9 @@ onBeforeUnmount(() => {
 
   &.selected {
     border-color: var(--card-border-selected);
-    box-shadow: 0 0 0 3px var(--primary-weak), var(--card-shadow-hover);
+    box-shadow:
+      0 0 0 3px var(--primary-weak),
+      var(--card-shadow-hover);
   }
 
   &.connect-target {
@@ -284,8 +335,12 @@ onBeforeUnmount(() => {
   opacity: 0;
   scale: 0.55;
   pointer-events: none;
-  transition: opacity 0.16s ease, scale 0.16s ease, background-color 0.12s ease,
-    border-color 0.12s ease, color 0.12s ease;
+  transition:
+    opacity 0.16s ease,
+    scale 0.16s ease,
+    background-color 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease;
 
   &:hover {
     background: var(--primary);
@@ -394,7 +449,10 @@ onBeforeUnmount(() => {
     cursor: pointer;
     opacity: 0;
     pointer-events: none;
-    transition: opacity 0.16s ease, background-color 0.12s ease, color 0.12s ease;
+    transition:
+      opacity 0.16s ease,
+      background-color 0.12s ease,
+      color 0.12s ease;
 
     &:hover {
       background: var(--danger-weak);
@@ -511,7 +569,10 @@ onBeforeUnmount(() => {
   cursor: pointer;
   border-radius: var(--radius-s);
   border: 1px dashed var(--border);
-  transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease,
+    background-color 0.15s ease;
 
   &:hover {
     color: var(--primary-text);

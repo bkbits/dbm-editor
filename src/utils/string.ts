@@ -7,7 +7,10 @@
  * @param str 源字符串（支持下划线/中划线/空格分隔，或已存在的驼峰）
  * @param firstLetterLowerCase 首字母是否小写（true=小驼峰，false/默认=大驼峰）
  */
-export function toCamelCase(str: string | null | undefined, firstLetterLowerCase?: boolean): string {
+export function toCamelCase(
+  str: string | null | undefined,
+  firstLetterLowerCase?: boolean,
+): string {
   const s = String(str ?? '').trim()
   if (!s) return ''
   const hadSeparator = /[\s_\-.]/.test(s)
@@ -16,7 +19,10 @@ export function toCamelCase(str: string | null | undefined, firstLetterLowerCase
     words = s.split(/[\s_\-.]+/).filter(Boolean)
   } else {
     // 已是驼峰：在大写字母前分割（保留连续大写缩写，如 HTTPServer）
-    words = s.replace(/([a-z0-9])([A-Z])/g, '$1 $2').split(/\s+/).filter(Boolean)
+    words = s
+      .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+      .split(/\s+/)
+      .filter(Boolean)
   }
   const lower = words.map((w) => w.toLowerCase())
   let camel = lower.map((w, i) => (i === 0 ? w : w.charAt(0).toUpperCase() + w.slice(1))).join('')

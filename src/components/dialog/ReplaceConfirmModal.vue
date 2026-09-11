@@ -46,8 +46,13 @@ async function confirmReplace() {
     <div class="replace-warn">
       <AlertTriangle :size="16" />
       <div>
-        <p>即将通过 <span class="mono">ManagerApi.replace</span> 上传 zip 并<b>直接替换</b>对应的源码文件。</p>
-        <p>该操作影响面大，请谨慎确认！当前将替换 <b>{{ files.length }}</b> 个文件。</p>
+        <p>
+          即将通过 <span class="mono">ManagerApi.replace</span> 上传 zip
+          并<b>直接替换</b>对应的源码文件。
+        </p>
+        <p>
+          该操作影响面大，请谨慎确认！当前将替换 <b>{{ files.length }}</b> 个文件。
+        </p>
       </div>
     </div>
 
@@ -58,7 +63,9 @@ async function confirmReplace() {
           <span class="tpl-name">{{ f.templateName }}</span>
           <span class="file-path">{{ f.filePath }}</span>
         </div>
-        <div v-if="files.length > shownFiles.length" class="more">… 其余 {{ files.length - shownFiles.length }} 个文件</div>
+        <div v-if="files.length > shownFiles.length" class="more">
+          … 其余 {{ files.length - shownFiles.length }} 个文件
+        </div>
       </div>
     </div>
   </a-modal>

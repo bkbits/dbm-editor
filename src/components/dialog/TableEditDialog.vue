@@ -69,7 +69,8 @@ watch(dialogOpen, (open) => {
     draft.columns = model.columnsOf(t.id).map((c) => ({ ...c }))
     draft.indexes = model.indexesOf(t.id).map((i) => ({ ...i, columns: [...i.columns] }))
   } else {
-    const world = state.position ?? canvas.screenToWorld({ x: canvas.viewportW / 2, y: canvas.viewportH / 2 })
+    const world =
+      state.position ?? canvas.screenToWorld({ x: canvas.viewportW / 2, y: canvas.viewportH / 2 })
     draft.id = ''
     draft.categoryId = state.defaultCategoryId || model.categories[0]?.id || ''
     draft.tableName = ''
@@ -163,7 +164,9 @@ function addIndex() {
 function removeIndex(idx: number) {
   draft.indexes.splice(idx, 1)
 }
-const indexTypeOptions = computed(() => settingsStore.indexTypeOptions.map((v) => ({ value: v, label: v })))
+const indexTypeOptions = computed(() =>
+  settingsStore.indexTypeOptions.map((v) => ({ value: v, label: v })),
+)
 const columnSelectOptions = computed(() =>
   draft.columns
     .filter((c) => c.columnName.trim())
@@ -209,7 +212,9 @@ const saving = reactive({ loading: false })
 function validate(): string | null {
   if (!draft.categoryId) return '请选择所属分类'
   if (!draft.tableName.trim()) return '表名不能为空'
-  const dupName = model.tables.find((t) => t.tableName === draft.tableName.trim() && t.id !== draft.id)
+  const dupName = model.tables.find(
+    (t) => t.tableName === draft.tableName.trim() && t.id !== draft.id,
+  )
   if (dupName) return `表名已存在：${draft.tableName}`
   const names = new Set<string>()
   for (const c of draft.columns) {
@@ -319,11 +324,21 @@ async function save() {
     <div class="form-grid">
       <div class="form-item">
         <label>所属分类<span class="req">*</span></label>
-        <a-select v-model:value="draft.categoryId" :options="categoryOptions" placeholder="选择分类" size="small" />
+        <a-select
+          v-model:value="draft.categoryId"
+          :options="categoryOptions"
+          placeholder="选择分类"
+          size="small"
+        />
       </div>
       <div class="form-item">
         <label>表名<span class="req">*</span></label>
-        <a-input v-model:value="draft.tableName" placeholder="如 sys_user" size="small" @blur="onTableNameBlur" />
+        <a-input
+          v-model:value="draft.tableName"
+          placeholder="如 sys_user"
+          size="small"
+          @blur="onTableNameBlur"
+        />
       </div>
       <div class="form-item">
         <label>实体类名</label>
@@ -344,7 +359,10 @@ async function save() {
             size="small"
             class="mono tree-input"
             placeholder="parent_id"
-            :filter-option="(input: string, option: any) => String(option.value).toLowerCase().includes(input.toLowerCase())"
+            :filter-option="
+              (input: string, option: any) =>
+                String(option.value).toLowerCase().includes(input.toLowerCase())
+            "
           />
         </div>
       </div>
@@ -378,11 +396,7 @@ async function save() {
             @dragover.prevent="columnDrag.onDragOver(idx, $event)"
             @drop.prevent="columnDrag.onDrop()"
           >
-            <span
-              class="drag-handle"
-              title="拖拽排序"
-              @pointerdown="columnDrag.handleDown(idx)"
-            >
+            <span class="drag-handle" title="拖拽排序" @pointerdown="columnDrag.handleDown(idx)">
               <GripVertical :size="13" />
             </span>
             <a-input
@@ -405,7 +419,10 @@ async function save() {
               size="small"
               class="mono"
               placeholder="如 VARCHAR(50)"
-              :filter-option="(input: string, option: any) => String(option.value).toUpperCase().includes(input.toUpperCase())"
+              :filter-option="
+                (input: string, option: any) =>
+                  String(option.value).toUpperCase().includes(input.toUpperCase())
+              "
               @change="onTypeChange(col)"
             />
             <a-auto-complete
@@ -414,7 +431,10 @@ async function save() {
               size="small"
               class="mono"
               placeholder="如 String"
-              :filter-option="(input: string, option: any) => String(option.value).toLowerCase().includes(input.toLowerCase())"
+              :filter-option="
+                (input: string, option: any) =>
+                  String(option.value).toLowerCase().includes(input.toLowerCase())
+              "
               @change="col._javaTouched = true"
             />
             <div class="center-cell">
@@ -455,7 +475,12 @@ async function save() {
         </div>
         <div class="columns-body">
           <div v-for="(idx, i) in draft.indexes" :key="idx.id" class="column-row idx-grid">
-            <a-input v-model:value="idx.indexName" size="small" class="mono" placeholder="如 uk_username" />
+            <a-input
+              v-model:value="idx.indexName"
+              size="small"
+              class="mono"
+              placeholder="如 uk_username"
+            />
             <a-select v-model:value="idx.type" :options="indexTypeOptions" size="small" />
             <a-select
               v-model:value="idx.columns"
@@ -471,7 +496,11 @@ async function save() {
               <Trash2 :size="12" />
             </button>
           </div>
-          <a-empty v-if="!draft.indexes.length" description="暂无索引" :image-style="{ height: '40px' }" />
+          <a-empty
+            v-if="!draft.indexes.length"
+            description="暂无索引"
+            :image-style="{ height: '40px' }"
+          />
         </div>
         <a-button size="small" type="dashed" block class="add-btn" @click="addIndex">
           <template #icon><Plus :size="12" /></template>
@@ -490,7 +519,9 @@ async function save() {
               <span class="nav-type" :class="`t-${nv.type.toLowerCase()}`">{{ nv.typeLabel }}</span>
               <span class="nav-tables mono">
                 {{ nv.selfName }}
-                <span class="nav-arrow">-&nbsp;{{ nv.type[0] }}&nbsp;-&nbsp;{{ nv.type[1] }}&nbsp;-</span>
+                <span class="nav-arrow"
+                  >-&nbsp;{{ nv.type[0] }}&nbsp;-&nbsp;{{ nv.type[1] }}&nbsp;-</span
+                >
                 {{ nv.targetName }}
               </span>
               <span class="nav-props mono" :title="`${nv.selfProp} / ${nv.targetProp}`">
@@ -499,12 +530,21 @@ async function save() {
               <span class="nav-cascade">级联：{{ nv.cascadeAB }} / {{ nv.cascadeBA }}</span>
               <span class="nav-actions">
                 <a-button size="small" @click="ui.openNavigateEdit(nv.id)">编辑</a-button>
-                <a-popconfirm title="删除该导航关系？" ok-text="删除" cancel-text="取消" @confirm="deleteNavigate(nv.id)">
+                <a-popconfirm
+                  title="删除该导航关系？"
+                  ok-text="删除"
+                  cancel-text="取消"
+                  @confirm="deleteNavigate(nv.id)"
+                >
                   <a-button size="small" danger>删除</a-button>
                 </a-popconfirm>
               </span>
             </div>
-            <a-empty v-if="!tableNavs.length" description="该表暂未参与任何导航关系" :image-style="{ height: '40px' }" />
+            <a-empty
+              v-if="!tableNavs.length"
+              description="该表暂未参与任何导航关系"
+              :image-style="{ height: '40px' }"
+            />
           </div>
           <a-button
             v-if="isEdit"
@@ -577,7 +617,9 @@ async function save() {
 
 .cols-grid {
   display: grid;
-  grid-template-columns: 28px minmax(96px, 1fr) minmax(84px, 1fr) 132px 118px 44px 44px 108px minmax(72px, 1fr) 26px;
+  grid-template-columns:
+    28px minmax(96px, 1fr) minmax(84px, 1fr)
+    132px 118px 44px 44px 108px minmax(72px, 1fr) 26px;
   gap: 4px 6px;
   align-items: center;
 }
@@ -638,7 +680,9 @@ async function save() {
   color: var(--text-3);
   cursor: grab;
   touch-action: none;
-  transition: color 0.15s ease, background 0.15s ease;
+  transition:
+    color 0.15s ease,
+    background 0.15s ease;
 
   &:hover {
     color: var(--text-1);

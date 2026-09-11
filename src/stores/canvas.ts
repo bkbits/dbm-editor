@@ -1,6 +1,6 @@
 /**
  * 画布仓库：视口（平移/缩放）、选择、交互状态机（框选/拖卡/连线）、
- * 隐藏表、右键菜单、剪贴板、对齐/自动美化布局等
+ * 隐藏表（Table.hidden 派生）、右键菜单、剪贴板、对齐/自动美化布局等
  */
 import { defineStore } from 'pinia'
 import { message } from 'antdv-next'
@@ -8,12 +8,10 @@ import type { TableAddPayload } from '@/types/model'
 import type { Point, Rect, Side } from '@/utils/geometry'
 import { CARD_WIDTH, rectCenter, rectContains } from '@/utils/geometry'
 import { computeAutoLayout } from '@/utils/layout'
-import { SEED_HIDDEN_TABLES } from '@/mock/seed'
 import { useModelStore } from './model'
 import { useUiStore } from './ui'
 import { useHistoryStore } from './history'
 
-const HIDDEN_KEY = 'gdbme:hidden'
 export const MIN_ZOOM = 0.25
 export const MAX_ZOOM = 5
 
@@ -41,16 +39,6 @@ export interface ContextMenuState {
 
 type Mode = 'pan' | 'select' | 'dragCards' | 'connect' | null
 
-function loadHidden(): string[] {
-  try {
-    const raw = localStorage.getItem(HIDDEN_KEY)
-    if (raw) return JSON.parse(raw) as string[]
-  } catch {
-    /* ignore */
-  }
-  return [...SEED_HIDDEN_TABLES]
-}
-
 export const useCanvasStore = defineStore('canvas', {
   state: () => ({
     rootEl: null as HTMLElement | null,
@@ -64,7 +52,6 @@ export const useCanvasStore = defineStore('canvas', {
     selectedNavigateId: '',
     hoveredNavigateId: '',
     hoveredTableId: '',
-    hiddenTableIds: loadHidden(),
     expandedTableIds: [] as string[],
     showIndexIds: [] as string[],
     cardSizes: {} as Record<string, { w: number; h: number }>,
@@ -75,10 +62,18 @@ export const useCanvasStore = defineStore('canvas', {
     pointerCaptured: false,
     panDraft: null as { lastX: number; lastY: number } | null,
     selectDraft: null as { x0: number; y0: number; x1: number; y1: number } | null,
-    dragDraft: null as
-      | { startWorld: Point; ids: string[]; origPositions: Record<string, Point>; moved: boolean }
-      | null,
-    connectDraft: null as { fromTableId: string; fromSide: Side; world: Point; hoverTableId: string | null } | null,
+    dragDraft: null as {
+      startWorld: Point
+      ids: string[]
+      origPositions: Record<string, Point>
+      moved: boolean
+    } | null,
+    connectDraft: null as {
+      fromTableId: string
+      fromSide: Side
+      world: Point
+      hoverTableId: string | null
+    } | null,
     clipboard: [] as Array<Omit<TableAddPayload, 'id'>>,
     menu: null as ContextMenuState | null,
     animating: false,
@@ -109,7 +104,12 @@ export const useCanvasStore = defineStore('canvas', {
     },
     visibleTableIds(): string[] {
       const model = useModelStore()
-      return model.tables.filter((t) => !this.hiddenTableIds.includes(t.id)).map((t) => t.id)
+      return model.tables.filter((t) => !t.hidden).map((t) => t.id)
+    },
+    /** 隐藏表 id 列表（由 Table.hidden 派生，不再单独持久化） */
+    hiddenTableIds(): string[] {
+      const model = useModelStore()
+      return model.tables.filter((t) => t.hidden).map((t) => t.id)
     },
   },
 
@@ -166,9 +166,7 @@ export const useCanvasStore = defineStore('canvas', {
       return { x: t.x ?? 0, y: t.y ?? 0, w: size.w, h: size.h }
     },
     cardRectsOf(ids: string[]): Rect[] {
-      return ids
-        .map((id) => this.cardRectOf(id))
-        .filter((r): r is Rect => Boolean(r))
+      return ids.map((id) => this.cardRectOf(id)).filter((r): r is Rect => Boolean(r))
     },
     fitAll(instant = false) {
       const rects = this.cardRectsOf(this.visibleTableIds)
@@ -192,7 +190,10 @@ export const useCanvasStore = defineStore('canvas', {
       const pad = 60
       const w = maxX - minX + pad * 2
       const h = maxY - minY + pad * 2
-      const zoom = Math.min(Math.max(Math.min(this.viewportW / w, this.viewportH / h), MIN_ZOOM), 1.25)
+      const zoom = Math.min(
+        Math.max(Math.min(this.viewportW / w, this.viewportH / h), MIN_ZOOM),
+        1.25,
+      )
       const target = {
         zoom,
         panX: this.viewportW / 2 - ((minX + maxX) / 2) * zoom,
@@ -246,7 +247,10 @@ export const useCanvasStore = defineStore('canvas', {
         panX: target.panX ?? this.panX,
         panY: target.panY ?? this.panY,
       }
-      if (duration <= 0 || (from.zoom === to.zoom && from.panX === to.panX && from.panY === to.panY)) {
+      if (
+        duration <= 0 ||
+        (from.zoom === to.zoom && from.panX === to.panX && from.panY === to.panY)
+      ) {
         this.zoom = to.zoom
         this.panX = to.panX
         this.panY = to.panY
@@ -288,9 +292,8 @@ export const useCanvasStore = defineStore('canvas', {
           ? this.selectedCategoryIds.filter((x) => x !== id)
           : [...this.selectedCategoryIds, id]
       } else {
-        this.selectedCategoryIds = this.selectedCategoryIds.includes(id) && this.selectedCategoryIds.length === 1
-          ? []
-          : [id]
+        this.selectedCategoryIds =
+          this.selectedCategoryIds.includes(id) && this.selectedCategoryIds.length === 1 ? [] : [id]
       }
     },
     selectTable(id: string, additive = false) {
@@ -412,7 +415,8 @@ export const useCanvasStore = defineStore('canvas', {
         this.selectDraft.x1 = local.x
         this.selectDraft.y1 = local.y
         // 位移超过阈值才捕获：无位移的单击/双击仍指向原目标（卡片/线段/胶囊）
-        if (Math.hypot(local.x - this.selectDraft.x0, local.y - this.selectDraft.y0) > 3) this.captureOnce(e)
+        if (Math.hypot(local.x - this.selectDraft.x0, local.y - this.selectDraft.y0) > 3)
+          this.captureOnce(e)
       } else if (this.mode === 'dragCards' && this.dragDraft) {
         const model = useModelStore()
         const world = this.screenToWorld(this.localPoint(e))
@@ -440,7 +444,7 @@ export const useCanvasStore = defineStore('canvas', {
         this.connectDraft.hoverTableId = this.hitTableAt(e)
       }
     },
-    onPointerUp(e: PointerEvent) {
+    onPointerUp(_e: PointerEvent) {
       this.resetPointerCapture()
       if (!this.mode) return
       const mode = this.mode
@@ -469,9 +473,7 @@ export const useCanvasStore = defineStore('canvas', {
           .map((id) => ({ id, r: this.cardRectOf(id) }))
           .filter(({ r }) => r && rectContains(worldRect, r))
           .map(({ id }) => id)
-        this.selectedIds = this.additiveSelect
-          ? [...new Set([...this.selectedIds, ...hits])]
-          : hits
+        this.selectedIds = this.additiveSelect ? [...new Set([...this.selectedIds, ...hits])] : hits
         // 框选切换为表焦点：清除导航线选中态
         this.selectedNavigateId = ''
       } else if (mode === 'dragCards' && this.dragDraft) {
@@ -536,33 +538,29 @@ export const useCanvasStore = defineStore('canvas', {
       return this.showIndexIds.includes(tableId)
     },
     toggleHiddenTable(tableId: string) {
-      if (this.hiddenTableIds.includes(tableId)) {
-        this.hiddenTableIds = this.hiddenTableIds.filter((x) => x !== tableId)
-      } else {
-        this.hiddenTableIds = [...this.hiddenTableIds, tableId]
-        this.selectedIds = this.selectedIds.filter((x) => x !== tableId)
-      }
-      this.persistHidden()
+      const model = useModelStore()
+      const next = !this.hiddenTableIds.includes(tableId)
+      if (next) this.selectedIds = this.selectedIds.filter((x) => x !== tableId)
+      model.setTableHidden(tableId, next).catch((e: unknown) => {
+        message.error((e as Error)?.message || '切换隐藏状态失败')
+      })
     },
     hideTable(tableId: string) {
+      const model = useModelStore()
       if (!this.hiddenTableIds.includes(tableId)) {
-        this.hiddenTableIds = [...this.hiddenTableIds, tableId]
         this.selectedIds = this.selectedIds.filter((x) => x !== tableId)
-        this.persistHidden()
+        model.setTableHidden(tableId, true).catch((e: unknown) => {
+          message.error((e as Error)?.message || '隐藏表失败')
+        })
       }
     },
     showTable(tableId: string) {
+      const model = useModelStore()
       if (this.hiddenTableIds.includes(tableId)) {
-        this.hiddenTableIds = this.hiddenTableIds.filter((x) => x !== tableId)
-        this.persistHidden()
+        model.setTableHidden(tableId, false).catch((e: unknown) => {
+          message.error((e as Error)?.message || '显示表失败')
+        })
       }
-    },
-    persistHidden() {
-      localStorage.setItem(HIDDEN_KEY, JSON.stringify(this.hiddenTableIds))
-    },
-    resetHidden() {
-      this.hiddenTableIds = [...SEED_HIDDEN_TABLES]
-      this.persistHidden()
     },
 
     /* ==================== 自动美化 / 对齐分布 ==================== */

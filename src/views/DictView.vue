@@ -242,12 +242,19 @@ const isValueHit = (v: DictValue) => {
     </aside>
 
     <section class="dict-detail">
-      <template v-if="draft.label !== undefined || draft.dictKey !== '' || isEdit || draft.values.length">
+      <template
+        v-if="draft.label !== undefined || draft.dictKey !== '' || isEdit || draft.values.length"
+      >
         <div class="detail-form">
           <div class="form-row">
             <div class="form-item">
               <label>字典键（dictKey）<span class="req">*</span></label>
-              <a-input v-model:value="draft.dictKey" size="small" class="mono" placeholder="如 sys_status" />
+              <a-input
+                v-model:value="draft.dictKey"
+                size="small"
+                class="mono"
+                placeholder="如 sys_status"
+              />
             </div>
             <div class="form-item">
               <label>字典标签（label）<span class="req">*</span></label>
@@ -258,13 +265,20 @@ const isValueHit = (v: DictValue) => {
               <a-input v-model:value="draft.comment" size="small" placeholder="说明信息" />
             </div>
             <div class="form-actions">
-              <a-popconfirm title="删除该字典？" ok-text="删除" cancel-text="取消" @confirm="deleteDict">
+              <a-popconfirm
+                title="删除该字典？"
+                ok-text="删除"
+                cancel-text="取消"
+                @confirm="deleteDict"
+              >
                 <a-button size="small" danger>
                   <template #icon><Trash2 :size="12" /></template>
                   删除
                 </a-button>
               </a-popconfirm>
-              <a-button size="small" type="primary" :loading="dirty.saving" @click="saveDict">保存字典</a-button>
+              <a-button size="small" type="primary" :loading="dirty.saving" @click="saveDict"
+                >保存字典</a-button
+              >
             </div>
           </div>
         </div>
@@ -291,7 +305,12 @@ const isValueHit = (v: DictValue) => {
               <span></span>
             </div>
             <div class="v-body">
-              <div v-for="(v, i) in draft.values" :key="v.id" class="v-row v-grid" :class="{ hit: isValueHit(v) }">
+              <div
+                v-for="(v, i) in draft.values"
+                :key="v.id"
+                class="v-row v-grid"
+                :class="{ hit: isValueHit(v) }"
+              >
                 <a-input v-model:value="v.valueKey" size="small" class="mono" placeholder="如 1" />
                 <div class="v-label-cell">
                   <span class="v-label-dot" :style="typeStyle(v)" />
@@ -303,8 +322,19 @@ const isValueHit = (v: DictValue) => {
                   :options="labelTypeOptions.map((o) => ({ value: o.value, label: o.label }))"
                 />
                 <div class="v-color-cell">
-                  <input v-model="v.color" type="color" class="color-input" title="自定义颜色（清空则回退类型默认色）" />
-                  <button v-if="v.color" class="color-clear" type="button" title="清除自定义颜色" @click="v.color = ''">
+                  <input
+                    v-model="v.color"
+                    type="color"
+                    class="color-input"
+                    title="自定义颜色（清空则回退类型默认色）"
+                  />
+                  <button
+                    v-if="v.color"
+                    class="color-clear"
+                    type="button"
+                    title="清除自定义颜色"
+                    @click="v.color = ''"
+                  >
                     ×
                   </button>
                 </div>
@@ -313,9 +343,7 @@ const isValueHit = (v: DictValue) => {
                   <Trash2 :size="12" />
                 </button>
               </div>
-              <div v-if="!draft.values.length" class="v-empty">
-                暂无字典值，点击「新增值」添加
-              </div>
+              <div v-if="!draft.values.length" class="v-empty">暂无字典值，点击「新增值」添加</div>
             </div>
           </div>
 

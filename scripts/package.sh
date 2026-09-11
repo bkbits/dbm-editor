@@ -7,6 +7,7 @@ STAGE="$(pwd)/zip-stage"
 OUT="download/graph-db-model-editor.zip"
 
 rm -rf "$STAGE"
+rm -f "$OUT"
 mkdir -p "$STAGE/graph-db-model-editor" download
 
 rsync -a --delete \
@@ -19,6 +20,10 @@ rsync -a --delete \
   --exclude 'download' \
   --exclude 'upload' \
   --exclude 'agent-ctx' \
+  --exclude 'tool-results' \
+  --exclude '.vite-hooks' \
+  --exclude '.env' \
+  --exclude '.env.*' \
   --exclude 'snapshot' \
   --exclude 'patch' \
   --exclude '*.log' \

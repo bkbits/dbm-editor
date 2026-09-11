@@ -4,6 +4,11 @@
  * 由原 axios mock 分发层迁移而来：数据存于内存（src/mock/db.ts）并
  * 持久化到 localStorage（gdbme:db:v2）。除 replace 的 zip 解析外全部
  * 同步完成；校验失败抛出 Error（message 为中文业务提示）。
+ *
+ * 契约语义：
+ * - 细粒度方法（addXxx/updateXxx/removeXxx/updateTablePos）即时写库并落盘
+ * - save() 无参全量保存：demo 的内存即真相，等价于确认落盘
+ * - removeTable 一并删除其字段、索引与关联导航
  */
 import JSZip from 'jszip'
 import { message } from 'antdv-next'
@@ -17,6 +22,7 @@ import type {
   Settings,
   Table,
   TableCategory,
+  TableColumn,
   TableIndex,
   TableNavigate,
   Template,
@@ -56,7 +62,11 @@ export class DemoManagerApi implements ManagerApi {
     const typeMappings = (Array.isArray(s.typeMappings) ? s.typeMappings : [])
       .slice()
       .sort((a, b) => a.sort - b.sort)
-      .map((m) => ({ sort: Number(m.sort) || 0, pattern: String(m.pattern ?? ''), javaType: String(m.javaType || 'String') }))
+      .map((m) => ({
+        sort: Number(m.sort) || 0,
+        pattern: String(m.pattern ?? ''),
+        javaType: String(m.javaType || 'String'),
+      }))
     const indexTypes = (Array.isArray(s.indexTypes) ? s.indexTypes : [])
       .map((t) => String(t).trim().toUpperCase())
       .filter(Boolean)
@@ -74,7 +84,9 @@ export class DemoManagerApi implements ManagerApi {
     const seen = new Set<string>()
     const indexTypes: string[] = []
     for (const raw of settings.indexTypes || []) {
-      const t = String(raw ?? '').trim().toUpperCase()
+      const t = String(raw ?? '')
+        .trim()
+        .toUpperCase()
       if (!t) throw new Error('索引类型不能为空')
       if (seen.has(t)) throw new Error(`索引类型重复：${t}`)
       seen.add(t)
@@ -96,80 +108,157 @@ export class DemoManagerApi implements ManagerApi {
 
   load(): LoadResultVO {
     const db = getDB()
-    const tables: ManagerTable[] = db.tables.map((t) => ({
-      ...clone(t),
-      columns: db.columns
-        .filter((c) => c.tableId === t.id)
-        .sort((a, b) => a.sort - b.sort)
-        .map((c) => ({ ...c })),
-      indexes: db.indexes
-        .filter((i) => i.tableId === t.id)
-        .map((i) => ({ ...i, columns: [...i.columns] })),
-    }))
     return {
       categories: clone(db.categories),
-      tables,
+      tables: this.assembleTables(db.tables.map((t) => t.id)),
       navigates: clone(db.navigates),
     }
   }
 
-  save(categories: TableCategory[], tables: ManagerTable[], navigates: TableNavigate[]): void {
-    /* ---------- 校验 ---------- */
-    const catNames = new Set<string>()
-    for (const c of categories || []) {
-      const name = requireStr(c?.name, 'name', '分类名称')
-      if (catNames.has(name)) throw new Error(`分类名称已存在: ${name}`)
-      catNames.add(name)
-      requireStr(c?.basePackage, 'basePackage', '基础包路径')
-    }
-    const tableIds = new Set<string>()
-    const tableNames = new Set<string>()
-    for (const t of tables || []) {
-      const name = requireStr(t?.tableName, 'tableName', '表名')
-      if (tableNames.has(name)) throw new Error(`表名已存在: ${name}`)
-      tableNames.add(name)
-      if (!tableIds.has(t.id)) tableIds.add(t.id)
-      if (!(categories || []).some((c) => c.id === t.categoryId)) {
-        throw new Error(`表 ${name} 的所属分类不存在`)
-      }
-      const colNames = new Set<string>()
-      for (const c of t.columns || []) {
-        const colName = requireStr(c?.columnName, 'columnName', '字段名')
-        if (colNames.has(colName)) throw new Error(`表 ${name} 存在重复字段名：${colName}`)
-        colNames.add(colName)
-      }
-      const idxNames = new Set<string>()
-      for (const i of t.indexes || []) {
-        const idxName = requireStr(i?.indexName, 'indexName', '索引名')
-        if (idxNames.has(idxName)) throw new Error(`表 ${name} 存在重复索引名：${idxName}`)
-        idxNames.add(idxName)
-      }
-    }
-    for (const n of navigates || []) {
-      if (!tableIds.has(n.self)) throw new Error(`导航 ${n.id || ''} 的 self 表不存在`)
-      if (!tableIds.has(n.target)) throw new Error(`导航 ${n.id || ''} 的 target 表不存在`)
-      if (n.mappingTable && !tableIds.has(n.mappingTable)) {
-        throw new Error(`导航 ${n.id || ''} 的中间映射表不存在`)
-      }
-      if (!NAVIGATE_TYPES.includes(n.type)) throw new Error(`导航 ${n.id || ''} 的类型无效: ${n.type}`)
-    }
+  /** 全量保存（无参契约）：demo 的每次细粒度操作已即时写库，此处确认整体落盘 */
+  save(): void {
+    persistDB()
+  }
 
-    /* ---------- 写入（保留字典/模板/设置等其余数据） ---------- */
+  /* ==================== 分类 ==================== */
+
+  getCategories(): TableCategory[] {
+    return clone(getDB().categories)
+  }
+
+  addCategory(category: TableCategory): void {
     const db = getDB()
-    const flatTables: Table[] = []
-    const flatColumns = []
-    const flatIndexes: TableIndex[] = []
-    for (const t of tables || []) {
-      const { columns, indexes, ...table } = t
-      flatTables.push(clone(table))
-      for (const c of columns || []) flatColumns.push({ ...clone(c), tableId: t.id })
-      for (const i of indexes || []) flatIndexes.push({ ...clone(i), tableId: t.id, columns: [...i.columns] })
+    const name = requireStr(category?.name, 'name', '分类名称')
+    requireStr(category?.basePackage, 'basePackage', '基础包路径')
+    if (db.categories.some((c) => c.name === name)) throw new Error(`分类名称已存在: ${name}`)
+    if (!category.id) throw new Error('新增分类必须提供 id')
+    if (db.categories.some((c) => c.id === category.id))
+      throw new Error(`分类 id 已存在: ${category.id}`)
+    db.categories.push(clone(category))
+    persistDB()
+  }
+
+  updateCategory(category: TableCategory): void {
+    const db = getDB()
+    const id = requireStr(category?.id, 'id', '分类ID')
+    const target = db.categories.find((c) => c.id === id)
+    if (!target) throw new Error(`分类不存在: ${id}`)
+    const name = requireStr(category?.name, 'name', '分类名称')
+    requireStr(category?.basePackage, 'basePackage', '基础包路径')
+    if (db.categories.some((c) => c.name === name && c.id !== id))
+      throw new Error(`分类名称已存在: ${name}`)
+    Object.assign(target, clone(category))
+    persistDB()
+  }
+
+  removeCategory(categoryId: string): void {
+    const db = getDB()
+    if (!db.categories.some((c) => c.id === categoryId)) return
+    const held = db.tables.filter((t) => t.categoryId === categoryId)
+    if (held.length) {
+      throw new Error(
+        `分类下仍有 ${held.length} 张表（${held[0].tableName} 等），请先删除或迁移这些表`,
+      )
     }
-    db.categories = clone(categories || [])
-    db.tables = flatTables
-    db.columns = flatColumns
-    db.indexes = flatIndexes
-    db.navigates = clone(navigates || [])
+    db.categories = db.categories.filter((c) => c.id !== categoryId)
+    persistDB()
+  }
+
+  /* ==================== 表 ==================== */
+
+  getTables(): ManagerTable[] {
+    return this.assembleTables(getDB().tables.map((t) => t.id))
+  }
+
+  addTable(table: ManagerTable): void {
+    const db = getDB()
+    const name = requireStr(table?.tableName, 'tableName', '表名')
+    if (db.tables.some((t) => t.tableName === name)) throw new Error(`表名已存在: ${name}`)
+    if (!table.id) throw new Error('新增表必须提供 id')
+    if (db.tables.some((t) => t.id === table.id)) throw new Error(`表 id 已存在: ${table.id}`)
+    if (!db.categories.some((c) => c.id === table.categoryId)) {
+      throw new Error(`表 ${name} 的所属分类不存在`)
+    }
+    const columns = normalizeColumns(table, name)
+    const indexes = normalizeIndexes(table, name, columns)
+    const { columns: _c, indexes: _i, ...meta } = table
+    db.tables.push({ ...clone(meta), id: table.id })
+    for (const c of columns) db.columns.push({ ...c, tableId: table.id })
+    for (const i of indexes) db.indexes.push({ ...i, tableId: table.id })
+    persistDB()
+  }
+
+  updateTable(table: ManagerTable): void {
+    const db = getDB()
+    const id = requireStr(table?.id, 'id', '表ID')
+    const target = db.tables.find((t) => t.id === id)
+    if (!target) throw new Error(`表不存在: ${id}`)
+    const name = requireStr(table?.tableName, 'tableName', '表名')
+    if (db.tables.some((t) => t.tableName === name && t.id !== id))
+      throw new Error(`表名已存在: ${name}`)
+    if (!db.categories.some((c) => c.id === table.categoryId)) {
+      throw new Error(`表 ${name} 的所属分类不存在`)
+    }
+    const columns = normalizeColumns(table, name)
+    const indexes = normalizeIndexes(table, name, columns)
+    Object.assign(target, { ...clone(table), id })
+    db.columns = db.columns.filter((c) => c.tableId !== id)
+    db.indexes = db.indexes.filter((i) => i.tableId !== id)
+    for (const c of columns) db.columns.push({ ...c, tableId: id })
+    for (const i of indexes) db.indexes.push({ ...i, tableId: id })
+    persistDB()
+  }
+
+  /** 删除表（一并删除其字段、索引与关联导航） */
+  removeTable(tableId: string): void {
+    const db = getDB()
+    if (!db.tables.some((t) => t.id === tableId)) return
+    db.tables = db.tables.filter((t) => t.id !== tableId)
+    db.columns = db.columns.filter((c) => c.tableId !== tableId)
+    db.indexes = db.indexes.filter((i) => i.tableId !== tableId)
+    db.navigates = db.navigates.filter(
+      (n) => n.self !== tableId && n.target !== tableId && n.mappingTable !== tableId,
+    )
+    persistDB()
+  }
+
+  /** 更新表位置（拖动表卡片结束时使用） */
+  updateTablePos(tableId: string, pos: { x: number; y: number }): void {
+    const db = getDB()
+    const target = db.tables.find((t) => t.id === tableId)
+    if (!target) throw new Error(`表不存在: ${tableId}`)
+    target.x = Number(pos?.x) || 0
+    target.y = Number(pos?.y) || 0
+    persistDB()
+  }
+
+  /* ==================== 导航 ==================== */
+
+  getNavigates(): TableNavigate[] {
+    return clone(getDB().navigates)
+  }
+
+  addNavigate(navigate: TableNavigate): void {
+    const db = getDB()
+    const nav = normalizeNavigate(navigate)
+    if (db.navigates.some((n) => n.id === nav.id)) throw new Error(`导航 id 已存在: ${nav.id}`)
+    db.navigates.push(clone(nav))
+    persistDB()
+  }
+
+  updateNavigate(navigate: TableNavigate): void {
+    const db = getDB()
+    const nav = normalizeNavigate(navigate)
+    const idx = db.navigates.findIndex((n) => n.id === nav.id)
+    if (idx < 0) throw new Error(`导航不存在: ${nav.id}`)
+    db.navigates[idx] = clone(nav)
+    persistDB()
+  }
+
+  removeNavigate(navigateId: string): void {
+    const db = getDB()
+    if (!db.navigates.some((n) => n.id === navigateId)) return
+    db.navigates = db.navigates.filter((n) => n.id !== navigateId)
     persistDB()
   }
 
@@ -195,7 +284,8 @@ export class DemoManagerApi implements ManagerApi {
     const target = db.dicts.find((d) => d.id === id)
     if (!target) throw new Error(`字典不存在: ${id}`)
     const dictKey = requireStr(dict?.dictKey, 'dictKey', '字典键')
-    if (db.dicts.some((d) => d.dictKey === dictKey && d.id !== id)) throw new Error(`字典键已存在: ${dictKey}`)
+    if (db.dicts.some((d) => d.dictKey === dictKey && d.id !== id))
+      throw new Error(`字典键已存在: ${dictKey}`)
     Object.assign(target, clone(normalizeDict(dict, dictKey)))
     persistDB()
   }
@@ -227,7 +317,8 @@ export class DemoManagerApi implements ManagerApi {
     const target = db.templates.find((t) => t.id === id)
     if (!target) throw new Error(`模板不存在: ${id}`)
     const name = requireStr(template?.templateName, 'templateName', '模板名称')
-    if (db.templates.some((t) => t.name === name && t.id !== id)) throw new Error(`模板名称已存在: ${name}`)
+    if (db.templates.some((t) => t.name === name && t.id !== id))
+      throw new Error(`模板名称已存在: ${name}`)
     target.name = name
     target.content = String(template.content || '')
     persistDB()
@@ -246,7 +337,9 @@ export class DemoManagerApi implements ManagerApi {
     void JSZip.loadAsync(zipFile)
       .then((archive) => {
         const files = Object.keys(archive.files).filter((name) => !archive.files[name].dir)
-        message.success(`已接收 zip 并"替换" ${files.length} 个代码文件（demo 行为，未发生真实写入）`)
+        message.success(
+          `已接收 zip 并"替换" ${files.length} 个代码文件（demo 行为，未发生真实写入）`,
+        )
       })
       .catch((e: unknown) => {
         message.error(`zip 文件解析失败: ${e instanceof Error ? e.message : String(e)}`)
@@ -259,13 +352,84 @@ export class DemoManagerApi implements ManagerApi {
   resetDemo(): void {
     resetDB()
   }
+
+  /* ==================== 内部辅助 ==================== */
+
+  /** 按 id 列表组装完整表（含字段与索引），返回深拷贝 */
+  private assembleTables(ids: string[]): ManagerTable[] {
+    const db = getDB()
+    return ids
+      .map((id) => db.tables.find((t) => t.id === id))
+      .filter((t): t is Table => Boolean(t))
+      .map((t) => ({
+        ...clone(t),
+        columns: db.columns
+          .filter((c) => c.tableId === t.id)
+          .sort((a, b) => a.sort - b.sort)
+          .map((c) => ({ ...c })),
+        indexes: db.indexes
+          .filter((i) => i.tableId === t.id)
+          .map((i) => ({ ...i, columns: [...i.columns] })),
+      }))
+  }
+}
+
+/** 字段列表归一：字段名非空唯一、tableId 归一、sort 重排 */
+function normalizeColumns(table: ManagerTable, tableName: string): TableColumn[] {
+  const colNames = new Set<string>()
+  return (table.columns || []).map((c, i) => {
+    const colName = requireStr(c?.columnName, 'columnName', '字段名')
+    if (colNames.has(colName)) throw new Error(`表 ${tableName} 存在重复字段名：${colName}`)
+    colNames.add(colName)
+    return { ...clone(c), id: c.id || uid('c-'), tableId: table.id, sort: Number(c.sort ?? i) || i }
+  })
+}
+
+/** 索引列表归一：索引名非空唯一、索引字段存在 */
+function normalizeIndexes(
+  table: ManagerTable,
+  tableName: string,
+  columns: Array<{ columnName: string }>,
+): TableIndex[] {
+  const colNames = new Set(columns.map((c) => c.columnName))
+  const idxNames = new Set<string>()
+  return (table.indexes || []).map((i) => {
+    const idxName = requireStr(i?.indexName, 'indexName', '索引名')
+    if (idxNames.has(idxName)) throw new Error(`表 ${tableName} 存在重复索引名：${idxName}`)
+    idxNames.add(idxName)
+    const cols = (i.columns || []).map(String)
+    for (const col of cols) {
+      if (!colNames.has(col))
+        throw new Error(`表 ${tableName} 的索引 ${idxName} 引用了不存在的字段：${col}`)
+    }
+    return { ...clone(i), id: i.id || uid('i-'), tableId: table.id, columns: cols }
+  })
+}
+
+/** 导航关系归一：两端表存在、类型枚举合法、属性名非空 */
+function normalizeNavigate(input: TableNavigate): TableNavigate {
+  const db = getDB()
+  const nav = clone(input)
+  if (!nav.id) throw new Error('新增导航必须提供 id')
+  requireStr(nav.selfPropertyName, 'selfPropertyName', 'self 属性名')
+  requireStr(nav.targetPropertyName, 'targetPropertyName', 'target 属性名')
+  if (!db.tables.some((t) => t.id === nav.self)) throw new Error(`导航 ${nav.id} 的 self 表不存在`)
+  if (!db.tables.some((t) => t.id === nav.target))
+    throw new Error(`导航 ${nav.id} 的 target 表不存在`)
+  if (nav.mappingTable && !db.tables.some((t) => t.id === nav.mappingTable)) {
+    throw new Error(`导航 ${nav.id} 的中间映射表不存在`)
+  }
+  if (!NAVIGATE_TYPES.includes(nav.type)) throw new Error(`导航 ${nav.id} 的类型无效: ${nav.type}`)
+  return nav
 }
 
 /** 字典值归一：空值键拦截、标签回退、类型/颜色兜底 */
 function normalizeDictValue(v: Partial<DictValue>, dictKey: string): DictValue {
   const valueKey = String(v?.valueKey ?? '').trim()
   if (!valueKey) throw new Error(`字典 ${dictKey} 存在空值键`)
-  const labelType = ['I', 'S', 'W', 'D'].includes(v?.labelType as string) ? (v?.labelType as DictValue['labelType']) : 'I'
+  const labelType = ['I', 'S', 'W', 'D'].includes(v?.labelType as string)
+    ? (v?.labelType as DictValue['labelType'])
+    : 'I'
   return {
     id: v?.id || uid('dv-'),
     dictId: String(v?.dictId || ''),

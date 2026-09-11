@@ -2,22 +2,22 @@
   "name": "graph-db-model-editor",
   "version": "1.0.0",
   "private": true,
-  "type": "module",
   "description": "图形数据库模型编辑工具 - 可视化设计表结构、字段、索引及表间导航关系，支持模板代码生成",
+  "type": "module",
   "scripts": {
-    "vp": "vite",
-    "dev": "vite --port 3000 --host 0.0.0.0",
-    "build": "vite build",
-    "preview": "vite preview --port 3000 --host 0.0.0.0",
-    "typecheck": "vue-tsc --noEmit"
+    "dev": "vp dev",
+    "build": "vp build",
+    "preview": "vp preview",
+    "typecheck": "vue-tsc --noEmit",
+    "prepare": "vp config"
   },
   "dependencies": {
-    "@lucide/vue": "^1.42.0",
-    "antdv-next": "^1.5.3",
+    "@lucide/vue": "^1.44.0",
+    "antdv-next": "^1.5.4",
     "eta": "^4.6.0",
     "highlight.js": "^11.12.0",
     "highlightjs-eta": "^0.1.0",
-    "jszip": "^3.10.1",
+    "jszip": "^3.10.2",
     "pinia": "^4.0.3",
     "vue": "^3.5.42"
   },
@@ -26,8 +26,19 @@
     "@vitejs/plugin-vue": "^6.0.8",
     "sass": "^1.104.0",
     "typescript": "~5.9.3",
-    "vite": "^8.2.2",
+    "vite": "npm:@voidzero-dev/vite-plus-core@0.3.1",
+    "vite-plus": "0.3.1",
     "vue-tsc": "^3.3.11"
+  },
+  "overrides": {
+    "vite": "npm:@voidzero-dev/vite-plus-core@0.3.1"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "bun",
+      "version": "1.4.2",
+      "onFail": "download"
+    }
   },
   "trustedDependencies": [
     "@parcel/watcher"

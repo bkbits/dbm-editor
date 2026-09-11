@@ -1,6 +1,6 @@
 /**
  * 历史仓库：基于模型快照的撤销/重做
- * 恢复后通过 ManagerApi.save 全量同步持久层
+ * 恢复后通过细粒度 diff 同步（model.syncToApi）将持久层对齐到本地状态
  */
 import { defineStore } from 'pinia'
 import type { ModelSnapshot } from './model'
@@ -49,8 +49,8 @@ export const useHistoryStore = defineStore('history', {
       const before = model.takeSnapshot()
       model.applySnapshot(snap)
       try {
-        // 全量同步：save 校验失败（如恢复到不一致状态）时回滚本地并中止
-        model.persist()
+        // diff 同步：api 校验失败（如恢复到不一致状态）时回滚本地并中止
+        model.syncToApi()
       } catch (e) {
         model.applySnapshot(before)
         throw e

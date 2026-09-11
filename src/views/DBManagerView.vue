@@ -52,17 +52,20 @@ watch(
   { immediate: true },
 )
 
-// api 切换时全量重载各仓库数据（不重置 UI 页面）
+// api 切换时全量重载各仓库数据（不重置 UI 页面）；隐藏态随模型数据（Table.hidden）恢复
 watch(apiRef, (api, old) => {
   if (old && api !== old) {
-    const stores = [model, dict, templateStore, settingsStore] as Array<{ loaded: boolean; loading: boolean; init: () => Promise<void> }>
+    const stores = [model, dict, templateStore, settingsStore] as Array<{
+      loaded: boolean
+      loading: boolean
+      init: () => Promise<void>
+    }>
     for (const s of stores) {
       s.loaded = false
       s.loading = false
     }
     useHistoryStore().clear()
     const canvas = useCanvasStore()
-    canvas.resetHidden()
     canvas.setSelection([])
     initPage(ui.page)
   }

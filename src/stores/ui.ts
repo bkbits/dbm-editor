@@ -33,7 +33,12 @@ export const useUiStore = defineStore('ui', {
   state: () => ({
     /** 当前页面（v-if 切换） */
     page: 'editor' as PageName,
-    tableEdit: { open: false, tableId: null, position: null, defaultCategoryId: null } as TableEditDialogState,
+    tableEdit: {
+      open: false,
+      tableId: null,
+      position: null,
+      defaultCategoryId: null,
+    } as TableEditDialogState,
     navigateEdit: { open: false, navigateId: null, preset: null } as NavigateEditDialogState,
     categoryEdit: { open: false, categoryId: null } as CategoryEditDialogState,
     importDB: { open: false },
@@ -59,7 +64,10 @@ export const useUiStore = defineStore('ui', {
     closeTableEdit() {
       this.tableEdit.open = false
     },
-    openNavigateEdit(navigateId?: string | null, preset?: { self?: string; target?: string } | null) {
+    openNavigateEdit(
+      navigateId?: string | null,
+      preset?: { self?: string; target?: string } | null,
+    ) {
       this.navigateEdit = { open: true, navigateId: navigateId ?? null, preset: preset ?? null }
     },
     closeNavigateEdit() {

@@ -1,10 +1,16 @@
 <script setup lang="ts">
-import { Database, BookText, FileCode, Sun, Moon, Settings } from '@lucide/vue'
+import { Database, BookText, FileCode, Sun, Moon, Settings, SaveAll, RefreshCw } from '@lucide/vue'
+import { message } from 'antdv-next'
 import { useThemeStore } from '@/stores/theme'
 import { useUiStore, type PageName } from '@/stores/ui'
+import { useModelStore } from '@/stores/model'
+import { useHistoryStore } from '@/stores/history'
+import { errorMessageOf } from '@/api/manager-api'
 
 const themeStore = useThemeStore()
 const ui = useUiStore()
+const model = useModelStore()
+const history = useHistoryStore()
 
 const pages: Array<{ key: PageName; label: string; icon: unknown }> = [
   { key: 'editor', label: '模型编辑器', icon: Database },
@@ -15,6 +21,27 @@ const pages: Array<{ key: PageName; label: string; icon: unknown }> = [
 
 function switchPage(key: PageName) {
   ui.setPage(key)
+}
+
+/** 点击「保存所有」：走 ManagerApi.save() 全量保存契约 */
+function saveAll() {
+  try {
+    model.saveAll()
+    message.success('所有修改已保存')
+  } catch (e: unknown) {
+    message.error(errorMessageOf(e, '保存失败'))
+  }
+}
+
+/** 点击「刷新」：走 ManagerApi.load() 重新加载（放弃本地未保存状态） */
+async function refresh() {
+  try {
+    await model.refresh()
+    history.clear()
+    message.success('模型已刷新')
+  } catch (e: unknown) {
+    message.error(errorMessageOf(e, '刷新失败'))
+  }
 }
 </script>
 
@@ -41,6 +68,20 @@ function switchPage(key: PageName) {
     </nav>
 
     <div class="header-right">
+      <template v-if="ui.page === 'editor'">
+        <button class="icon-btn" type="button" title="保存所有（全量保存模型）" @click="saveAll">
+          <SaveAll :size="16" />
+        </button>
+        <button
+          class="icon-btn"
+          type="button"
+          title="刷新（重新加载模型，放弃本地未保存状态）"
+          :disabled="model.loading"
+          @click="refresh"
+        >
+          <RefreshCw :size="16" :class="{ spinning: model.loading }" />
+        </button>
+      </template>
       <button
         class="icon-btn"
         type="button"
@@ -159,6 +200,24 @@ function switchPage(key: PageName) {
     color: var(--primary-text);
     border-color: var(--primary);
     background: var(--primary-weak);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .spinning {
+    animation: spin 0.9s linear infinite;
+  }
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
   }
 }
 </style>

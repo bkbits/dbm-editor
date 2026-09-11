@@ -117,7 +117,9 @@ export const useTemplateStore = defineStore('template', {
             templateName: tpl.name,
             tableName: vo.tableName,
             fileName: out.fileName,
-            filePath: String(out.filePath || '').replace(/\\/g, '/').replace(/^\/+/, ''),
+            filePath: String(out.filePath || '')
+              .replace(/\\/g, '/')
+              .replace(/^\/+/, ''),
             content: out.result || '',
           })
         }

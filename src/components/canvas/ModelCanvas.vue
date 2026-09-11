@@ -41,7 +41,12 @@ const visibleCards = computed(() => {
     const size = canvas.cardSizes[id] || { w: 268, h: 120 }
     const x = t.x ?? 0
     const y = t.y ?? 0
-    return x + size.w > rect.x - margin && x < rect.x + rect.w + margin && y + size.h > rect.y - margin && y < rect.y + rect.h + margin
+    return (
+      x + size.w > rect.x - margin &&
+      x < rect.x + rect.w + margin &&
+      y + size.h > rect.y - margin &&
+      y < rect.y + rect.h + margin
+    )
   })
 })
 
@@ -90,7 +95,14 @@ function drawGrid() {
   drawGridLines(ctx, w, h, major, canvas.panX, canvas.panY)
 }
 
-function drawGridLines(ctx: CanvasRenderingContext2D, w: number, h: number, step: number, panX: number, panY: number) {
+function drawGridLines(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  step: number,
+  panX: number,
+  panY: number,
+) {
   if (step <= 0) return
   ctx.beginPath()
   const startX = ((panX % step) + step) % step
@@ -209,7 +221,9 @@ function onKeyUp(e: KeyboardEvent) {
 function confirmDeleteTables() {
   const ids = [...canvas.selectedIds]
   const names = ids.map((id) => model.tableById(id)?.tableName).filter(Boolean)
-  const navCount = model.navigates.filter((n) => ids.includes(n.self) || ids.includes(n.target) || ids.includes(n.mappingTable)).length
+  const navCount = model.navigates.filter(
+    (n) => ids.includes(n.self) || ids.includes(n.target) || ids.includes(n.mappingTable),
+  ).length
   Modal.confirm({
     title: `删除 ${ids.length} 张表？`,
     content: `将删除表：${names.join('、')}${navCount ? `，及其涉及的 ${navCount} 条导航关系` : ''}。该操作可通过 Ctrl+Z 撤销。`,
@@ -273,7 +287,9 @@ defineExpose({ rootRef })
         v-for="nav in visibleNavigates"
         :key="nav.id"
         :navigate="nav"
-        :route-through-mapping="nav.type === 'NN' && !canvas.hiddenTableIds.includes(nav.mappingTable)"
+        :route-through-mapping="
+          nav.type === 'NN' && !canvas.hiddenTableIds.includes(nav.mappingTable)
+        "
       />
       <ConnectionDraft />
       <TableCard v-for="id in visibleCards" :key="id" :table-id="id" />
@@ -299,7 +315,9 @@ defineExpose({ rootRef })
       <span class="status-item">缩放 {{ canvas.zoomPercent }}%</span>
       <span class="status-item">{{ canvas.visibleTableIds.length }} 张表</span>
       <span class="status-item">{{ model.navigates.length }} 条导航</span>
-      <span v-if="canvas.selectedIds.length" class="status-item">已选 {{ canvas.selectedIds.length }} 张</span>
+      <span v-if="canvas.selectedIds.length" class="status-item"
+        >已选 {{ canvas.selectedIds.length }} 张</span
+      >
       <span class="status-hint">左键拖框选 · 中键/空格拖拽平移 · 滚轮缩放</span>
     </div>
 

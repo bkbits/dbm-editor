@@ -68,7 +68,9 @@ function columnPreview(t: DBTable): string {
   })
   const types = settingsStore.indexTypeOptions
   for (const idx of t.indexes || []) {
-    const raw = String(idx.type || '').trim().toUpperCase()
+    const raw = String(idx.type || '')
+      .trim()
+      .toUpperCase()
     const normalized = types.includes(raw) ? raw : types[0]
     lines.push(`[索引] ${idx.indexName}  ${idx.type} → ${normalized}（${idx.columns.join(', ')}）`)
   }
@@ -103,7 +105,12 @@ async function doImport() {
   >
     <template #footer>
       <a-button @click="ui.closeImportDB()">取消</a-button>
-      <a-button type="primary" :loading="loading.importing" :disabled="!canImport" @click="doImport">
+      <a-button
+        type="primary"
+        :loading="loading.importing"
+        :disabled="!canImport"
+        @click="doImport"
+      >
         导入所选（{{ selected.size }}）
       </a-button>
     </template>
@@ -112,13 +119,19 @@ async function doImport() {
       <div class="import-head">
         <div class="item">
           <label>导入到分类</label>
-          <a-select v-model:value="categoryId" :options="categoryOptions" size="small" style="width: 260px" />
+          <a-select
+            v-model:value="categoryId"
+            :options="categoryOptions"
+            size="small"
+            style="width: 260px"
+          />
         </div>
         <a-button size="small" @click="fetchDefs">重新查询</a-button>
       </div>
 
       <div class="import-tip">
-        字段 Java 类型默认值由「系统设置 → 列默认类型」规则依序正则匹配推导（悬停查看各字段推导结果）；未命中时回退内置类型映射。索引类型不在设置列表时归一为列表首项，悬停可预览归一化结果。
+        字段 Java 类型默认值由「系统设置 →
+        列默认类型」规则依序正则匹配推导（悬停查看各字段推导结果）；未命中时回退内置类型映射。索引类型不在设置列表时归一为列表首项，悬停可预览归一化结果。
       </div>
 
       <div class="db-table-list">
@@ -135,7 +148,9 @@ async function doImport() {
             <div class="db-comment">{{ t.comment }}</div>
           </div>
           <div class="db-cols mono" :title="columnPreview(t)">
-            {{ t.columns.length }} 个字段<template v-if="t.indexes?.length"> / {{ t.indexes.length }} 索引</template>
+            {{ t.columns.length }} 个字段<template v-if="t.indexes?.length">
+              / {{ t.indexes.length }} 索引</template
+            >
           </div>
         </div>
         <a-empty v-if="!dbTables.length && !loading.fetching" description="未查询到表结构" />

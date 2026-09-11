@@ -1,6 +1,45 @@
 # 工作日志
 
 ---
+Task ID: 9
+Agent: main (Super Z)
+Task: ManagerApi 对齐用户原型（细粒度 CRUD 契约）+ Table.hidden 数据化 + vite-plus 迁移（vp dev）+ 依赖全量升级
+
+Work Log:
+- 修改前快照：snapshot/20260911035806.zip（113 文件）
+- web-search 调研 vite-plus：Vite+（viteplus.dev，VoidZero）统一工具链 = 全局 `vp` CLI + 项目本地 `vite-plus` 包；curl -fsSL https://vite.plus | bash 安装 vp v0.3.1（VP_NODE_MANAGER=no 跳过接管）；研读 migrate.md / migrate-rules.md 掌握迁移规则
+- types/model.ts 对齐用户原型：Table 增加 `hidden?: boolean`；ManagerApi 重写为细粒度契约——save() 无参（仅在「点击保存所有」时调用）、load()（初次进入 + 点击刷新）、新增分类组（getCategories/addCategory/updateCategory/removeCategory）、表组（getTables/addTable/updateTable/removeTable 级联删字段索引导航/updateTablePos 拖拽结束保存）、导航组（getNavigates/addNavigate/updateNavigate/removeNavigate）；其余类型逐字段比对与原型一致
+- DemoManagerApi 重写实现新契约：细粒度方法即时写库 + persistDB；save() 无参 = persistDB（内存即真相）；校验逻辑从原全量 save 迁移到各方法（表名/字段名/索引名唯一、分类存在、导航 self/target/mappingTable 引用与 type 枚举、分类下有表时 removeCategory 拒绝）；normalizeColumns/normalizeIndexes/normalizeNavigate 归一辅助 + assembleTables 私有装配
+- model store 改造：persist() 全量保存退役 → 每动作「本地先行 → 对应细粒度 api → 失败回滚快照」（saveCategory=add/updateCategory、createTable/pasteTable/importFromDB=addTable、saveTable=updateTable、removeTables=removeTable×n、导航三动作对应、setTableHidden=updateTable）；persistTables(ids) 改走 updateTablePos（拖拽/对齐/自动美化）；新增 saveAll()（api.save）与 refresh()（api.load 重载）；新增 syncToApi() diff 同步（分类补齐 → 表删/加/全量更 → 导航基于最新持久层 diff → 分类删除收尾）供撤销/重做 restore 使用；managerTableOf() 组装完整表
+- hidden 数据化（Table.hidden）：seed.ts 三张中间表加 hidden: true + SEED_HIDDEN_TABLES 退役为 SEED_HIDDEN_TABLE_NAMES（名字集合）；db.ts loadDB 对旧数据补 hidden（优先读旧 gdbme:hidden 键迁移并清除，否则按种子表名补齐，随即归一落盘）；canvas store 的 hiddenTableIds 从 state+localStorage 改为 getter（model.tables 派生），hideTable/showTable/toggleHiddenTable 调 model.setTableHidden（fire-and-forget + catch 提示），persistHidden/resetHidden/loadHidden/HIDDEN_KEY 全部删除；DBManagerView api 切换与 OutlinePanel 重置演示的 resetHidden 调用移除（hidden 随模型数据恢复）
+- AppHeader：编辑器页新增「保存所有」（SaveAll 图标，走 api.save() + toast）与「刷新」（RefreshCw 图标，走 api.load() 重载 + history.clear + toast，加载中禁用 + 旋转动画）两个按钮
+- vite-plus 迁移：vp migrate --no-interactive（自动安装依赖 + 重写 vite.config.ts 导入为 vite-plus/lazyPlugins + scripts 改 vp 命令面 + git hooks + AGENTS.md）；package.json 最终形态：vite → npm:@voidzero-dev/vite-plus-core@0.3.1 + vite-plus 0.3.1 + overrides + devEngines(bun 1.4.2)；scripts 精简（dev=vp dev、build=vp build、preview=vp preview、prepare=vp config，删除无意义 vp 别名）
+- vite.config.ts：server.allowedHosts: true（Host 头实测 custom-domain.test / preview-*.space-z.ai 均 200）；optimizeDeps.entries=['index.html'] 消除 skills/ 目录 html 参考文件卷入依赖扫描的 three 报错；fmt 块 singleQuote+semi:false（保持项目既有风格）+ ignorePatterns 排除非源码目录；lint 关闭 typeAware（受限环境 oxc 分配器 panic）且不挂 vite-plus/oxlint-plugin（jsPlugins 装载即崩，纯 oxlint 规则正常）
+- 依赖升级：vp update --latest → @lucide/vue 1.44.0、antdv-next 1.5.4、jszip 3.10.2（+31 个传递依赖）；typescript --latest 到 7.0.2 与 vue-tsc 3.3.11 不兼容（ERR_PACKAGE_PATH_NOT_EXPORTED ./lib/tsc，TS7 为原生实现移除 JS API）回退 ~5.9.3（5.x 最新）
+- oxfmt 全量格式化（51 文件）+ 4 个 lint 警告清零（canvas.ts onPointerUp e→_e、db.ts 移除未用 SEED_DB_TABLES 导入、seed.ts 移除未用 TableIndex 导入、NavigateEdge isRelatedSelected 去掉冗余 sel.length>0 前置）；**oxfmt 重大坑**：格式化把两处 Vue 模板内联多语句 `@click="a(); b()"` 折行删分号 → Vue 编译报错页面白屏（TableCard 隐藏导航行 / OutlinePanel 眼睛按钮），修复为组件方法 revealHiddenNav(otherId)/revealTable(tableId) 单语句调用（根本解决，fmt 幂等稳定）
+- package.sh 修复两处：新增排除 tool-results/.vite-hooks/.env(.*)；zip 增量更新模式导致已删除文件残留（.env 曾留包内）→ 打包前 rm -f OUT 重建
+- 验证（agent-browser 1920×1080 真实输入 + vp dev dev server）：
+  * vp dev 3000 端口干净启动（无依赖扫描警告）、allowedHosts 自定义 Host 200、HMR 正常（hot updated: index.scss）
+  * 初始：10 卡片/10 导航线/3 NN 胶囊/顶栏三个按钮（保存所有/刷新/主题）、控制台 0 错误
+  * 拖拽 sys_user（真实 mouse down/move/up）→ updateTablePos 持久化（世界坐标 208.35/228.35 与 zoom≈0.74 换算吻合）→ Ctrl+Z 回 60/80 → Ctrl+Y 恢复 208/228（diff 同步双向）
+  * NN 胶囊点击 → sys_user_role 显示 + Table.hidden=false 持久化；大纲眼睛真实点击 → 同链路
+  * 保存所有 → toast「所有修改已保存」；刷新 → 11 卡片（sys_user_role 可见态从 db 恢复）+ toast「模型已刷新」+ 位置保持
+  * 表编辑（合成 dblclick 打开）改注释保存 → db comment 更新 + toast；右键新增表 t_fine_grained_verify → addTable 持久化（id 客户端生成/hidden:false/默认 id 字段/14 张表）→ 真实点击选中 + Delete 确认删除 → 13 张表 → Ctrl+Z 撤销删除 → 表+字段完整恢复（syncToApi add 分支）
+  * 重置演示数据 → 13 表/hidden 三张中间表/注释与位置全部还原种子/10 导航/14 规则
+  * 数据库导入（真实点击 checkbox + 导入所选）→ t_blog 创建（5 字段 1 索引）
+  * 双击导航线（合成 dblclick → .edge-hit）→ 编辑导航改注释保存 → n-user-role comment 更新 + toast
+  * 字典页 27 值行、模板页 1387 字符预览正常；格式化修复后全量回归（拖拽/撤销/双击编辑）通过；亮暗双主题截图
+- vp check 全绿（55 文件格式正确 + 47 文件 0 lint 警告）；vue-tsc 通过；vp build 通过（2.67s）
+- patch 留档：patch/20260911042229.patch（38 文件 160K）；打包 download/graph-db-model-editor.zip（110 文件 5.0M，无 .env/tool-results/.vite-hooks/skills 泄漏）
+- README 更新：技术栈表 Vite+（vp CLI）；快速开始改 vp 全局安装 + vp dev/vp build/vp check；ManagerApi 接口清单表重写（细粒度契约 + load/save 语义注释）；注入链路描述改细粒度 + syncToApi；保存所有/刷新按钮说明；hidden 随模型持久化说明；非功能说明改 diff 同步
+
+Stage Summary:
+- 五项需求全部完成并经真实浏览器验证：ManagerApi 对齐用户原型（24 方法细粒度契约，save 无参 + load/save 语义落地）、Table.hidden 数据化（画布/大纲/胶囊/持久化/迁移全链路）、vite.config.ts allowedHosts:true、依赖全量升级（typescript 因 vue-tsc 兼容性保持 5.9.3 最新 5.x）、项目迁移 vite-plus（vp dev 可启动且全链路验证）
+- 关键决策：撤销/重做的恢复同步走 syncToApi diff（先分类补齐→表删加改→导航最新态 diff→分类删除收尾，表不做内容比较防漏同步）而非无参 save（持久层无从感知本地状态）；oxfmt semi:false 与 Vue 模板多语句内联冲突 → 改组件方法单语句（不用 ignore hack）；vp lint 的 jsPlugins/typeAware 在受限环境触发 oxc 分配器 panic → 退纯 oxlint 规则 + vue-tsc 承担类型检查；TS7 原生化不兼容 vue-tsc 暂留 5.9.x
+- 交付物：snapshot/20260911035806.zip（改前快照）、patch/20260911042229.patch（本次改动）、download/graph-db-model-editor.zip（110 文件）+ download/README.md
+- 截图：docs/screenshots/vp-dev-fine-grained(.|-dark).png
+
+---
 Task ID: 5
 Agent: main (Super Z)
 Task: 快照/patch 留档 + TemplateContext.language + 字典页签切换修复 + 框选完全包含 + 导航线悬停单行提示 + 自动美化布局 + 右键对齐分布菜单

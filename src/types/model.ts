@@ -24,6 +24,7 @@ export interface Table {
   className?: string // 实体类名(默认为表名大驼峰命名)
   comment?: string // 表注释
   parentIdColumn?: string // 树形表父id列（如 parent_id），为空则代表非树形表
+  hidden?: boolean // 是否隐藏
   x?: number // x坐标
   y?: number // y坐标
 }
@@ -254,11 +255,56 @@ export interface ManagerApi {
   /** 从真实数据库读取表结构（用于导入建模） */
   importFromDB(): DBTable[]
 
-  /** 加载完整模型（分类/表/导航） */
+  /** 加载完整模型（分类/表/导航），初次进入加载以及点击刷新按钮时使用它 */
   load(): LoadResultVO
 
-  /** 全量保存模型（分类/表/导航） */
-  save(categories: TableCategory[], tables: ManagerTable[], navigates: TableNavigate[]): void
+  /** 全量保存模型（分类/表/导航）,仅在 `点击保存所有` 时调用 */
+  save(): void
+
+  /* ---------- 分类 ---------- */
+
+  /** 获取全部分类 */
+  getCategories(): TableCategory[]
+
+  /** 新增分类 */
+  addCategory(category: TableCategory): void
+
+  /** 更新分类 */
+  updateCategory(category: TableCategory): void
+
+  /** 删除分类 */
+  removeCategory(categoryId: string): void
+
+  /* ---------- 表 ---------- */
+
+  /** 获取全部表（含字段与索引） */
+  getTables(): ManagerTable[]
+
+  /** 新增表（含字段与索引） */
+  addTable(table: ManagerTable): void
+
+  /** 更新表（含字段与索引） */
+  updateTable(table: ManagerTable): void
+
+  /** 删除表（一并删除其字段、索引与关联导航） */
+  removeTable(tableId: string): void
+
+  /** 更新表位置（拖动表卡片结束时使用它进行保存） */
+  updateTablePos(tableId: string, pos: { x: number; y: number }): void
+
+  /* ---------- 导航 ---------- */
+
+  /** 获取全部导航关系 */
+  getNavigates(): TableNavigate[]
+
+  /** 新增导航关系 */
+  addNavigate(navigate: TableNavigate): void
+
+  /** 更新导航关系 */
+  updateNavigate(navigate: TableNavigate): void
+
+  /** 删除导航关系 */
+  removeNavigate(navigateId: string): void
 
   /** 获取全部字典 */
   getDicts(): Dict[]

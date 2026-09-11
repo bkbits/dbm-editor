@@ -30,7 +30,9 @@ const templateStore = useTemplateStore()
 /** 代码生成范围：选中分类 > 选中表 > 全部 */
 const scopeTableIds = computed<string[]>(() => {
   if (canvas.selectedCategoryIds.length) {
-    return model.tables.filter((t) => canvas.selectedCategoryIds.includes(t.categoryId)).map((t) => t.id)
+    return model.tables
+      .filter((t) => canvas.selectedCategoryIds.includes(t.categoryId))
+      .map((t) => t.id)
   }
   if (canvas.selectedIds.length) return [...canvas.selectedIds]
   return model.tables.map((t) => t.id)
@@ -115,15 +117,28 @@ async function replace() {
 
     <div class="tool-group">
       <a-tooltip title="缩小（25% ~ 500%）">
-        <a-button size="small" :disabled="canvas.zoom <= MIN_ZOOM + 0.001" @click="canvas.zoomStep(1 / 1.25)">
+        <a-button
+          size="small"
+          :disabled="canvas.zoom <= MIN_ZOOM + 0.001"
+          @click="canvas.zoomStep(1 / 1.25)"
+        >
           <template #icon><ZoomOut :size="13" /></template>
         </a-button>
       </a-tooltip>
-      <button class="zoom-display" type="button" title="点击重置为 100%" @click="canvas.resetZoom()">
+      <button
+        class="zoom-display"
+        type="button"
+        title="点击重置为 100%"
+        @click="canvas.resetZoom()"
+      >
         {{ canvas.zoomPercent }}%
       </button>
       <a-tooltip title="放大（25% ~ 500%）">
-        <a-button size="small" :disabled="canvas.zoom >= MAX_ZOOM - 0.001" @click="canvas.zoomStep(1.25)">
+        <a-button
+          size="small"
+          :disabled="canvas.zoom >= MAX_ZOOM - 0.001"
+          @click="canvas.zoomStep(1.25)"
+        >
           <template #icon><ZoomIn :size="13" /></template>
         </a-button>
       </a-tooltip>

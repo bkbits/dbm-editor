@@ -57,7 +57,9 @@ export function languageOfFileName(fileName: string): string {
  * 未设置则按产物文件名后缀自动识别
  */
 export function resolveLanguage(fileName: string, language?: string): string {
-  const explicit = String(language ?? '').trim().toLowerCase()
+  const explicit = String(language ?? '')
+    .trim()
+    .toLowerCase()
   if (explicit) return explicit
   return languageOfFileName(fileName)
 }

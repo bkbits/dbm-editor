@@ -8,7 +8,12 @@ import { useModelStore } from '@/stores/model'
 import { useCanvasStore } from '@/stores/canvas'
 import { toCamelCase } from '@/utils/string'
 import { uid } from '@/utils/id'
-import { CASCADE_LABEL, NAVIGATE_TYPE_LABEL, flipNavigateType, suggestPropertyName } from '@/utils/navigate'
+import {
+  CASCADE_LABEL,
+  NAVIGATE_TYPE_LABEL,
+  flipNavigateType,
+  suggestPropertyName,
+} from '@/utils/navigate'
 
 const ui = useUiStore()
 const model = useModelStore()
@@ -115,7 +120,10 @@ function onTargetChange() {
 }
 
 const tableOptions = computed(() =>
-  model.tables.map((t) => ({ value: t.id, label: `${t.tableName}${t.comment ? `（${t.comment}）` : ''}` })),
+  model.tables.map((t) => ({
+    value: t.id,
+    label: `${t.tableName}${t.comment ? `（${t.comment}）` : ''}`,
+  })),
 )
 const typeOptions = (Object.keys(NAVIGATE_TYPE_LABEL) as NavigateType[]).map((t) => ({
   value: t,
@@ -140,7 +148,9 @@ const mappingTableOptions = computed(() =>
     .filter((t) => t.id !== draft.self && t.id !== draft.target)
     .map((t) => ({ value: t.id, label: t.tableName })),
 )
-const mappingColumnOptions = computed(() => (draft.mappingTable ? columnsOf(draft.mappingTable) : []))
+const mappingColumnOptions = computed(() =>
+  draft.mappingTable ? columnsOf(draft.mappingTable) : [],
+)
 
 /** 反转 self 与 target（类型同步调换） */
 function reverse() {
@@ -185,9 +195,11 @@ function validate(): string | null {
   if (!draft.targetPropertyName.trim()) return '目标表属性名不能为空'
   if (isNN.value && draft.mappingMode === 'auto' && !isEdit.value) {
     if (!draft.mappingNewName.trim()) return '请填写中间表名'
-    if (model.tableNames.has(draft.mappingNewName.trim())) return `中间表名已存在：${draft.mappingNewName}`
+    if (model.tableNames.has(draft.mappingNewName.trim()))
+      return `中间表名已存在：${draft.mappingNewName}`
   }
-  if (isNN.value && draft.mappingMode === 'existing' && !draft.mappingTable) return '请选择中间映射表'
+  if (isNN.value && draft.mappingMode === 'existing' && !draft.mappingTable)
+    return '请选择中间映射表'
   return null
 }
 
@@ -344,11 +356,21 @@ async function save() {
       <div class="row">
         <div class="item">
           <label>本表属性名<span class="req">*</span></label>
-          <a-input v-model:value="draft.selfPropertyName" size="small" class="mono" placeholder="self 的 Java 属性名" />
+          <a-input
+            v-model:value="draft.selfPropertyName"
+            size="small"
+            class="mono"
+            placeholder="self 的 Java 属性名"
+          />
         </div>
         <div class="item">
           <label>目标表属性名<span class="req">*</span></label>
-          <a-input v-model:value="draft.targetPropertyName" size="small" class="mono" placeholder="target 的 Java 属性名" />
+          <a-input
+            v-model:value="draft.targetPropertyName"
+            size="small"
+            class="mono"
+            placeholder="target 的 Java 属性名"
+          />
         </div>
         <div class="item">
           <label>注释</label>
@@ -447,7 +469,8 @@ async function save() {
           </div>
         </div>
         <div v-if="draft.mappingMode === 'auto' && !isEdit" class="mapping-hint">
-          自动创建的中间表默认隐藏，含 id / 本表ID / 目标表ID 三个字段，可在导航线上点击「表名 +」展开。
+          自动创建的中间表默认隐藏，含 id / 本表ID / 目标表ID 三个字段，可在导航线上点击「表名
+          +」展开。
         </div>
       </template>
 
@@ -458,14 +481,22 @@ async function save() {
             {{ model.tableById(draft.self)?.tableName || '本表' }} →
             {{ model.tableById(draft.target)?.tableName || '目标表' }}
           </label>
-          <a-select v-model:value="draft.selfToTargetCascade" :options="cascadeOptions" size="small" />
+          <a-select
+            v-model:value="draft.selfToTargetCascade"
+            :options="cascadeOptions"
+            size="small"
+          />
         </div>
         <div class="item">
           <label>
             {{ model.tableById(draft.target)?.tableName || '目标表' }} →
             {{ model.tableById(draft.self)?.tableName || '本表' }}
           </label>
-          <a-select v-model:value="draft.targetToSelfCascade" :options="cascadeOptions" size="small" />
+          <a-select
+            v-model:value="draft.targetToSelfCascade"
+            :options="cascadeOptions"
+            size="small"
+          />
         </div>
       </div>
 

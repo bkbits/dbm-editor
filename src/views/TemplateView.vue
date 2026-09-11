@@ -46,10 +46,19 @@ const previewTableId = computed({
 })
 
 const tableOptions = computed(() =>
-  model.tables.map((t) => ({ value: t.id, label: `${t.tableName}${t.comment ? `（${t.comment}）` : ''}` })),
+  model.tables.map((t) => ({
+    value: t.id,
+    label: `${t.tableName}${t.comment ? `（${t.comment}）` : ''}`,
+  })),
 )
 
-const previewState = reactive<{ output: string; fileName: string; filePath: string; error: string; language: string }>({
+const previewState = reactive<{
+  output: string
+  fileName: string
+  filePath: string
+  error: string
+  language: string
+}>({
   output: '',
   fileName: '',
   filePath: '',
@@ -231,10 +240,21 @@ const isEdit = computed(() => Boolean(draft.value.id))
       <div class="tpl-head">
         <div class="tpl-name-input">
           <label>模板名称</label>
-          <a-input v-model:value="draft.name" size="small" class="mono" placeholder="如 entity" style="width: 220px" />
+          <a-input
+            v-model:value="draft.name"
+            size="small"
+            class="mono"
+            placeholder="如 entity"
+            style="width: 220px"
+          />
         </div>
         <div class="tpl-actions">
-          <a-popconfirm title="删除该模板？" ok-text="删除" cancel-text="取消" @confirm="deleteTemplate">
+          <a-popconfirm
+            title="删除该模板？"
+            ok-text="删除"
+            cancel-text="取消"
+            @confirm="deleteTemplate"
+          >
             <a-button size="small" danger>
               <template #icon><Trash2 :size="12" /></template>
               删除
@@ -254,7 +274,11 @@ const isEdit = computed(() => Boolean(draft.value.id))
           </div>
           <div class="editor-code-wrap">
             <!-- 高亮覆盖层：与 textarea 完全同构的排版，位于其下方，不可交互 -->
-            <pre ref="overlayRef" class="code-overlay mono" aria-hidden="true"><code class="hljs" v-html="highlightedSource"></code></pre>
+            <pre
+              ref="overlayRef"
+              class="code-overlay mono"
+              aria-hidden="true"
+            ><code class="hljs" v-html="highlightedSource"></code></pre>
             <textarea
               ref="editorRef"
               v-model="draft.content"
@@ -288,7 +312,9 @@ const isEdit = computed(() => Boolean(draft.value.id))
             />
           </div>
           <div v-if="previewState.error" class="preview-error mono">⚠ {{ previewState.error }}</div>
-          <div v-else-if="previewState.filePath" class="preview-file mono">{{ previewState.filePath }}</div>
+          <div v-else-if="previewState.filePath" class="preview-file mono">
+            {{ previewState.filePath }}
+          </div>
           <pre class="code-view"><code class="hljs mono" v-html="highlighted"></code></pre>
         </div>
       </div>
@@ -300,11 +326,20 @@ const isEdit = computed(() => Boolean(draft.value.id))
             <p><code>context.templateName</code> 模板名称</p>
             <p><code>context.basePackage</code> 基础包名（表所属分类）</p>
             <p><code>context.fileName / filePath</code> 产物文件名/路径（模板内赋值）</p>
-            <p><code>context.language</code> 显式指定预览高亮语言，如 <code>&lt;% context.language = 'java' %&gt;</code>（未设置时按文件后缀自动识别）</p>
+            <p>
+              <code>context.language</code> 显式指定预览高亮语言，如
+              <code>&lt;% context.language = 'java' %&gt;</code>（未设置时按文件后缀自动识别）
+            </p>
             <p><code>context.table.tableName / className / comment</code> 表信息</p>
-            <p><code>context.table.columns</code> 字段数组（columnName/propertyName/type/javaType/comment/notNull/primaryKey/dict）</p>
+            <p>
+              <code>context.table.columns</code>
+              字段数组（columnName/propertyName/type/javaType/comment/notNull/primaryKey/dict）
+            </p>
             <p><code>context.table.indexes</code> 索引数组（indexName/type/columns/comment）</p>
-            <p><code>context.table.navigates</code> 单向导航（propertyName/type/self/target/cascade/...）</p>
+            <p>
+              <code>context.table.navigates</code>
+              单向导航（propertyName/type/self/target/cascade/...）
+            </p>
           </div>
           <div class="help-col">
             <p><code>utils.toCamelCase(str, firstLower?)</code> 转驼峰</p>
@@ -313,7 +348,10 @@ const isEdit = computed(() => Boolean(draft.value.id))
             <p><code>utils.quote(content, cond?)</code> 引号包裹</p>
             <p><code>utils.wrap(content, cond?)</code> 括号包裹</p>
             <p><code>utils.isEmpty(str) / utils.isBlank(str)</code> 判空 / 判空白</p>
-            <p><code>&lt;% ... %&gt;</code> 逻辑 <code>&lt;%= ... %&gt;</code> 输出 <code>&lt;%# ... %&gt;</code> 注释</p>
+            <p>
+              <code>&lt;% ... %&gt;</code> 逻辑 <code>&lt;%= ... %&gt;</code> 输出
+              <code>&lt;%# ... %&gt;</code> 注释
+            </p>
           </div>
         </div>
       </div>

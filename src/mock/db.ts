@@ -17,8 +17,8 @@ import type {
 } from '@/types/model'
 import {
   SEED_CATEGORIES,
-  SEED_DB_TABLES,
   SEED_DICTS,
+  SEED_HIDDEN_TABLE_NAMES,
   SEED_NAVIGATES,
   SEED_SETTINGS,
   SEED_TABLES,
@@ -68,7 +68,11 @@ function createSeedDB(): MockDB {
 
 /** 旧版设置（columnTypeRules 形态）读取时迁移为 Settings 新形态 */
 function migrateSettings(raw: unknown): Settings {
-  const s = (raw || {}) as { indexTypes?: unknown; typeMappings?: unknown; columnTypeRules?: unknown }
+  const s = (raw || {}) as {
+    indexTypes?: unknown
+    typeMappings?: unknown
+    columnTypeRules?: unknown
+  }
   const typeMappings: TypeMapping[] = Array.isArray(s.typeMappings)
     ? s.typeMappings.map((m: Partial<TypeMapping>, i: number) => ({
         sort: Number(m?.sort ?? i) || i,
@@ -76,13 +80,11 @@ function migrateSettings(raw: unknown): Settings {
         javaType: String(m?.javaType ?? 'String'),
       }))
     : Array.isArray(s.columnTypeRules)
-      ? s.columnTypeRules.map(
-          (r: { pattern?: unknown; javaType?: unknown }, i: number) => ({
-            sort: i,
-            pattern: String(r?.pattern ?? '').trim(),
-            javaType: String(r?.javaType ?? 'String'),
-          }),
-        )
+      ? s.columnTypeRules.map((r: { pattern?: unknown; javaType?: unknown }, i: number) => ({
+          sort: i,
+          pattern: String(r?.pattern ?? '').trim(),
+          javaType: String(r?.javaType ?? 'String'),
+        }))
       : clone(SEED_SETTINGS.typeMappings)
   const indexTypes: string[] =
     Array.isArray(s.indexTypes) && s.indexTypes.length
@@ -97,9 +99,25 @@ function loadDB(): MockDB {
     if (raw) {
       const parsed = JSON.parse(raw) as MockDB
       if (parsed && parsed.version === 2 && Array.isArray(parsed.tables)) {
+        let migrated = false
         // 兼容旧数据（设置字段形态升级 / 缺失）：读取时迁移并立即归一落盘
         if (!parsed.settings || !Array.isArray(parsed.settings.typeMappings)) {
           parsed.settings = migrateSettings(parsed.settings)
+          migrated = true
+        }
+        // 旧版 hidden 存于独立 localStorage 键（gdbme:hidden），模型未带 hidden 字段：
+        // 读取时按旧键合并（存在即读），否则按种子隐藏表名补齐，随即归一落盘
+        if (parsed.tables.some((t) => typeof t.hidden !== 'boolean')) {
+          const legacyHidden = readLegacyHidden()
+          parsed.tables = parsed.tables.map((t) => ({
+            ...t,
+            hidden: legacyHidden
+              ? legacyHidden.includes(t.id)
+              : SEED_HIDDEN_TABLE_NAMES.has(t.tableName),
+          }))
+          migrated = true
+        }
+        if (migrated) {
           db = parsed
           persistDB()
         }
@@ -112,6 +130,21 @@ function loadDB(): MockDB {
   // 清理旧版本存储（v1 缺少 parentIdColumn 等字段，直接回退种子）
   for (const key of LEGACY_STORAGE_KEYS) localStorage.removeItem(key)
   return createSeedDB()
+}
+
+/** 读取旧版隐藏表存储键（gdbme:hidden），迁移成功后清除该键 */
+function readLegacyHidden(): string[] | null {
+  try {
+    const raw = localStorage.getItem('gdbme:hidden')
+    if (raw) {
+      const ids = JSON.parse(raw) as string[]
+      localStorage.removeItem('gdbme:hidden')
+      return Array.isArray(ids) ? ids : null
+    }
+  } catch {
+    /* ignore */
+  }
+  return null
 }
 
 let db: MockDB

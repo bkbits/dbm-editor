@@ -102,7 +102,14 @@ function alignItemsSection(): MenuItem[] {
   if (count < 2) return []
   return [
     { key: 'align-div', label: '', icon: null, danger: false, divider: true, run: () => undefined },
-    { key: 'align-head', label: '对齐与分布', icon: null, danger: false, header: true, run: () => undefined },
+    {
+      key: 'align-head',
+      label: '对齐与分布',
+      icon: null,
+      danger: false,
+      header: true,
+      run: () => undefined,
+    },
     ...ALIGN_DEFS.map(({ mode, label, icon }) => {
       const isDistribute = mode === 'hdistribute' || mode === 'vdistribute'
       return {
@@ -111,7 +118,10 @@ function alignItemsSection(): MenuItem[] {
         icon,
         danger: false,
         disabled: isDistribute && count < 3,
-        title: isDistribute && count < 3 ? '均匀分布至少需要选中 3 张表' : `${label}已选中的 ${count} 张表`,
+        title:
+          isDistribute && count < 3
+            ? '均匀分布至少需要选中 3 张表'
+            : `${label}已选中的 ${count} 张表`,
         run: withClose(() => canvas.alignSelection(mode)),
       }
     }),
@@ -207,7 +217,9 @@ const edgeItems = computed<MenuItem[]>(() => {
       run: withClose(() => {
         Modal.confirm({
           title: '删除该导航关系？',
-          content: nav ? `${model.tableById(nav.self)?.tableName} 与 ${model.tableById(nav.target)?.tableName} 之间的导航将被移除。` : '',
+          content: nav
+            ? `${model.tableById(nav.self)?.tableName} 与 ${model.tableById(nav.target)?.tableName} 之间的导航将被移除。`
+            : '',
           okText: '删除',
           okType: 'danger',
           cancelText: '取消',
@@ -384,7 +396,9 @@ onBeforeUnmount(() => {
   font-size: 12.5px;
   cursor: pointer;
   text-align: left;
-  transition: background-color 0.12s ease, color 0.12s ease;
+  transition:
+    background-color 0.12s ease,
+    color 0.12s ease;
 
   .icon-spacer {
     width: 13px;

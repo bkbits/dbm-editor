@@ -23,7 +23,13 @@ function schedule() {
 }
 
 function catColorOf(categoryId: string): string {
-  return getComputedStyle(document.documentElement).getPropertyValue(`--cat-${model.categories.findIndex((c) => c.id === categoryId) % 8 >= 0 ? model.categories.findIndex((c) => c.id === categoryId) % 8 : 0}`).trim() || '#888'
+  return (
+    getComputedStyle(document.documentElement)
+      .getPropertyValue(
+        `--cat-${model.categories.findIndex((c) => c.id === categoryId) % 8 >= 0 ? model.categories.findIndex((c) => c.id === categoryId) % 8 : 0}`,
+      )
+      .trim() || '#888'
+  )
 }
 
 function draw() {
@@ -77,7 +83,12 @@ function draw() {
     const size = canvas.cardSizes[id] || { w: 268, h: 120 }
     ctx.fillStyle = catColorOf(t.categoryId)
     ctx.globalAlpha = canvas.selectedIds.includes(id) ? 1 : 0.7
-    ctx.fillRect((t.x ?? 0) * scale + offX, (t.y ?? 0) * scale + offY, Math.max(2, size.w * scale), Math.max(2, size.h * scale))
+    ctx.fillRect(
+      (t.x ?? 0) * scale + offX,
+      (t.y ?? 0) * scale + offY,
+      Math.max(2, size.w * scale),
+      Math.max(2, size.h * scale),
+    )
   }
   ctx.globalAlpha = 1
 

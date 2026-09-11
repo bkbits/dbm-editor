@@ -103,12 +103,18 @@ const markOffset = 26
 const selfMarkPos = computed(() => {
   const g = geo.value
   if (!g) return { x: 0, y: 0 }
-  return { x: g.selfAnchor.x + g.selfDir.x * markOffset, y: g.selfAnchor.y + g.selfDir.y * markOffset }
+  return {
+    x: g.selfAnchor.x + g.selfDir.x * markOffset,
+    y: g.selfAnchor.y + g.selfDir.y * markOffset,
+  }
 })
 const targetMarkPos = computed(() => {
   const g = geo.value
   if (!g) return { x: 0, y: 0 }
-  return { x: g.targetAnchor.x + g.targetDir.x * markOffset, y: g.targetAnchor.y + g.targetDir.y * markOffset }
+  return {
+    x: g.targetAnchor.x + g.targetDir.x * markOffset,
+    y: g.targetAnchor.y + g.targetDir.y * markOffset,
+  }
 })
 
 /** NN 中间表胶囊（中间表隐藏时：-N--中间表名+--N-） */
@@ -146,12 +152,13 @@ const isRelatedHover = computed(() => {
 })
 /** 选中卡片（单选/多选/框选）时，其关联线段联动切换到选中风格（含 NN 中间表） */
 const isRelatedSelected = computed(() => {
-  const sel = canvas.selectedIds
-  return sel.length > 0 && sel.some(isEndpoint)
+  return canvas.selectedIds.some(isEndpoint)
 })
 /** 线段的关联端点：两端表 + NN 经由的中间表（线段同样“连着”它） */
 function isEndpoint(tableId: string): boolean {
-  return tableId === nav.value.self || tableId === nav.value.target || tableId === nav.value.mappingTable
+  return (
+    tableId === nav.value.self || tableId === nav.value.target || tableId === nav.value.mappingTable
+  )
 }
 
 const tipWidth = computed(() => tipText.value.length * 7.6 + 20)
@@ -224,7 +231,9 @@ onBeforeUnmount(() => {
       </g>
       <g class="edge-mark">
         <rect :x="targetMarkPos.x - 8" :y="targetMarkPos.y - 9" width="16" height="18" rx="4" />
-        <text :x="targetMarkPos.x" :y="targetMarkPos.y + 5" text-anchor="middle">{{ targetMark }}</text>
+        <text :x="targetMarkPos.x" :y="targetMarkPos.y + 5" text-anchor="middle">
+          {{ targetMark }}
+        </text>
       </g>
 
       <!-- NN 中间表胶囊：中间表名 + 展开按钮 -->
@@ -240,8 +249,16 @@ onBeforeUnmount(() => {
 
       <!-- 悬停信息提示（单行：属性对 ⇄ 属性对 +（关系说明）） -->
       <g v-if="isHovered || isSelected" class="edge-tip">
-        <rect :x="geo.mid.x - tipWidth / 2" :y="geo.mid.y - 36" :width="tipWidth" height="26" rx="6" />
-        <text class="tip-main" :x="geo.mid.x" :y="geo.mid.y - 18" text-anchor="middle">{{ tipText }}</text>
+        <rect
+          :x="geo.mid.x - tipWidth / 2"
+          :y="geo.mid.y - 36"
+          :width="tipWidth"
+          height="26"
+          rx="6"
+        />
+        <text class="tip-main" :x="geo.mid.x" :y="geo.mid.y - 18" text-anchor="middle">
+          {{ tipText }}
+        </text>
       </g>
     </g>
   </svg>
@@ -277,7 +294,10 @@ onBeforeUnmount(() => {
     vector-effect: non-scaling-stroke;
     pointer-events: none;
     /* 悬停/选中均为实线：颜色/粗细/透明度/光晕平滑过渡（虚线仅用于连线草稿） */
-    transition: stroke 0.18s ease, stroke-width 0.18s ease, stroke-opacity 0.18s ease,
+    transition:
+      stroke 0.18s ease,
+      stroke-width 0.18s ease,
+      stroke-opacity 0.18s ease,
       filter 0.18s ease;
     filter: drop-shadow(0 0 0 rgba(0, 0, 0, 0));
   }
@@ -310,7 +330,9 @@ onBeforeUnmount(() => {
       stroke: var(--edge-pill-border);
       stroke-width: 1;
       vector-effect: non-scaling-stroke;
-      transition: stroke 0.18s ease, fill 0.18s ease;
+      transition:
+        stroke 0.18s ease,
+        fill 0.18s ease;
     }
     .pill-label {
       font-size: 11px;

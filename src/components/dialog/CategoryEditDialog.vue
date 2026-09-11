@@ -90,11 +90,21 @@ async function save() {
       </div>
       <div class="item">
         <label>基础包路径<span class="req">*</span></label>
-        <a-input v-model:value="draft.basePackage" size="small" class="mono" placeholder="如 com.example.system" />
+        <a-input
+          v-model:value="draft.basePackage"
+          size="small"
+          class="mono"
+          placeholder="如 com.example.system"
+        />
       </div>
       <div class="item">
         <label>源码路径（用于替换）</label>
-        <a-input v-model:value="draft.src" size="small" class="mono" placeholder="如 src/main/java/com/example/system" />
+        <a-input
+          v-model:value="draft.src"
+          size="small"
+          class="mono"
+          placeholder="如 src/main/java/com/example/system"
+        />
       </div>
     </div>
   </a-modal>

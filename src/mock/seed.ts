@@ -9,7 +9,6 @@ import type {
   Settings,
   TableColumn,
   TableCategory,
-  TableIndex,
   TableNavigate,
 } from '@/types/model'
 import { toCamelCase } from '@/utils/string'
@@ -17,9 +16,24 @@ import { getJavaTypeByType } from '@/utils/javaType'
 
 /* ============ 分类 ============ */
 export const SEED_CATEGORIES: TableCategory[] = [
-  { id: 'cat-system', name: '系统管理', basePackage: 'com.example.system', src: 'src/main/java/com/example/system' },
-  { id: 'cat-content', name: '内容管理', basePackage: 'com.example.cms', src: 'src/main/java/com/example/cms' },
-  { id: 'cat-mall', name: '商城模块', basePackage: 'com.example.mall', src: 'src/main/java/com/example/mall' },
+  {
+    id: 'cat-system',
+    name: '系统管理',
+    basePackage: 'com.example.system',
+    src: 'src/main/java/com/example/system',
+  },
+  {
+    id: 'cat-content',
+    name: '内容管理',
+    basePackage: 'com.example.cms',
+    src: 'src/main/java/com/example/cms',
+  },
+  {
+    id: 'cat-mall',
+    name: '商城模块',
+    basePackage: 'com.example.mall',
+    src: 'src/main/java/com/example/mall',
+  },
 ]
 
 /* ============ 表与字段 ============ */
@@ -64,8 +78,22 @@ export const SEED_TABLES = [
       ['updated_at', 'DATETIME', { comment: '更新时间' }],
     ]),
     indexes: [
-      { id: 'i-sys-user-username', tableId: 't-sys-user', indexName: 'uk_username', type: 'UNIQUE' as const, columns: ['username'], comment: '登录名唯一' },
-      { id: 'i-sys-user-email', tableId: 't-sys-user', indexName: 'idx_email', type: 'NORMAL' as const, columns: ['email'], comment: '邮箱查询' },
+      {
+        id: 'i-sys-user-username',
+        tableId: 't-sys-user',
+        indexName: 'uk_username',
+        type: 'UNIQUE' as const,
+        columns: ['username'],
+        comment: '登录名唯一',
+      },
+      {
+        id: 'i-sys-user-email',
+        tableId: 't-sys-user',
+        indexName: 'idx_email',
+        type: 'NORMAL' as const,
+        columns: ['email'],
+        comment: '邮箱查询',
+      },
     ],
   },
   {
@@ -84,7 +112,14 @@ export const SEED_TABLES = [
       ['remark', 'VARCHAR(200)', { comment: '备注' }],
     ]),
     indexes: [
-      { id: 'i-sys-role-code', tableId: 't-sys-role', indexName: 'uk_role_code', type: 'UNIQUE' as const, columns: ['role_code'], comment: '' },
+      {
+        id: 'i-sys-role-code',
+        tableId: 't-sys-role',
+        indexName: 'uk_role_code',
+        type: 'UNIQUE' as const,
+        columns: ['role_code'],
+        comment: '',
+      },
     ],
   },
   {
@@ -93,6 +128,7 @@ export const SEED_TABLES = [
     tableName: 'sys_user_role',
     className: 'SysUserRole',
     comment: '用户角色中间表',
+    hidden: true,
     x: 300,
     y: 420,
     columns: buildColumns('t-sys-user-role', [
@@ -101,7 +137,14 @@ export const SEED_TABLES = [
       ['role_id', 'BIGINT', { notNull: true, comment: '角色ID' }],
     ]),
     indexes: [
-      { id: 'i-sur-uk', tableId: 't-sys-user-role', indexName: 'uk_user_role', type: 'UNIQUE' as const, columns: ['user_id', 'role_id'], comment: '联合唯一' },
+      {
+        id: 'i-sur-uk',
+        tableId: 't-sys-user-role',
+        indexName: 'uk_user_role',
+        type: 'UNIQUE' as const,
+        columns: ['user_id', 'role_id'],
+        comment: '联合唯一',
+      },
     ],
   },
   {
@@ -130,6 +173,7 @@ export const SEED_TABLES = [
     tableName: 'sys_role_menu',
     className: 'SysRoleMenu',
     comment: '角色菜单中间表',
+    hidden: true,
     x: 820,
     y: 420,
     columns: buildColumns('t-sys-role-menu', [
@@ -177,8 +221,22 @@ export const SEED_TABLES = [
       ['created_at', 'DATETIME', { notNull: true, comment: '发布时间' }],
     ]),
     indexes: [
-      { id: 'i-article-category', tableId: 't-cms-article', indexName: 'idx_category', type: 'NORMAL' as const, columns: ['category_id'], comment: '分类检索' },
-      { id: 'i-article-fulltext', tableId: 't-cms-article', indexName: 'ft_title_content', type: 'FULLTEXT' as const, columns: ['title', 'content'], comment: '全文检索' },
+      {
+        id: 'i-article-category',
+        tableId: 't-cms-article',
+        indexName: 'idx_category',
+        type: 'NORMAL' as const,
+        columns: ['category_id'],
+        comment: '分类检索',
+      },
+      {
+        id: 'i-article-fulltext',
+        tableId: 't-cms-article',
+        indexName: 'ft_title_content',
+        type: 'FULLTEXT' as const,
+        columns: ['title', 'content'],
+        comment: '全文检索',
+      },
     ],
   },
   {
@@ -198,7 +256,14 @@ export const SEED_TABLES = [
       ['created_at', 'DATETIME', { notNull: true, comment: '评论时间' }],
     ]),
     indexes: [
-      { id: 'i-comment-article', tableId: 't-cms-comment', indexName: 'idx_article', type: 'NORMAL' as const, columns: ['article_id'], comment: '' },
+      {
+        id: 'i-comment-article',
+        tableId: 't-cms-comment',
+        indexName: 'idx_article',
+        type: 'NORMAL' as const,
+        columns: ['article_id'],
+        comment: '',
+      },
     ],
   },
   {
@@ -221,6 +286,7 @@ export const SEED_TABLES = [
     tableName: 'cms_article_tag',
     className: 'CmsArticleTag',
     comment: '文章标签中间表',
+    hidden: true,
     x: 700,
     y: 1080,
     columns: buildColumns('t-cms-article-tag', [
@@ -265,7 +331,14 @@ export const SEED_TABLES = [
       ['created_at', 'DATETIME', { notNull: true, comment: '下单时间' }],
     ]),
     indexes: [
-      { id: 'i-order-no', tableId: 't-mall-order', indexName: 'uk_order_no', type: 'UNIQUE' as const, columns: ['order_no'], comment: '订单号唯一' },
+      {
+        id: 'i-order-no',
+        tableId: 't-mall-order',
+        indexName: 'uk_order_no',
+        type: 'UNIQUE' as const,
+        columns: ['order_no'],
+        comment: '订单号唯一',
+      },
     ],
   },
   {
@@ -287,8 +360,12 @@ export const SEED_TABLES = [
   },
 ]
 
-/** 默认隐藏的表（中间表默认不显示在画布上） */
-export const SEED_HIDDEN_TABLES = ['t-sys-user-role', 't-sys-role-menu', 't-cms-article-tag']
+/** 种子隐藏表名集合：旧版数据（无 hidden 字段）读取时按表名补齐隐藏标记 */
+export const SEED_HIDDEN_TABLE_NAMES = new Set([
+  'sys_user_role',
+  'sys_role_menu',
+  'cms_article_tag',
+])
 
 /* ============ 导航关系 ============ */
 export const SEED_NAVIGATES: TableNavigate[] = [
@@ -462,9 +539,30 @@ export const SEED_DICTS: Dict[] = [
     label: '系统状态',
     comment: '通用的启用/禁用状态',
     values: [
-      { id: 'dv-ss-0', dictId: 'dict-sys-status', valueKey: '0', label: '禁用', labelType: 'D', comment: '不可用' },
-      { id: 'dv-ss-1', dictId: 'dict-sys-status', valueKey: '1', label: '启用', labelType: 'S', comment: '正常' },
-      { id: 'dv-ss-2', dictId: 'dict-sys-status', valueKey: '2', label: '锁定', labelType: 'W', comment: '临时锁定' },
+      {
+        id: 'dv-ss-0',
+        dictId: 'dict-sys-status',
+        valueKey: '0',
+        label: '禁用',
+        labelType: 'D',
+        comment: '不可用',
+      },
+      {
+        id: 'dv-ss-1',
+        dictId: 'dict-sys-status',
+        valueKey: '1',
+        label: '启用',
+        labelType: 'S',
+        comment: '正常',
+      },
+      {
+        id: 'dv-ss-2',
+        dictId: 'dict-sys-status',
+        valueKey: '2',
+        label: '锁定',
+        labelType: 'W',
+        comment: '临时锁定',
+      },
     ],
   },
   {
@@ -475,7 +573,14 @@ export const SEED_DICTS: Dict[] = [
     values: [
       { id: 'dv-ut-0', dictId: 'dict-user-type', valueKey: '0', label: '普通用户', labelType: 'I' },
       { id: 'dv-ut-1', dictId: 'dict-user-type', valueKey: '1', label: '会员', labelType: 'S' },
-      { id: 'dv-ut-9', dictId: 'dict-user-type', valueKey: '9', label: '管理员', labelType: 'W', comment: '后台管理员' },
+      {
+        id: 'dv-ut-9',
+        dictId: 'dict-user-type',
+        valueKey: '9',
+        label: '管理员',
+        labelType: 'W',
+        comment: '后台管理员',
+      },
     ],
   },
   {
@@ -483,10 +588,34 @@ export const SEED_DICTS: Dict[] = [
     dictKey: 'article_status',
     label: '文章状态',
     values: [
-      { id: 'dv-as-0', dictId: 'dict-article-status', valueKey: '0', label: '草稿', labelType: 'I' },
-      { id: 'dv-as-1', dictId: 'dict-article-status', valueKey: '1', label: '已发布', labelType: 'S' },
-      { id: 'dv-as-2', dictId: 'dict-article-status', valueKey: '2', label: '审核中', labelType: 'W' },
-      { id: 'dv-as-3', dictId: 'dict-article-status', valueKey: '3', label: '已下架', labelType: 'D' },
+      {
+        id: 'dv-as-0',
+        dictId: 'dict-article-status',
+        valueKey: '0',
+        label: '草稿',
+        labelType: 'I',
+      },
+      {
+        id: 'dv-as-1',
+        dictId: 'dict-article-status',
+        valueKey: '1',
+        label: '已发布',
+        labelType: 'S',
+      },
+      {
+        id: 'dv-as-2',
+        dictId: 'dict-article-status',
+        valueKey: '2',
+        label: '审核中',
+        labelType: 'W',
+      },
+      {
+        id: 'dv-as-3',
+        dictId: 'dict-article-status',
+        valueKey: '3',
+        label: '已下架',
+        labelType: 'D',
+      },
     ],
   },
   {
@@ -494,11 +623,43 @@ export const SEED_DICTS: Dict[] = [
     dictKey: 'order_status',
     label: '订单状态',
     values: [
-      { id: 'dv-os-0', dictId: 'dict-order-status', valueKey: '0', label: '待支付', labelType: 'I' },
-      { id: 'dv-os-1', dictId: 'dict-order-status', valueKey: '1', label: '已支付', labelType: 'S' },
-      { id: 'dv-os-2', dictId: 'dict-order-status', valueKey: '2', label: '已发货', labelType: 'W' },
-      { id: 'dv-os-3', dictId: 'dict-order-status', valueKey: '3', label: '已完成', labelType: 'S' },
-      { id: 'dv-os-4', dictId: 'dict-order-status', valueKey: '4', label: '已取消', labelType: 'D', comment: '自定义颜色示例', color: '#9333ea' },
+      {
+        id: 'dv-os-0',
+        dictId: 'dict-order-status',
+        valueKey: '0',
+        label: '待支付',
+        labelType: 'I',
+      },
+      {
+        id: 'dv-os-1',
+        dictId: 'dict-order-status',
+        valueKey: '1',
+        label: '已支付',
+        labelType: 'S',
+      },
+      {
+        id: 'dv-os-2',
+        dictId: 'dict-order-status',
+        valueKey: '2',
+        label: '已发货',
+        labelType: 'W',
+      },
+      {
+        id: 'dv-os-3',
+        dictId: 'dict-order-status',
+        valueKey: '3',
+        label: '已完成',
+        labelType: 'S',
+      },
+      {
+        id: 'dv-os-4',
+        dictId: 'dict-order-status',
+        valueKey: '4',
+        label: '已取消',
+        labelType: 'D',
+        comment: '自定义颜色示例',
+        color: '#9333ea',
+      },
     ],
   },
   {
@@ -624,13 +785,42 @@ export const SEED_DB_TABLES: DBTable[] = [
     comment: '博客主表',
     columns: [
       { columnName: 'id', type: 'BIGINT', notNull: true, primaryKey: true, comment: '主键' },
-      { columnName: 'title', type: 'VARCHAR(200)', notNull: true, primaryKey: false, comment: '标题' },
-      { columnName: 'author', type: 'VARCHAR(50)', notNull: true, primaryKey: false, comment: '作者' },
-      { columnName: 'content', type: 'LONGTEXT', notNull: false, primaryKey: false, comment: '正文' },
-      { columnName: 'publish_time', type: 'DATETIME', notNull: false, primaryKey: false, comment: '发布时间' },
+      {
+        columnName: 'title',
+        type: 'VARCHAR(200)',
+        notNull: true,
+        primaryKey: false,
+        comment: '标题',
+      },
+      {
+        columnName: 'author',
+        type: 'VARCHAR(50)',
+        notNull: true,
+        primaryKey: false,
+        comment: '作者',
+      },
+      {
+        columnName: 'content',
+        type: 'LONGTEXT',
+        notNull: false,
+        primaryKey: false,
+        comment: '正文',
+      },
+      {
+        columnName: 'publish_time',
+        type: 'DATETIME',
+        notNull: false,
+        primaryKey: false,
+        comment: '发布时间',
+      },
     ],
     indexes: [
-      { indexName: 'idx_publish_time', type: 'NORMAL', columns: ['publish_time'], comment: '发布时间检索' },
+      {
+        indexName: 'idx_publish_time',
+        type: 'NORMAL',
+        columns: ['publish_time'],
+        comment: '发布时间检索',
+      },
     ],
   },
   {
@@ -638,7 +828,13 @@ export const SEED_DB_TABLES: DBTable[] = [
     comment: '博客标签',
     columns: [
       { columnName: 'id', type: 'BIGINT', notNull: true, primaryKey: true, comment: '主键' },
-      { columnName: 'tag_name', type: 'VARCHAR(50)', notNull: true, primaryKey: false, comment: '标签名' },
+      {
+        columnName: 'tag_name',
+        type: 'VARCHAR(50)',
+        notNull: true,
+        primaryKey: false,
+        comment: '标签名',
+      },
     ],
     indexes: [
       { indexName: 'uk_tag_name', type: 'UNIQUE', columns: ['tag_name'], comment: '标签名唯一' },
@@ -649,11 +845,22 @@ export const SEED_DB_TABLES: DBTable[] = [
     comment: '博客标签关联',
     columns: [
       { columnName: 'id', type: 'BIGINT', notNull: true, primaryKey: true, comment: '主键' },
-      { columnName: 'blog_id', type: 'BIGINT', notNull: true, primaryKey: false, comment: '博客ID' },
+      {
+        columnName: 'blog_id',
+        type: 'BIGINT',
+        notNull: true,
+        primaryKey: false,
+        comment: '博客ID',
+      },
       { columnName: 'tag_id', type: 'BIGINT', notNull: true, primaryKey: false, comment: '标签ID' },
     ],
     indexes: [
-      { indexName: 'uk_blog_tag', type: 'UNIQUE', columns: ['blog_id', 'tag_id'], comment: '联合唯一' },
+      {
+        indexName: 'uk_blog_tag',
+        type: 'UNIQUE',
+        columns: ['blog_id', 'tag_id'],
+        comment: '联合唯一',
+      },
     ],
   },
   {
@@ -661,10 +868,34 @@ export const SEED_DB_TABLES: DBTable[] = [
     comment: '留言板',
     columns: [
       { columnName: 'id', type: 'BIGINT', notNull: true, primaryKey: true, comment: '主键' },
-      { columnName: 'nickname', type: 'VARCHAR(50)', notNull: true, primaryKey: false, comment: '昵称' },
-      { columnName: 'message', type: 'VARCHAR(500)', notNull: true, primaryKey: false, comment: '留言内容' },
-      { columnName: 'reply', type: 'VARCHAR(500)', notNull: false, primaryKey: false, comment: '管理员回复' },
-      { columnName: 'created_at', type: 'DATETIME', notNull: true, primaryKey: false, comment: '留言时间' },
+      {
+        columnName: 'nickname',
+        type: 'VARCHAR(50)',
+        notNull: true,
+        primaryKey: false,
+        comment: '昵称',
+      },
+      {
+        columnName: 'message',
+        type: 'VARCHAR(500)',
+        notNull: true,
+        primaryKey: false,
+        comment: '留言内容',
+      },
+      {
+        columnName: 'reply',
+        type: 'VARCHAR(500)',
+        notNull: false,
+        primaryKey: false,
+        comment: '管理员回复',
+      },
+      {
+        columnName: 'created_at',
+        type: 'DATETIME',
+        notNull: true,
+        primaryKey: false,
+        comment: '留言时间',
+      },
     ],
     indexes: [],
   },
@@ -673,7 +904,13 @@ export const SEED_DB_TABLES: DBTable[] = [
     comment: '每日统计',
     columns: [
       { columnName: 'id', type: 'BIGINT', notNull: true, primaryKey: true, comment: '主键' },
-      { columnName: 'stat_date', type: 'DATE', notNull: true, primaryKey: false, comment: '统计日期' },
+      {
+        columnName: 'stat_date',
+        type: 'DATE',
+        notNull: true,
+        primaryKey: false,
+        comment: '统计日期',
+      },
       { columnName: 'pv', type: 'INT', notNull: true, primaryKey: false, comment: '访问量' },
       { columnName: 'uv', type: 'INT', notNull: true, primaryKey: false, comment: '独立访客' },
     ],

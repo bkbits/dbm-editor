@@ -28,9 +28,12 @@ watch(
 )
 
 /* 规则顺序即匹配优先级（sort 升序），拖拽手柄排序后按位置重编号 */
-const drag = useDragSort(() => rules.value, () => {
-  rules.value.forEach((m, i) => (m.sort = i))
-})
+const drag = useDragSort(
+  () => rules.value,
+  () => {
+    rules.value.forEach((m, i) => (m.sort = i))
+  },
+)
 
 function addRule() {
   rules.value.push({ ...settingsStore.newMappingDraft(), key: uid('mapping-') })
@@ -185,7 +188,8 @@ async function save() {
 
         <div class="card-intro">
           从数据库导入表时，对每个字段的数据库类型（如
-          <code class="mono">VARCHAR(255)</code>、<code class="mono">Decimal(6, 4)</code>）按下列规则
+          <code class="mono">VARCHAR(255)</code>、<code class="mono">Decimal(6, 4)</code
+          >）按下列规则
           <b>自上而下依次</b>进行正则表达式匹配（忽略大小写），取<b>第一条命中</b>规则的 Java
           类型作为该字段的默认 Java 类型；全部未命中时回退内置类型映射表（仍无映射则为
           String）。规则顺序（sort）即优先级，可拖拽调整。
@@ -273,13 +277,17 @@ async function save() {
             size="small"
             class="mono test-input"
             placeholder="输入数据库类型实时预览，如 VARCHAR(255) / Decimal(6, 4)"
-            :filter-option="(input: string, option: any) => String(option.value).toUpperCase().includes(input.toUpperCase())"
+            :filter-option="
+              (input: string, option: any) =>
+                String(option.value).toUpperCase().includes(input.toUpperCase())
+            "
           />
           <div class="test-result">
             <template v-if="firstHit">
               <span class="type-badge hit">{{ firstHit.javaType }}</span>
               <span class="hit-desc">
-                命中规则 <b>#{{ firstHit.index + 1 }}</b>：
+                命中规则 <b>#{{ firstHit.index + 1 }}</b
+                >：
                 <code class="mono">{{ rules[firstHit.index]?.pattern }}</code>
               </span>
             </template>
@@ -287,7 +295,9 @@ async function save() {
               <span class="type-badge fallback">{{ fallbackType }}</span>
               <span class="hit-desc">未命中任何规则，导入时回退内置类型映射</span>
             </template>
-            <span v-else class="test-placeholder">输入数据库类型后实时预览匹配结果（含未保存修改）</span>
+            <span v-else class="test-placeholder"
+              >输入数据库类型后实时预览匹配结果（含未保存修改）</span
+            >
           </div>
         </div>
       </section>
@@ -300,7 +310,8 @@ async function save() {
 
         <div class="card-intro">
           管理索引类型选项（如 <code class="mono">UNIQUE</code> / <code class="mono">NORMAL</code> /
-          <code class="mono">FULLTEXT</code>）。保存后「编辑表」对话框的索引类型下拉选项将使用该列表；
+          <code class="mono">FULLTEXT</code
+          >）。保存后「编辑表」对话框的索引类型下拉选项将使用该列表；
           从数据库导入表时，不在列表中的索引类型将归一为列表第一项。至少保留一个类型。
         </div>
 
@@ -311,7 +322,9 @@ async function save() {
               <X :size="10" />
             </button>
           </span>
-          <span v-if="!indexTypes.length" class="index-empty">索引类型列表为空，保存前请至少添加一个类型</span>
+          <span v-if="!indexTypes.length" class="index-empty"
+            >索引类型列表为空，保存前请至少添加一个类型</span
+          >
         </div>
 
         <div class="index-add">
@@ -537,7 +550,9 @@ async function save() {
   color: var(--text-3);
   border-radius: 3px;
   padding: 1px 0;
-  transition: color 0.15s ease, background 0.15s ease;
+  transition:
+    color 0.15s ease,
+    background 0.15s ease;
 
   &.hit {
     color: var(--warning);
@@ -567,7 +582,9 @@ async function save() {
   color: var(--text-3);
   cursor: grab;
   touch-action: none;
-  transition: color 0.15s ease, background 0.15s ease;
+  transition:
+    color 0.15s ease,
+    background 0.15s ease;
 
   &:hover {
     color: var(--text-1);
@@ -590,7 +607,9 @@ async function save() {
   background: transparent;
   color: var(--text-3);
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
 
   &:hover {
     background: var(--danger-weak);
@@ -699,7 +718,9 @@ async function save() {
     border: 1px solid transparent;
     border-radius: var(--radius-m);
     padding: 2px 4px 2px 9px;
-    transition: border-color 0.15s ease, background 0.15s ease;
+    transition:
+      border-color 0.15s ease,
+      background 0.15s ease;
 
     &:hover {
       border-color: var(--primary);
@@ -716,7 +737,9 @@ async function save() {
       background: transparent;
       color: var(--text-3);
       cursor: pointer;
-      transition: background 0.15s ease, color 0.15s ease;
+      transition:
+        background 0.15s ease,
+        color 0.15s ease;
 
       &:hover {
         background: var(--danger-weak);
