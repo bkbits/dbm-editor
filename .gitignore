@@ -43,3 +43,4 @@ agent-ctx/
 # 快照与补丁（会话产物目录，不纳入版本管理）
 snapshot/
 patch/
+tool-results/
