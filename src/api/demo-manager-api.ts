@@ -9,10 +9,12 @@
  * - 细粒度方法（addXxx/updateXxx/removeXxx/updateTablePos）即时写库并落盘
  * - save() 无参全量保存：demo 的内存即真相，等价于确认落盘
  * - removeTable 一并删除其字段、索引与关联导航
- * - 所有方法经 Proxy 包装打印入参/返回（见 withCallLogging），控制台可观测
+ * - 所有方法经 Proxy 包装，使用统一日志器（src/log/Logger.ts）打印入参与返回
+ *   （debug 级）、抛错（error 级）；Logger.setLevel 可运行时调整输出级别
  */
 import JSZip from 'jszip'
 import { message } from 'antdv-next'
+import { Logger } from '@/log/Logger'
 import type {
   DBTable,
   Dict,
@@ -55,10 +57,13 @@ function assertRegex(pattern: string): void {
 const NAVIGATE_TYPES = ['11', '1N', 'N1', 'NN']
 
 /**
- * 调用日志包装：为实例的全部方法打印入参与返回结果，抛错时打印错误后原样抛出。
+ * 调用日志包装：为实例的全部方法用 Logger（src/log/Logger.ts）打印入参与返回结果，
+ * 抛错时以 error 级输出后原样抛出。
  *
  * - 以 Proxy 拦截方法访问实现，契约方法（含 resetDemo 扩展）全部覆盖，
  *   后续新增方法无需逐个插桩
+ * - 入参/返回走 Logger.debug（开发构建默认 DEBUG 级全量可见；
+ *   setLevel('INFO') 可静默追踪噪音），抛错走 Logger.error
  * - 包装函数以原始实例为 this 执行：内部 this.xxx 辅助互调不经过代理，
  *   每次外部调用仅产生「入参 + 返回」两条日志，内部装配过程不打扰
  * - 同名方法的包装结果缓存，保持方法引用稳定（proxy.load === proxy.load）
@@ -76,13 +81,13 @@ function withCallLogging<T extends object>(instance: T, label: string): T {
       if (!wrapped) {
         const original = value as (this: T, ...args: unknown[]) => unknown
         wrapped = function (this: unknown, ...args: unknown[]): unknown {
-          console.log(`[${label}] ${prop}() 入参`, args)
+          Logger.debug(`[${label}] ${prop}() 入参`, args)
           try {
             const result = original.apply(target, args)
-            console.log(`[${label}] ${prop}() 返回`, result)
+            Logger.debug(`[${label}] ${prop}() 返回`, result)
             return result
           } catch (e) {
-            console.error(`[${label}] ${prop}() 抛错`, e)
+            Logger.error(`[${label}] ${prop}() 抛错`, e)
             throw e
           }
         }
@@ -95,7 +100,8 @@ function withCallLogging<T extends object>(instance: T, label: string): T {
 
 export class DemoManagerApi implements ManagerApi {
   constructor() {
-    // 演示实现的调用可观测性：所有方法在控制台打印入参与结果，便于联调核对契约调用时机
+    // 演示实现的调用可观测性：所有方法经统一日志器打印入参与结果，
+    // 便于联调核对契约调用时机（级别可由 Logger.setLevel 调整）
     return withCallLogging(this, 'DemoManagerApi')
   }
 

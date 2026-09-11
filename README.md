@@ -66,11 +66,29 @@ const myApi: ManagerApi = {
 
 > `DBColumn.notNull` 为 demo 扩展字段（真实实现可不提供，缺省视为可空）；`Table.hidden` 随模型数据持久化（隐藏态在刷新/重开后保持）；`resetDemo()` 为 DemoManagerApi 的扩展方法（重置为内置演示数据），正式实现无需提供。
 
+### 统一日志 Logger（src/log/Logger.ts）
+
+导出全局单例 `Logger`，提供 `log / info / debug / warn / error / fatal` 六个输出方法与级别控制：
+
+```ts
+import { Logger } from '@/log/Logger'
+
+Logger.debug('入参', args) // [09:30:12.405] [DEBUG] 入参 [args...]
+Logger.error('失败', err) // [09:30:12.405] [ERROR] 失败 Error: ...
+Logger.setLevel('INFO') // 或 Logger.level = 'INFO' / Logger.getLevel()
+```
+
+- 级别：`DEBUG < INFO < WARN < ERROR < FATAL`，只输出当前级别及以上的日志；`DISABLED` 屏蔽一切输出（含 `log` 与 `fatal`）
+- `log()` 为无级别方法：未禁用即输出（等同 `console.log` 的定位，不参与级别过滤）
+- 通道映射：`debug/log → console.log`（不用 `console.debug`，避免被 DevTools 默认 Verbose 过滤隐藏）、`info → console.info`、`warn → console.warn`、`error/fatal → console.error`（fatal 以 `[FATAL]` 标签区分）
+- 输出带 `[HH:mm:ss.SSS] [级别]` 前缀，参数原样透传（对象在 DevTools 中保持可展开）
+- 默认级别：开发构建 `DEBUG`（全量），生产构建 `INFO`；运行时可随时 `setLevel` 调整
+
 ### DemoManagerApi（内置演示实现）
 
 `src/api/demo-manager-api.ts`：数据存于内存（`src/mock/db.ts`）并持久化到 `localStorage`（`gdbme:db:v2`）；除 `replace` 的 zip 解析外全部同步完成，校验失败抛出含中文业务提示的 `Error`。数据重置：左下大纲面板「重置演示数据」按钮。
 
-所有方法经 Proxy 包装打印调用日志：每次契约调用在控制台输出 `[DemoManagerApi] <方法>() 入参` 与 `返回`（抛错时 `console.error` 后原样抛出），内部辅助方法互调不打日志——联调时可在控制台按 `[DemoManagerApi]` 过滤，直接观测各契约方法的实际调用时机与参数（如应用启动即触发 `getSettings` / `load`）。
+所有方法经 Proxy 包装打印调用日志：每次契约调用输出 `[DemoManagerApi] <方法>() 入参` 与 `返回`（debug 级），抛错时以 error 级输出后原样抛出；内部辅助方法互调不打日志。联调时可在控制台按 `DemoManagerApi` 过滤，直接观测各契约方法的实际调用时机与参数（如应用启动即触发 `getSettings` / `load`）；`Logger.setLevel('INFO')` 可静默追踪噪音，`DISABLED` 可完全关闭。
 
 ## 快速开始
 
@@ -208,6 +226,7 @@ Eta 语法：`<% %>` 逻辑、`<%= %>` 输出、`<%# %>` 自定义注释标签�
    ├─ App.vue              # 根组件（渲染 DBManagerView，可传入自定义 api）
    ├─ api/                 # ManagerApi 注入体系（manager-api）+ DemoManagerApi 演示实现
    ├─ composables/         # useDragSort 行拖拽排序（字段/设置规则共用）
+   ├─ log/                 # 统一日志器 Logger（级别过滤：DEBUG/INFO/WARN/ERROR/FATAL/DISABLED）
    ├─ mock/                # 种子数据 + demo 内存数据库（localStorage 持久化）
    ├─ stores/              # Pinia：model / canvas / dict / template / theme / ui / history / settings
    ├─ types/               # 数据模型类型（含 ManagerApi 契约，与规格说明书一致）

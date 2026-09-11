@@ -329,3 +329,28 @@ Stage Summary:
 - 两项需求完成：(1) DemoManagerApi 所有方法（含 resetDemo）控制台打印入参与结果，Proxy 包装实现零逐方法插桩、内部互调不打扰、方法引用稳定；(2) 设置 API 调用时机问题确认并修复——根因是设置完全惰性加载导致启动阶段 getSettings() 从未调用，改为视图启动即幂等预载（任意页面、api 热切换、页面切换全覆盖），并加固 init() 并发等待语义
 - 关键决策：日志用 Proxy 统一包装而非逐方法插桩（新增契约方法自动覆盖）；包装函数绑定原始实例为 this 避免内部辅助方法重复打日志；settings init 用在途 Promise 替代 loading 早退（异步 api 实现下 await 语义正确）
 - 交付物：snapshot/20260911065109.zip（改前快照）、patch/20260911065517.patch、download/graph-db-model-editor.zip（111 文件）；截图 docs/screenshots/api-call-logs.png
+
+---
+Task ID: 10
+Agent: main (Super Z)
+Task: 实现 src/log/Logger.ts 统一日志器 + DemoManagerApi 调用日志切换到 Logger
+
+Work Log:
+- 新建 src/log/Logger.ts：导出 Logger 单例对象——log/info/debug/warn/error/fatal 六个输出方法；级别 DEBUG/INFO/WARN/ERROR/FATAL/DISABLED，setLevel()/getLevel()/level getter-setter 三种控制形态；权重过滤只输出当前级别及以上，DISABLED 屏蔽一切（含 log 与 fatal）
+- 设计决策：log() 为无级别方法（用户级别清单中无 LOG 级——未禁用即输出，定位等同 console.log）；debug/log 映射 console.log 而非 console.debug（Chrome DevTools 默认过滤级隐藏 Verbose，debug 会看不到）；fatal 无控制台对应通道，按 console.error + [FATAL] 标签输出；输出格式 [HH:mm:ss.SSS] [级别] 前缀 + 参数原样透传（对象保持可展开）；默认级别 DEV=DEBUG / PROD=INFO（import.meta.env.DEV）；级别存模块闭包变量（方法解构调用不依赖 this）
+- demo-manager-api.ts：withCallLogging 的 console.log/error 全部替换为 Logger.debug/Logger.error——入参与返回走 debug 级（默认可见、setLevel('INFO') 可静默追踪噪音），抛错走 error 级（各级别下只要未禁用均透传）；文件头与包装函数注释同步更新
+- README：新增「统一日志 Logger（src/log/Logger.ts）」章节（用法示例 + 级别语义 + 通道映射 + 默认级别）；DemoManagerApi 章节日志说明改为 Logger 表述（级别可调）；项目结构补 src/log/ 条目
+- 验证（agent-browser 真实浏览器，localhost:3000）：
+  * 六方法输出格式与通道：log/debug→log、info→info、warn→warning、error/fatal→error，前缀 [07:15:25.632] [LEVEL] 正确
+  * INFO 级：debug 被过滤（info/warn 正常输出）
+  * DISABLED 级：log/debug/error/fatal 及 DemoManagerApi 调用链路全部静默
+  * WARN 级：DemoManagerApi 抛错路径仍以 [ERROR] 透传（updateTablePos 不存在表）
+  * INFO 级下真实 UI 打开导入对话框：importFromDB debug 追踪静默、对话框功能正常
+  * 重载回归：启动日志新格式（[DEBUG] [DemoManagerApi] getSettings/load）、10 卡片、0 控制台错误
+- vue-tsc 通过；vp build 通过（2.58s）
+- patch 留档：patch/20260911071639.patch（3 文件 12K：Logger.ts 新增 / demo-manager-api.ts / README.md）；重新打包 download/graph-db-model-editor.zip（114 文件 5.3M）
+
+Stage Summary:
+- Logger 统一日志器落地：六方法 + 六级别（DISABLED 全静默）+ 三种级别控制形态（setLevel/getLevel/level 存取器），时间戳前缀、参数透传保持可展开、通道映射规避 console.debug 的 DevTools 默认隐藏问题；DemoManagerApi 全部契约方法调用日志由 console 直写切换为 Logger（入参/返回 debug 级、抛错 error 级），运行时 setLevel 即可静默或全关
+- 关键决策：log() 无级别语义（级别清单无 LOG）；debug 走 console.log 保证默认可见；DEV/PROD 差异化默认级别；闭包变量存级别使解构调用安全
+- 交付物：patch/20260911071639.patch、download/graph-db-model-editor.zip（114 文件）；截图 docs/screenshots/logger-levels.png
