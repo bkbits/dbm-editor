@@ -1,5 +1,6 @@
 /**
  * 模型仓库：分类 / 表 / 字段 / 索引 / 导航关系
+ * （reactive 对象工厂形态，由 DBManagerView 经上下文注入，不依赖 Pinia）
  *
  * 本地状态为 UI 单一数据源；所有变更遵循 ManagerApi 细粒度异步契约：
  * - 每次操作先改本地状态，再 await 对应 api 方法（add/update/remove）
@@ -8,9 +9,11 @@
  * - saveAll 对应 api.save()（点击「保存所有」）；refresh 对应 api.load()（点击「刷新」）
  * - 撤销/重做恢复后通过 diff 同步（syncToApi）将持久层对齐到本地状态
  */
-import { defineStore } from 'pinia'
+import { reactive } from 'vue'
+import { useDBManagerContext } from './context'
 import type {
   DBTable,
+  ManagerApi,
   ManagerTable,
   Navigate,
   Table,
@@ -22,13 +25,14 @@ import type {
   TableUpdatePayload,
   TableVO,
 } from '@/types/model'
-import { getManagerApi } from '@/api/manager-api'
 import { uid } from '@/utils/id'
 import { toCamelCase } from '@/utils/string'
 import { getJavaTypeByType } from '@/utils/javaType'
-import { buildNavigateView } from '@/utils/navigate'
-import { useSettingsStore } from './settings'
-import { useHistoryStore } from './history'
+import { buildNavigateView, flipNavigateType } from '@/utils/navigate'
+import type { HistoryStore } from './history'
+import type { SettingsStore } from './settings'
+import type { DictStore } from './dict'
+import type { TemplateStore } from './template'
 
 /** 模型快照（撤销/重做用） */
 export interface ModelSnapshot {
@@ -48,8 +52,17 @@ function sameEntity(a: unknown, b: unknown): boolean {
   return JSON.stringify(a) === JSON.stringify(b)
 }
 
-export const useModelStore = defineStore('model', {
-  state: () => ({
+/** 工厂依赖（均惰性取用，与原先 action 内 useXxxStore() 的运行时语义一致） */
+export interface ModelDeps {
+  getApi: () => ManagerApi
+  getHistory: () => HistoryStore
+  getSettings: () => SettingsStore
+  getDict: () => DictStore
+  getTemplate: () => TemplateStore
+}
+
+export function createModelStore(deps: ModelDeps) {
+  return reactive({
     loaded: false,
     loading: false,
     error: '',
@@ -58,42 +71,47 @@ export const useModelStore = defineStore('model', {
     columns: [] as TableColumn[],
     indexes: [] as TableIndex[],
     navigates: [] as TableNavigate[],
-  }),
 
-  getters: {
-    tableCount: (s) => s.tables.length,
-    navigateCount: (s) => s.navigates.length,
-    categoryCount: (s) => s.categories.length,
-    tableNames: (s) => new Set(s.tables.map((t) => t.tableName)),
-    categoryNames: (s) => new Set(s.categories.map((c) => c.name)),
-
-    tableById(): (id: string) => Table | undefined {
+    get tableCount(): number {
+      return this.tables.length
+    },
+    get navigateCount(): number {
+      return this.navigates.length
+    },
+    get categoryCount(): number {
+      return this.categories.length
+    },
+    get tableNames(): Set<string> {
+      return new Set(this.tables.map((t) => t.tableName))
+    },
+    get categoryNames(): Set<string> {
+      return new Set(this.categories.map((c) => c.name))
+    },
+    get tableById(): (id: string) => Table | undefined {
       return (id) => this.tables.find((t) => t.id === id)
     },
-    categoryById(): (id: string) => TableCategory | undefined {
+    get categoryById(): (id: string) => TableCategory | undefined {
       return (id) => this.categories.find((c) => c.id === id)
     },
-    tablesByCategory(): (categoryId: string) => Table[] {
+    get tablesByCategory(): (categoryId: string) => Table[] {
       return (categoryId) => this.tables.filter((t) => t.categoryId === categoryId)
     },
     /** 该表参与的全部原始导航 */
-    navigatesOf(): (tableId: string) => TableNavigate[] {
+    get navigatesOf(): (tableId: string) => TableNavigate[] {
       return (tableId) => this.navigates.filter((n) => n.self === tableId || n.target === tableId)
     },
     /** 是否为中间映射表 */
-    isMappingTable(): (tableId: string) => boolean {
+    get isMappingTable(): (tableId: string) => boolean {
       return (tableId) => this.navigates.some((n) => n.mappingTable === tableId)
     },
-    hasNavigateBetween(): (a: string, b: string, excludeId?: string) => boolean {
+    get hasNavigateBetween(): (a: string, b: string, excludeId?: string) => boolean {
       return (a, b, excludeId) =>
         this.navigates.some((n) => {
           if (excludeId && n.id === excludeId) return false
           return (n.self === a && n.target === b) || (n.self === b && n.target === a)
         })
     },
-  },
 
-  actions: {
     /* ==================== 初始化 / 全量动作 ==================== */
 
     async init() {
@@ -101,7 +119,7 @@ export const useModelStore = defineStore('model', {
       this.loading = true
       this.error = ''
       try {
-        const result = await getManagerApi().load()
+        const result = await deps.getApi().load()
         this.categories = result.categories.map(clone)
         this.applyTables(result.tables)
         this.navigates = result.navigates.map(clone)
@@ -118,7 +136,7 @@ export const useModelStore = defineStore('model', {
       this.loading = true
       this.error = ''
       try {
-        const result = await getManagerApi().load()
+        const result = await deps.getApi().load()
         this.categories = result.categories.map(clone)
         this.applyTables(result.tables)
         this.navigates = result.navigates.map(clone)
@@ -133,7 +151,7 @@ export const useModelStore = defineStore('model', {
 
     /** 全量保存（点击「保存所有」按钮或按 Ctrl+S 时调用，对应 api.save()） */
     async saveAll() {
-      await getManagerApi().save()
+      await deps.getApi().save()
     },
 
     /** 将完整表列表（含字段/索引）还原为扁平状态 */
@@ -155,7 +173,7 @@ export const useModelStore = defineStore('model', {
      * 三组做增删改 diff，逐个 await 契约的细粒度异步方法。
      */
     async syncToApi() {
-      const api = getManagerApi()
+      const api = deps.getApi()
 
       /* ---- 分类：先补新增/更新（保证表引用分类可通过校验） ---- */
       const apiCategories = await api.getCategories()
@@ -271,8 +289,8 @@ export const useModelStore = defineStore('model', {
       if (this.categories.some((c) => c.name === name && c.id !== draft.id)) {
         throw new Error(`分类名称已存在: ${name}`)
       }
-      const api = getManagerApi()
-      const history = useHistoryStore()
+      const api = deps.getApi()
+      const history = deps.getHistory()
       const snap = this.takeSnapshot()
       let saved: TableCategory
       if (draft.id) {
@@ -302,12 +320,12 @@ export const useModelStore = defineStore('model', {
     },
 
     async removeCategory(id: string) {
-      const history = useHistoryStore()
+      const history = deps.getHistory()
       const snap = this.takeSnapshot()
       history.capture(snap)
       this.categories = this.categories.filter((c) => c.id !== id)
       try {
-        await getManagerApi().removeCategory(id)
+        await deps.getApi().removeCategory(id)
       } catch (e) {
         this.rollback(snap)
         throw e
@@ -321,8 +339,8 @@ export const useModelStore = defineStore('model', {
       if (!tableName) throw new Error('表名不能为空')
       if (this.tableNames.has(tableName)) throw new Error(`表名已存在: ${tableName}`)
       if (!this.categories.some((c) => c.id === draft.categoryId)) throw new Error('所属分类不存在')
-      const api = getManagerApi()
-      const history = useHistoryStore()
+      const api = deps.getApi()
+      const history = deps.getHistory()
       const snap = this.takeSnapshot()
       const tableId = uid('t-')
       const table: Table = {
@@ -358,8 +376,8 @@ export const useModelStore = defineStore('model', {
       if (this.tables.some((t) => t.tableName === tableName && t.id !== tableId)) {
         throw new Error(`表名已存在: ${tableName}`)
       }
-      const api = getManagerApi()
-      const history = useHistoryStore()
+      const api = deps.getApi()
+      const history = deps.getHistory()
       const snap = this.takeSnapshot()
       Object.assign(target, {
         categoryId: String(draft.categoryId ?? target.categoryId),
@@ -388,7 +406,7 @@ export const useModelStore = defineStore('model', {
       const snap = this.takeSnapshot()
       target.hidden = hidden
       try {
-        await getManagerApi().updateTable(this.managerTableOf(tableId))
+        await deps.getApi().updateTable(this.managerTableOf(tableId))
       } catch (e) {
         this.rollback(snap)
         throw e
@@ -411,7 +429,7 @@ export const useModelStore = defineStore('model', {
      * 仅调用一次 api（tables 携带全部移动的表与最终坐标）。
      */
     async persistTables(ids: string[]) {
-      const api = getManagerApi()
+      const api = deps.getApi()
       const tables = ids
         .map((id) => this.tableById(id))
         .filter((t): t is Table => !!t)
@@ -421,8 +439,8 @@ export const useModelStore = defineStore('model', {
     },
 
     async removeTables(ids: string[]) {
-      const api = getManagerApi()
-      const history = useHistoryStore()
+      const api = deps.getApi()
+      const history = deps.getHistory()
       const snap = this.takeSnapshot()
       history.capture(snap)
       this.tables = this.tables.filter((t) => !ids.includes(t.id))
@@ -443,8 +461,8 @@ export const useModelStore = defineStore('model', {
 
     /** 新增导航（自动创建中间表的逻辑由调用方完成后传入） */
     async addNavigate(nav: TableNavigate) {
-      const api = getManagerApi()
-      const history = useHistoryStore()
+      const api = deps.getApi()
+      const history = deps.getHistory()
       const snap = this.takeSnapshot()
       history.capture(snap)
       this.navigates.push(clone(nav))
@@ -459,8 +477,8 @@ export const useModelStore = defineStore('model', {
     async updateNavigate(nav: TableNavigate) {
       const idx = this.navigates.findIndex((n) => n.id === nav.id)
       if (idx < 0) return
-      const api = getManagerApi()
-      const history = useHistoryStore()
+      const api = deps.getApi()
+      const history = deps.getHistory()
       const snap = this.takeSnapshot()
       history.capture(snap)
       this.navigates[idx] = clone(nav)
@@ -475,8 +493,8 @@ export const useModelStore = defineStore('model', {
     async removeNavigate(id: string) {
       const nav = this.navigates.find((n) => n.id === id)
       if (!nav) return
-      const api = getManagerApi()
-      const history = useHistoryStore()
+      const api = deps.getApi()
+      const history = deps.getHistory()
       const snap = this.takeSnapshot()
       history.capture(snap)
       this.navigates = this.navigates.filter((n) => n.id !== id)
@@ -492,7 +510,6 @@ export const useModelStore = defineStore('model', {
     async reverseNavigate(id: string) {
       const nav = this.navigates.find((n) => n.id === id)
       if (!nav) return
-      const { flipNavigateType } = await import('@/utils/navigate')
       const reversed: TableNavigate = {
         ...clone(nav),
         type: flipNavigateType(nav.type),
@@ -542,7 +559,7 @@ export const useModelStore = defineStore('model', {
     },
 
     async pasteTable(draft: Omit<TableAddPayload, 'id'>, position?: { x: number; y: number }) {
-      const api = getManagerApi()
+      const api = deps.getApi()
       const snap = this.takeSnapshot()
       const tableId = uid('t-')
       const x = position?.x ?? draft.x ?? 0
@@ -572,11 +589,11 @@ export const useModelStore = defineStore('model', {
     /* ==================== 从数据库导入 ==================== */
 
     async importFromDB(categoryId: string, defs: DBTable[]) {
-      const api = getManagerApi()
+      const api = deps.getApi()
       // 列类型映射规则：设置中 sort 最小命中优先，未命中回退内置映射
-      const settings = useSettingsStore()
+      const settings = deps.getSettings()
       if (!settings.loaded) await settings.init()
-      const history = useHistoryStore()
+      const history = deps.getHistory()
       const snap = this.takeSnapshot()
       history.capture(snap)
       const indexTypes = settings.indexTypes.length
@@ -672,16 +689,12 @@ export const useModelStore = defineStore('model', {
 
     /** 重置为演示数据（demo api 提供 resetDemo；正式实现下等价于重新加载） */
     async resetDemoData() {
-      const api = getManagerApi()
+      const api = deps.getApi()
       await api.resetDemo?.()
-      // 全量刷新各仓库（dict / template 动态引入避免与 model 产生模块环）
-      const [{ useDictStore }, { useTemplateStore }] = await Promise.all([
-        import('./dict'),
-        import('./template'),
-      ])
-      const dict = useDictStore()
-      const templateStore = useTemplateStore()
-      const settings = useSettingsStore()
+      // 全量刷新各仓库（经工厂依赖引用，无模块环问题）
+      const dict = deps.getDict()
+      const templateStore = deps.getTemplate()
+      const settings = deps.getSettings()
       for (const s of [this, dict, templateStore, settings] as Array<{
         loaded: boolean
         loading: boolean
@@ -691,5 +704,12 @@ export const useModelStore = defineStore('model', {
       }
       await Promise.all([this.init(), dict.init(), templateStore.init(), settings.init()])
     },
-  },
-})
+  })
+}
+
+export type ModelStore = ReturnType<typeof createModelStore>
+
+/** 子组件取用模型仓库（须处于 DBManagerView 组件树内） */
+export function useModelStore(): ModelStore {
+  return useDBManagerContext().model
+}

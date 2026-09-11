@@ -1,14 +1,17 @@
 /**
  * 设置仓库：索引类型列表 + 列类型映射规则（从数据库导入时的 Java 类型默认映射）
+ * （reactive 对象工厂形态，由 DBManagerView 经上下文注入，不依赖 Pinia；
+ *   ManagerApi 经工厂入参 getApi 惰性读取，prop 切换后自动走新实例）
  *
  * 匹配语义：对列类型（如 VARCHAR(255)、Decimal(6, 4)）按 typeMappings 的
  * sort 升序（越小越优先）进行正则表达式匹配（忽略大小写），取第一条命中
  * 规则的 javaType；全部未命中时由调用方回退内置类型映射表
  */
-import { defineStore } from 'pinia'
+import { reactive } from 'vue'
 import { message } from 'antdv-next'
-import type { Settings, TypeMapping } from '@/types/model'
-import { getManagerApi, errorMessageOf } from '@/api/manager-api'
+import { useDBManagerContext } from './context'
+import type { ManagerApi, Settings, TypeMapping } from '@/types/model'
+import { errorMessageOf } from '@/api/manager-api'
 import { uid } from '@/utils/id'
 
 function clone<T>(v: T): T {
@@ -30,24 +33,26 @@ export const SETTINGS_JAVA_TYPES = [
   'Timestamp',
 ] as const
 
-/** 在途加载 Promise：并发调用方共享同一次加载并等待其完成；结束后清空（失败可重试） */
-let initInFlight: Promise<void> | null = null
+/** 工厂依赖 */
+export interface SettingsDeps {
+  getApi: () => ManagerApi
+}
 
-export const useSettingsStore = defineStore('settings', {
-  state: () => ({
+export function createSettingsStore(deps: SettingsDeps) {
+  /** 在途加载 Promise：并发调用方共享同一次加载并等待其完成；结束后清空（失败可重试） */
+  let initInFlight: Promise<void> | null = null
+  return reactive({
     loaded: false,
     loading: false,
     indexTypes: [] as string[],
     typeMappings: [] as TypeMapping[],
-  }),
 
-  getters: {
     /** 索引类型选项（空时兜底三常规类型，避免设置未加载时无可选项） */
-    indexTypeOptions(): string[] {
+    get indexTypeOptions(): string[] {
       return this.indexTypes.length ? this.indexTypes : ['UNIQUE', 'NORMAL', 'FULLTEXT']
     },
     /** 编译后的规则（按 sort 升序、跳过空/非法正则），保留原始序号用于回显 */
-    compiledRules(): Array<{ re: RegExp; javaType: string; index: number }> {
+    get compiledRules(): Array<{ re: RegExp; javaType: string; index: number }> {
       const out: Array<{ re: RegExp; javaType: string; index: number }> = []
       ;[...this.typeMappings]
         .sort((a, b) => a.sort - b.sort)
@@ -62,9 +67,7 @@ export const useSettingsStore = defineStore('settings', {
         })
       return out
     },
-  },
 
-  actions: {
     /**
      * 加载设置（幂等；并发调用共享同一次在途加载）。
      * 此前"loading 时直接早退"会让后续 await init() 的调用方在加载
@@ -77,7 +80,7 @@ export const useSettingsStore = defineStore('settings', {
         this.loading = true
         initInFlight = (async () => {
           try {
-            const settings = await getManagerApi().getSettings()
+            const settings = await deps.getApi().getSettings()
             this.indexTypes = (settings.indexTypes || []).map(String)
             this.typeMappings = (settings.typeMappings || []).map(clone)
             this.loaded = true
@@ -95,7 +98,7 @@ export const useSettingsStore = defineStore('settings', {
     async save(settings: Settings) {
       const saved = clone(settings)
       // 异步契约：api 保存成功后才更新本地状态（失败时本地保持旧值）
-      await getManagerApi().saveSettings(saved)
+      await deps.getApi().saveSettings(saved)
       this.indexTypes = (saved.indexTypes || []).map(String)
       this.typeMappings = (saved.typeMappings || []).map(clone)
       this.loaded = true
@@ -124,5 +127,12 @@ export const useSettingsStore = defineStore('settings', {
     draftKey(): string {
       return uid('mapping-')
     },
-  },
-})
+  })
+}
+
+export type SettingsStore = ReturnType<typeof createSettingsStore>
+
+/** 子组件取用设置仓库（须处于 DBManagerView 组件树内） */
+export function useSettingsStore(): SettingsStore {
+  return useDBManagerContext().settings
+}

@@ -1,16 +1,18 @@
 /**
  * 画布仓库：视口（平移/缩放）、选择、交互状态机（框选/拖卡/连线）、
  * 隐藏表（Table.hidden 派生）、右键菜单、剪贴板、对齐/自动美化布局等
+ * （reactive 对象工厂形态，由 DBManagerView 经上下文注入，不依赖 Pinia）
  */
-import { defineStore } from 'pinia'
+import { reactive } from 'vue'
 import { message } from 'antdv-next'
+import { useDBManagerContext } from './context'
 import type { TableAddPayload } from '@/types/model'
 import type { Point, Rect, Side } from '@/utils/geometry'
 import { CARD_WIDTH, rectCenter, rectContains } from '@/utils/geometry'
 import { computeAutoLayout } from '@/utils/layout'
-import { useModelStore } from './model'
-import { useUiStore } from './ui'
-import { useHistoryStore } from './history'
+import type { ModelStore } from './model'
+import type { UiStore } from './ui'
+import type { HistoryStore } from './history'
 
 export const MIN_ZOOM = 0.25
 export const MAX_ZOOM = 5
@@ -39,8 +41,15 @@ export interface ContextMenuState {
 
 type Mode = 'pan' | 'select' | 'dragCards' | 'connect' | null
 
-export const useCanvasStore = defineStore('canvas', {
-  state: () => ({
+/** 工厂依赖（惰性取用，与原先 action 内 useXxxStore() 的运行时语义一致） */
+export interface CanvasDeps {
+  getModel: () => ModelStore
+  getUi: () => UiStore
+  getHistory: () => HistoryStore
+}
+
+export function createCanvasStore(deps: CanvasDeps) {
+  return reactive({
     rootEl: null as HTMLElement | null,
     zoom: 1,
     panX: 0,
@@ -80,21 +89,19 @@ export const useCanvasStore = defineStore('canvas', {
     /** 自动美化/对齐后卡片位置过渡动画进行中（卡片渲染层启用 left/top 过渡） */
     layoutAnimating: false,
     _everFit: false,
-  }),
 
-  getters: {
-    zoomPercent(): number {
+    get zoomPercent(): number {
       return Math.round(this.zoom * 100)
     },
     /** 世界层变换样式 */
-    worldStyle(): Record<string, string> {
+    get worldStyle(): Record<string, string> {
       return {
         transform: `translate(${this.panX}px, ${this.panY}px) scale(${this.zoom})`,
         transformOrigin: '0 0',
       }
     },
     /** 当前视口对应的世界矩形 */
-    viewportWorldRect(): Rect {
+    get viewportWorldRect(): Rect {
       return {
         x: (0 - this.panX) / this.zoom,
         y: (0 - this.panY) / this.zoom,
@@ -102,18 +109,16 @@ export const useCanvasStore = defineStore('canvas', {
         h: this.viewportH / this.zoom,
       }
     },
-    visibleTableIds(): string[] {
-      const model = useModelStore()
+    get visibleTableIds(): string[] {
+      const model = deps.getModel()
       return model.tables.filter((t) => !t.hidden).map((t) => t.id)
     },
     /** 隐藏表 id 列表（由 Table.hidden 派生，不再单独持久化） */
-    hiddenTableIds(): string[] {
-      const model = useModelStore()
+    get hiddenTableIds(): string[] {
+      const model = deps.getModel()
       return model.tables.filter((t) => t.hidden).map((t) => t.id)
     },
-  },
 
-  actions: {
     /* ==================== 初始化 ==================== */
     init(rootEl: HTMLElement) {
       this.rootEl = rootEl
@@ -160,7 +165,7 @@ export const useCanvasStore = defineStore('canvas', {
       this.animateTo({ zoom: 1 })
     },
     cardRectOf(id: string): Rect | null {
-      const t = useModelStore().tableById(id)
+      const t = deps.getModel().tableById(id)
       if (!t) return null
       const size = this.cardSizes[id] || { w: CARD_WIDTH, h: 140 }
       return { x: t.x ?? 0, y: t.y ?? 0, w: size.w, h: size.h }
@@ -369,7 +374,7 @@ export const useCanvasStore = defineStore('canvas', {
       if (this.mode || e.button !== 0) return
       // 布局过渡动画中开始拖拽：立即终止过渡，避免拖拽跟手性被 CSS 过渡拖慢
       if (this.layoutAnimating) this.layoutAnimating = false
-      const model = useModelStore()
+      const model = deps.getModel()
       const additive = e.ctrlKey || e.shiftKey
       if (additive) {
         this.selectTable(tableId, true)
@@ -418,14 +423,14 @@ export const useCanvasStore = defineStore('canvas', {
         if (Math.hypot(local.x - this.selectDraft.x0, local.y - this.selectDraft.y0) > 3)
           this.captureOnce(e)
       } else if (this.mode === 'dragCards' && this.dragDraft) {
-        const model = useModelStore()
+        const model = deps.getModel()
         const world = this.screenToWorld(this.localPoint(e))
         const dx = world.x - this.dragDraft.startWorld.x
         const dy = world.y - this.dragDraft.startWorld.y
         if (!this.dragDraft.moved && Math.hypot(dx, dy) * this.zoom < 3) return
         if (!this.dragDraft.moved) {
           this.dragDraft.moved = true
-          useHistoryStore().capture(model.takeSnapshot())
+          deps.getHistory().capture(model.takeSnapshot())
         }
         // 拖拽阈值已过，此时捕获指针（拖出画布也能持续跟踪）
         this.captureOnce(e)
@@ -481,7 +486,7 @@ export const useCanvasStore = defineStore('canvas', {
         const moved = this.dragDraft.moved
         this.dragDraft = null
         if (moved) {
-          const model = useModelStore()
+          const model = deps.getModel()
           model.persistTables(ids).catch(() => undefined)
         }
       } else if (mode === 'connect' && this.connectDraft) {
@@ -498,8 +503,8 @@ export const useCanvasStore = defineStore('canvas', {
     },
     /** 完成连线：校验重复后打开新增导航对话框 */
     finishConnect(fromTableId: string, hoverTableId: string | null) {
-      const ui = useUiStore()
-      const model = useModelStore()
+      const ui = deps.getUi()
+      const model = deps.getModel()
       if (!hoverTableId || hoverTableId === fromTableId) return
       if (model.hasNavigateBetween(fromTableId, hoverTableId)) {
         message.warning('两个表之间已存在导航关系，不能重复创建')
@@ -538,7 +543,7 @@ export const useCanvasStore = defineStore('canvas', {
       return this.showIndexIds.includes(tableId)
     },
     toggleHiddenTable(tableId: string) {
-      const model = useModelStore()
+      const model = deps.getModel()
       const next = !this.hiddenTableIds.includes(tableId)
       if (next) this.selectedIds = this.selectedIds.filter((x) => x !== tableId)
       model.setTableHidden(tableId, next).catch((e: unknown) => {
@@ -546,7 +551,7 @@ export const useCanvasStore = defineStore('canvas', {
       })
     },
     hideTable(tableId: string) {
-      const model = useModelStore()
+      const model = deps.getModel()
       if (!this.hiddenTableIds.includes(tableId)) {
         this.selectedIds = this.selectedIds.filter((x) => x !== tableId)
         model.setTableHidden(tableId, true).catch((e: unknown) => {
@@ -555,7 +560,7 @@ export const useCanvasStore = defineStore('canvas', {
       }
     },
     showTable(tableId: string) {
-      const model = useModelStore()
+      const model = deps.getModel()
       if (this.hiddenTableIds.includes(tableId)) {
         model.setTableHidden(tableId, false).catch((e: unknown) => {
           message.error((e as Error)?.message || '显示表失败')
@@ -570,7 +575,7 @@ export const useCanvasStore = defineStore('canvas', {
      * 相关联的表彼此靠近、孤立表散开不重叠，结果按 20px 网格对齐。
      */
     async autoLayout() {
-      const model = useModelStore()
+      const model = deps.getModel()
       const ids = [...this.visibleTableIds]
       if (!ids.length) {
         message.warning('画布上没有可见的表卡片')
@@ -592,7 +597,7 @@ export const useCanvasStore = defineStore('canvas', {
         }
       }
       const positions = computeAutoLayout(nodes, edges)
-      const history = useHistoryStore()
+      const history = deps.getHistory()
       history.capture(model.takeSnapshot())
       this.layoutAnimating = true
       for (const [id, p] of Object.entries(positions)) {
@@ -617,7 +622,7 @@ export const useCanvasStore = defineStore('canvas', {
      * 水平/垂直均匀分布（首尾不动，等间距分布中间卡片）
      */
     async alignSelection(mode: AlignMode) {
-      const model = useModelStore()
+      const model = deps.getModel()
       const ids = this.selectedIds.filter((id) => this.visibleTableIds.includes(id))
       const isDistribute = mode === 'hdistribute' || mode === 'vdistribute'
       const need = isDistribute ? 3 : 2
@@ -703,7 +708,7 @@ export const useCanvasStore = defineStore('canvas', {
         }
       }
 
-      const history = useHistoryStore()
+      const history = deps.getHistory()
       history.capture(model.takeSnapshot())
       this.layoutAnimating = true
       for (const mv of moves) {
@@ -729,7 +734,7 @@ export const useCanvasStore = defineStore('canvas', {
 
     /* ==================== 复制 / 粘贴 ==================== */
     copySelection() {
-      const model = useModelStore()
+      const model = deps.getModel()
       const ids = this.selectedIds.length ? this.selectedIds : []
       const drafts = ids
         .map((id) => model.buildCopyDraft(id))
@@ -738,9 +743,9 @@ export const useCanvasStore = defineStore('canvas', {
       return drafts.length
     },
     async pasteAt(world: Point) {
-      const model = useModelStore()
+      const model = deps.getModel()
       if (!this.clipboard.length) return
-      const history = useHistoryStore()
+      const history = deps.getHistory()
       history.capture(model.takeSnapshot())
       const created: string[] = []
       let i = 0
@@ -766,5 +771,12 @@ export const useCanvasStore = defineStore('canvas', {
       this.selectedNavigateId = this.selectedNavigateId === id ? '' : id
       if (id) this.selectedIds = []
     },
-  },
-})
+  })
+}
+
+export type CanvasStore = ReturnType<typeof createCanvasStore>
+
+/** 子组件取用画布仓库（须处于 DBManagerView 组件树内） */
+export function useCanvasStore(): CanvasStore {
+  return useDBManagerContext().canvas
+}

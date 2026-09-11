@@ -1,44 +1,48 @@
 /**
  * 模板仓库：代码模板 CRUD + 代码生成（zip 打包下载 / 上传替换）
- * 模板读写经 ManagerApi（Template.templateName ↔ 应用内部 CodeTemplate.name 适配）
+ * （reactive 对象工厂形态，由 DBManagerView 经上下文注入，不依赖 Pinia；
+ *   模板读写经 ManagerApi，Template.templateName ↔ 应用内部 CodeTemplate.name 适配）
  */
-import { defineStore } from 'pinia'
+import { reactive } from 'vue'
 import { message } from 'antdv-next'
 import JSZip from 'jszip'
-import type { CodeTemplate, GeneratedFile, TableVO, Template } from '@/types/model'
-import { getManagerApi, errorMessageOf } from '@/api/manager-api'
+import { useDBManagerContext } from './context'
+import type { CodeTemplate, GeneratedFile, ManagerApi, TableVO, Template } from '@/types/model'
+import { errorMessageOf } from '@/api/manager-api'
 import { renderTemplate } from '@/utils/render'
 import { uid } from '@/utils/id'
-import { useModelStore } from './model'
+import type { ModelStore } from './model'
 
 function clone<T>(v: T): T {
   return JSON.parse(JSON.stringify(v)) as T
 }
 
-export const useTemplateStore = defineStore('template', {
-  state: () => ({
+/** 工厂依赖 */
+export interface TemplateDeps {
+  getApi: () => ManagerApi
+  getModel: () => ModelStore
+}
+
+export function createTemplateStore(deps: TemplateDeps) {
+  return reactive({
     loaded: false,
     loading: false,
     templates: [] as CodeTemplate[],
     /** 实时编辑预览状态 */
     previewTableId: '',
-  }),
 
-  getters: {
-    templateNames(): string[] {
+    get templateNames(): string[] {
       return this.templates.map((t) => t.name)
     },
-    templateNamesSet(): Set<string> {
+    get templateNamesSet(): Set<string> {
       return new Set(this.templates.map((t) => t.name))
     },
-  },
 
-  actions: {
     async init() {
       if (this.loaded || this.loading) return
       this.loading = true
       try {
-        this.templates = (await getManagerApi().getTemplates()).map((t) => ({
+        this.templates = (await deps.getApi().getTemplates()).map((t) => ({
           id: t.id,
           name: t.templateName,
           content: t.content,
@@ -52,7 +56,7 @@ export const useTemplateStore = defineStore('template', {
     },
     async saveTemplate(draft: CodeTemplate) {
       try {
-        const api = getManagerApi()
+        const api = deps.getApi()
         if (draft.id) {
           const spec: Template = { id: draft.id, templateName: draft.name, content: draft.content }
           await api.updateTemplate(spec)
@@ -72,7 +76,7 @@ export const useTemplateStore = defineStore('template', {
     },
     async removeTemplate(id: string) {
       try {
-        await getManagerApi().removeTemplate(id)
+        await deps.getApi().removeTemplate(id)
         this.templates = this.templates.filter((t) => t.id !== id)
       } catch (e) {
         message.error(errorMessageOf(e, '模板删除失败'))
@@ -90,7 +94,7 @@ export const useTemplateStore = defineStore('template', {
 
     /** 渲染单个模板（预览用，失败返回带 error 的结果） */
     renderFor(template: Pick<CodeTemplate, 'name' | 'content'>, tableId: string) {
-      const model = useModelStore()
+      const model = deps.getModel()
       const vo = model.getVO(tableId)
       if (!vo) return null
       const category = model.categoryById(vo.categoryId)
@@ -102,7 +106,7 @@ export const useTemplateStore = defineStore('template', {
      * @param tableIds 目标表
      */
     generateFiles(tableIds: string[]): { files: GeneratedFile[]; errors: string[] } {
-      const model = useModelStore()
+      const model = deps.getModel()
       const files: GeneratedFile[] = []
       const errors: string[] = []
       for (const tableId of tableIds) {
@@ -184,12 +188,19 @@ export const useTemplateStore = defineStore('template', {
         return null
       }
       const zip = await this.buildZip(files)
-      await getManagerApi().replace(zip)
+      await deps.getApi().replace(zip)
       return true
     },
 
     newTemplateId(): string {
       return uid('tpl-')
     },
-  },
-})
+  })
+}
+
+export type TemplateStore = ReturnType<typeof createTemplateStore>
+
+/** 子组件取用模板仓库（须处于 DBManagerView 组件树内） */
+export function useTemplateStore(): TemplateStore {
+  return useDBManagerContext().template
+}

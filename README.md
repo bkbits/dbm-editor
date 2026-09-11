@@ -7,6 +7,7 @@
 ## 目录
 
 - [快速开始](#快速开始)
+- [库构建与宿主接入](#库构建与宿主接入)
 - [功能总览](#功能总览)
 - [页面封装与数据能力注入（DBManagerView / ManagerApi）](#页面封装与数据能力注入dbmanagerview--managerapi)
 - [数据模型概览](#数据模型概览)
@@ -26,7 +27,7 @@
 | 前端框架  | Vue 3（Composition API + `<script setup>`）                                                                                        |
 | UI 组件库 | antdv-next                                                                                                                         |
 | 图标库    | @lucide/vue                                                                                                                        |
-| 状态管理  | Pinia                                                                                                                              |
+| 状态管理  | 组件级状态注入（Vue `reactive` + `provide`/`inject`，无 Pinia 依赖）                                                               |
 | 模板引擎  | Eta（代码生成）                                                                                                                    |
 | 样式      | Sass（scss 标准）                                                                                                                  |
 | 数据能力  | ManagerApi 接口体系（内置 DemoManagerApi 演示实现，可注入自定义实现）                                                              |
@@ -70,19 +71,60 @@ bun run dev
 
 ### 常用命令速查
 
-| 命令                              | 说明                                                                      |
-| --------------------------------- | ------------------------------------------------------------------------- |
-| `bun run dev`（= `vp dev`）       | 启动开发服务器（localhost:3000，热更新）                                  |
-| `bun run build`（= `vp build`）   | 生产构建，产物输出到 `dist/`                                              |
-| `bun run preview`                 | 本地预览生产构建                                                          |
-| `bun run typecheck`               | 全量类型检查（`vue-tsc --noEmit`）                                        |
-| `vp check`                        | Vite+ 内置：格式 + lint + 类型检查（staged 提交时自动执行）               |
-| `vp install`                      | 安装依赖                                                                  |
-| `bun scripts/eta-smoke.mjs`       | Eta 模板引擎 API 冒烟测试（模板功能改动前的快速回归）                     |
-| `python3 scripts/check-readme.py` | README 链接 / 锚点 / 表格自检                                             |
-| `bash scripts/snapshot.sh`        | 快照当前源码到 `snapshot/`（见[源码快照与修改补丁](#源码快照与修改补丁)） |
-| `bash scripts/patch.sh`           | 保存当前修改的 patch 到 `patch/`                                          |
-| `bash scripts/package.sh`         | 打包源码为交付 zip（`download/graph-db-model-editor.zip`）                |
+| 命令                              | 说明                                                                                                                            |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `bun run dev`（= `vp dev`）       | 启动开发服务器（localhost:3000，热更新）                                                                                        |
+| `bun run build`（= `vp build`）   | 库构建：产出 `dist/DBManager.js` + `dist/DBManager.d.ts` 两个文件（CSS 已内联进 JS，详见[库构建与宿主接入](#库构建与宿主接入)） |
+| `bun run preview`                 | 本地预览生产构建                                                                                                                |
+| `bun run typecheck`               | 全量类型检查（`vue-tsc --noEmit`）                                                                                              |
+| `vp check`                        | Vite+ 内置：格式 + lint + 类型检查（staged 提交时自动执行）                                                                     |
+| `vp install`                      | 安装依赖                                                                                                                        |
+| `bun scripts/eta-smoke.mjs`       | Eta 模板引擎 API 冒烟测试（模板功能改动前的快速回归）                                                                           |
+| `python3 scripts/check-readme.py` | README 链接 / 锚点 / 表格自检                                                                                                   |
+| `bash scripts/snapshot.sh`        | 快照当前源码到 `snapshot/`（见[源码快照与修改补丁](#源码快照与修改补丁)）                                                       |
+| `bash scripts/patch.sh`           | 保存当前修改的 patch 到 `patch/`                                                                                                |
+| `bash scripts/package.sh`         | 打包源码为交付 zip（`download/graph-db-model-editor.zip`）                                                                      |
+
+## 库构建与宿主接入
+
+本项目既是可运行的演示应用（`vp dev`），也是一个**可发布的组件库**：`bun run build` 执行库模式构建，最终产物仅两个文件——
+
+| 产物                  | 内容                                                                                                        |
+| --------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `dist/DBManager.js`   | ES 模块单文件（约 420 KB）：DBManagerView 组件 + 全部状态/工具/演示实现，CSS 已内联（运行时注入 `<style>`） |
+| `dist/DBManager.d.ts` | 滚动合并的类型声明：`DBManagerView` 组件类型 + `ManagerApi` 接口与全部 DTO/VO 类型                          |
+
+构建配置要点（`vite.config.ts`）：
+
+- **外部依赖**（peerDependencies，由宿主项目提供，不打包进产物）：`vue` / `antdv-next` / `@lucide/vue`
+- 其余依赖（eta / highlight.js / jszip 等）与全部应用代码、组件 scoped 样式、全局样式一并打进 `DBManager.js`
+- 类型经 `vite-plugin-dts`（`bundleTypes`，底层 api-extractor）由 `src/index.ts` 滚动合并为单一声明文件
+- CSS 内联由 `scripts/inline-lib-css.mjs` 在 `vp build` 后完成（rolldown 底座下 `vite-plugin-lib-inject-css` 不生效，脚本等效替代并做产物白名单清理）
+
+宿主项目接入方式：
+
+```bash
+# 宿主项目需自行安装 peer 依赖
+npm i vue antdv-next @lucide/vue
+```
+
+```ts
+// 宿主入口（自带组件注册与全局样式注入，无需额外 import css）
+import { createApp } from 'vue'
+import Antd from 'antdv-next'
+import 'antdv-next/dist/reset.css'
+import { DBManagerView, type ManagerApi, type UpdateTablePosDTO } from 'dbmanager-lib'
+
+const myApi: ManagerApi = {
+  /* 实现全部异步契约方法（返回 Promise，校验失败 reject 中文提示） */
+} as ManagerApi
+
+createApp(() => h(DBManagerView, { api: myApi }))
+  .use(Antd)
+  .mount('#app')
+```
+
+> 库模式构建后 `dist` 不含演示页 HTML——演示应用通过 `vp dev`（入口 `index.html` → `src/main.ts`）访问；仓库内 `test/host-smoke.html` 为宿主接入冒烟页（直接加载 `dist/DBManager.js` 验证外部依赖解析与样式内联），`test/` 目录已 gitignore。
 
 ## 功能总览
 
@@ -214,9 +256,10 @@ const myApi: ManagerApi = {
 
 注入链路：
 
-- **DBManagerView** 解析 `api` 属性（缺省共享 `sharedDemoApi` 单例），`provide` 注入子组件并 `setActiveApi` 写入全局激活实例；切换 api 时自动全量重载各仓库数据
+- **DBManagerView** 解析 `api` 属性（缺省共享 `sharedDemoApi` 单例）后做两件事：`provide` 注入子组件（`useManagerApi()` 取用响应式引用）；调用 `createDBManagerState(() => api)` 创建整套状态仓库并 `provide` 注入子树——**每个 DBManagerView 实例一套状态**，不依赖 Pinia 等应用级全局单例
+- **状态仓库**（`src/stores/`）：theme / ui / model / canvas / dict / template / settings / history 八个仓库均为 Vue `reactive` 对象（state 字段 + getter 访问器 + action 方法），子组件经 `useXxxStore()` 注入取用（函数名与早期 Pinia 版本一致）；仓库间相互引用与 api 读取均经工厂入参的惰性取值函数建立，切换 api 时 DBManagerView 自动全量重载各仓库数据
 - **子组件**（如数据库导入 / 代码替换对话框）通过 `useManagerApi()`（`src/api/manager-api.ts`）注入响应式引用，在合适位置 `await` 调用 `api.importFromDB()` / `api.replace(zip)` 等异步方法
-- **Pinia store** 无法使用 inject，统一经 `getManagerApi()` 读取全局激活实例；模型变更遵循细粒度异步契约——每次操作先改本地状态，再 `await` 对应 api 方法（`addTable` / `updateTable` / `removeTable` / `updateTablePos` / `addNavigate` …）即时持久化，持久化失败（reject）自动回滚快照；撤销/重做恢复后通过 diff 同步（`syncToApi`）把持久层对齐到本地状态
+- **模型变更**遵循细粒度异步契约——每次操作先改本地状态，再 `await` 对应 api 方法（`addTable` / `updateTable` / `removeTable` / `updateTablePos` / `addNavigate` …）即时持久化，持久化失败（reject）自动回滚快照；撤销/重做恢复后通过 diff 同步（`syncToApi`）把持久层对齐到本地状态
 
 ### ManagerApi 接口清单
 
@@ -289,24 +332,25 @@ Logger.setLevel('INFO') // 或 Logger.level = 'INFO' / Logger.getLevel()
 
 ```
 ├─ index.html
-├─ vite.config.ts          # Vite+ 配置（@ 别名 / 端口 3000 / allowedHosts / lint / fmt / staged）
+├─ vite.config.ts          # Vite+ 配置（@ 别名 / 端口 3000 / allowedHosts / lint / fmt / staged / 库构建）
 ├─ tsconfig.json
 ├─ docs/screenshots/       # 界面截图
-├─ scripts/                # 开发辅助脚本（Eta 冒烟测试 / README 自检 / 快照 / patch / 打包）
+├─ scripts/                # 开发辅助脚本（Eta 冒烟 / README 自检 / 快照 / patch / 打包 / 库产物 CSS 内联）
 ├─ snapshot/               # 源码快照存档（scripts/snapshot.sh 生成，gitignore）
 ├─ patch/                  # 修改补丁存档（scripts/patch.sh 生成，gitignore）
 └─ src/
-   ├─ main.ts              # 入口（注册 Pinia / antdv-next / 主题）
+   ├─ index.ts             # 库入口（导出 DBManagerView 组件 + ManagerApi 契约类型）
+   ├─ main.ts              # 演示应用入口（注册 antdv-next，无 Pinia）
    ├─ App.vue              # 根组件（渲染 DBManagerView，可传入自定义 api）
    ├─ api/                 # ManagerApi 注入体系（manager-api）+ DemoManagerApi 演示实现
    ├─ composables/         # useDragSort 行拖拽排序（字段/设置规则共用）
    ├─ log/                 # 统一日志器 Logger（级别过滤：DEBUG/INFO/WARN/ERROR/FATAL/DISABLED）
    ├─ mock/                # 种子数据 + demo 内存数据库（localStorage 持久化）
-   ├─ stores/              # Pinia：model / canvas / dict / template / theme / ui / history / settings
+   ├─ stores/              # 状态注入体系：context（工厂+provide/inject）+ model / canvas / dict / template / theme / ui / history / settings 八个 reactive 仓库
    ├─ types/               # 数据模型类型（含 ManagerApi 契约，与规格说明书一致）
    ├─ utils/               # 字符串 / Java 类型映射 / 导航推导 / 几何 / 力导向布局 / Eta 渲染 / 高亮
-   ├─ styles/              # CSS 变量（亮暗双主题）/ 全局样式 / hljs 配色
-   ├─ views/               # DBManagerView（页面封装）/ EditorView / DictView / TemplateView / SettingsView
+   ├─ styles/              # CSS 变量（亮暗双主题）/ 全局样式 / hljs 配色（库构建时内联进 JS）
+   ├─ views/               # DBManagerView（页面封装+状态注入入口）/ EditorView / DictView / TemplateView / SettingsView
    └─ components/
       ├─ layout/           # AppHeader
       ├─ outline/          # 左侧表格大纲
@@ -398,6 +442,14 @@ DemoManagerApi 将模型持久化到浏览器 `localStorage`（key 为 `gdbme:db
 | 代码预览（高亮 / 可复制）                      | 系统设置 · 索引类型（暗色）                                 |
 | ---------------------------------------------- | ----------------------------------------------------------- |
 | ![代码预览](docs/screenshots/code-preview.png) | ![索引类型](docs/screenshots/settings-index-types-dark.png) |
+
+宿主项目冒烟页（`test/host-smoke.html`，直连构建产物 `dist/DBManager.js`，宿主侧仅提供 vue / antdv-next / @lucide/vue 三个 peer 依赖）：
+
+| 库产物直连宿主加载                               |
+| ------------------------------------------------ |
+| ![宿主冒烟](docs/screenshots/host-smoke-lib.png) |
+
+对照：同一组件在演示应用中的完整形态——
 
 | 页面封装 · DBManagerView（亮色）                      | 页面封装 · DBManagerView（暗色）                     |
 | ----------------------------------------------------- | ---------------------------------------------------- |

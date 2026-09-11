@@ -3,32 +3,51 @@
   "version": "1.0.0",
   "private": true,
   "description": "图形数据库模型编辑工具 - 可视化设计表结构、字段、索引及表间导航关系，支持模板代码生成",
+  "files": [
+    "dist"
+  ],
   "type": "module",
+  "main": "dist/DBManager.js",
+  "module": "dist/DBManager.js",
+  "types": "dist/DBManager.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/DBManager.d.ts",
+      "import": "./dist/DBManager.js"
+    }
+  },
   "scripts": {
     "dev": "vp dev",
-    "build": "vp build",
+    "build": "vp build && node scripts/inline-lib-css.mjs",
     "preview": "vp preview",
     "typecheck": "vue-tsc --noEmit",
     "prepare": "vp config"
   },
   "dependencies": {
-    "@lucide/vue": "^1.44.0",
-    "antdv-next": "^1.5.4",
     "eta": "^4.6.0",
     "highlight.js": "^11.12.0",
     "highlightjs-eta": "^0.1.0",
-    "jszip": "^3.10.2",
-    "pinia": "^4.0.3",
-    "vue": "^3.5.42"
+    "jszip": "^3.10.2"
   },
   "devDependencies": {
+    "@lucide/vue": "^1.44.0",
+    "@microsoft/api-extractor": "^7.59.1",
     "@types/node": "^26.5.0",
     "@vitejs/plugin-vue": "^6.0.8",
+    "antdv-next": "^1.5.4",
     "sass": "^1.104.0",
     "typescript": "~5.9.3",
     "vite": "npm:@voidzero-dev/vite-plus-core@0.3.1",
+    "vite-plugin-dts": "^5.1.0",
+    "vite-plugin-lib-inject-css": "^2.2.2",
     "vite-plus": "0.3.1",
+    "vue": "^3.5.42",
     "vue-tsc": "^3.3.11"
+  },
+  "peerDependencies": {
+    "@lucide/vue": "^1.44.0",
+    "antdv-next": "^1.5.4",
+    "vue": "^3.5.42"
   },
   "overrides": {
     "vite": "npm:@voidzero-dev/vite-plus-core@0.3.1"

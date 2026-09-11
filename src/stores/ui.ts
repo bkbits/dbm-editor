@@ -1,7 +1,9 @@
 /**
  * UI 仓库：页面状态切换（不使用 vue-router，使用 v-if 管理）+ 各编辑对话框状态
+ * （reactive 对象工厂形态，由 DBManagerView 经上下文注入，不依赖 Pinia）
  */
-import { defineStore } from 'pinia'
+import { reactive } from 'vue'
+import { useDBManagerContext } from './context'
 import type { GeneratedFile } from '@/types/model'
 
 export type PageName = 'editor' | 'dict' | 'template' | 'settings'
@@ -29,8 +31,8 @@ export interface ReplaceConfirmDialogState {
   files: GeneratedFile[]
 }
 
-export const useUiStore = defineStore('ui', {
-  state: () => ({
+export function createUiStore() {
+  return reactive({
     /** 当前页面（v-if 切换） */
     page: 'editor' as PageName,
     tableEdit: {
@@ -44,8 +46,7 @@ export const useUiStore = defineStore('ui', {
     importDB: { open: false },
     codePreview: { open: false, tableId: null as string | null },
     replaceConfirm: { open: false, files: [] as GeneratedFile[] } as ReplaceConfirmDialogState,
-  }),
-  actions: {
+
     setPage(page: PageName) {
       this.page = page
     },
@@ -97,5 +98,12 @@ export const useUiStore = defineStore('ui', {
     closeReplaceConfirm() {
       this.replaceConfirm.open = false
     },
-  },
-})
+  })
+}
+
+export type UiStore = ReturnType<typeof createUiStore>
+
+/** 子组件取用 UI 仓库（须处于 DBManagerView 组件树内） */
+export function useUiStore(): UiStore {
+  return useDBManagerContext().ui
+}

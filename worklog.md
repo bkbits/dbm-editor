@@ -1,6 +1,37 @@
 # 工作日志
 
 ---
+Task ID: 15
+Agent: main (Super Z)
+Task: 去除 Pinia（改为 DBManagerView 注入全局状态）+ vite 构建改为库模式（仅产出 DBManager.js / DBManager.d.ts，vue/antdv-next/@lucide/vue 外部化）+ 提交推送
+
+Work Log:
+- 改前快照：snapshot/20260911161316.zip（133 文件）
+- **状态注入体系（替代 Pinia）**：src/stores/context.ts 新增——DBManagerState（theme/ui/settings/dict/template/history/model/canvas 八仓库）+ DBMANAGER_STATE_KEY 注入键 + createDBManagerState(getApi) 工厂（template/history/model 相互引用经「先声明后回填 + 惰性取值函数」解耦）+ useDBManagerContext()（子树外调用抛中文错误）
+- 八个仓库全部由 defineStore 改写为 createXxxStore(deps) 工厂返回 reactive 对象：state 字段直置、getter 改访问器（get x()，getter 函数返回闭包）、action 为方法（this=proxy 语义保持）、跨仓库引用改 deps.getXxx()（与原先 action 内 useXxxStore() 运行时取用等价）、getManagerApi() 全部改 deps.getApi()；useXxxStore() 函数名保持不变（子组件调用面零改动，仅注入来源从 Pinia 换成 context）；settings 的 initInFlight 在途 Promise 移入工厂闭包（实例级）；model.resetDemoData 的动态 import 解环改依赖直取
+- api/manager-api.ts：删除全局激活实例机制（setActiveApi/getManagerApi/activeApiRef）——store 经工厂 getApi() 读 api；useManagerApi 兜底改 sharedDemoApi
+- DBManagerView.vue：setup 中 createDBManagerState(() => apiRef.value) + provide(DBMANAGER_STATE_KEY)；theme.init() 移入（同步早于首帧渲染，无闪烁）；api 切换重载逻辑改用 state.* ；新增 import '@/styles/index.scss'（库样式自包含）；main.ts 移除 createPinia 与 useThemeStore 预初始化
+- package.json：删除 pinia 依赖；vue/antdv-next/@lucide/vue 移至 peerDependencies（devDependencies 保留供演示工作区）；新增 main/module/types/exports/files 库字段；build 脚本改「vp build && node scripts/inline-lib-css.mjs」
+- **库模式构建**（vite.config.ts）：build.lib（entry=src/index.ts、formats=['es']、fileName=()=>'DBManager.js'）+ rollupOptions.external 正则（vue|antdv-next|@lucide/vue 及其子路径）+ copyPublicDir:false（favicon 不入产物）；插件：vite-plugin-dts 5.1.0（entryRoot:'src'、outDirs:['dist']、bundleTypes:true——v5 选项名 rollupTypes→bundleTypes、outDir→outDirs，@microsoft/api-extractor 需显式安装）+ vite-plugin-lib-inject-css
+- src/index.ts 新建库入口：export default DBManagerView + export type * from types/model
+- **rolldown 坑**：vite-plus-core 底座为 rolldown，libInjectCss 未生效（CSS 独立成 dist/index.css 且 JS 中保留 import './index.css'）→ 新建 scripts/inline-lib-css.mjs 后处理：读 index.css → JSON.stringify 转义 → 替换 import 语句为运行时 <style data-dbmanager> 注入代码 → 删除 css 文件 → dist 白名单清理（仅保留 DBManager.js/.d.ts）；d.ts 的 api-extractor 滚动合并正常后产物收敛为单一文件
+- 验证：
+  * bun run typecheck 通过；vp check --fix 通过（51 文件 0 告警）；check-readme.py 通过（30 标题）
+  * vp build：dist 仅 DBManager.js（422.8KB，CSS 内联后 474KB）+ DBManager.d.ts（10.4KB，导出 DBManagerView DefineComponent + ManagerApi + 全部 DTO 类型）；JS 外部引用仅 vue/antdv-next/@lucide/vue 三项（grep 验证）；无 vue 运行时内联
+  * Node 直连加载 dist/DBManager.js 因 antdv-next 的 dayjs 子路径无扩展名导入失败——属 Node ESM 严格解析限制，宿主打包器（vite/webpack）环境无此问题，改用真实浏览器验证
+  * **宿主冒烟**（test/host-smoke.html + host-smoke-main.ts，test/ 已 gitignore）：宿主页 createApp(h(DBManagerView)).use(Antd) 直连 dist/DBManager.js——10 卡片渲染、theme=light、<style data-dbmanager> 内联样式存在、Ctrl+A 全选 10 张、0 页面错误；截图 docs/screenshots/host-smoke-lib.png
+  * **演示应用全量回归**（agent-browser 1920×1080）：启动 getSettings/load 日志成对、10 卡片/10 导航线；Ctrl+A→10 选中、Ctrl+D→0；多选拖拽 updateTablePos 仅 1 次（批量契约保持）；Ctrl+Z 撤销（updateTable diff 同步）、Ctrl+S save+「所有修改已保存」；主题切换 dark/light；字典页（getDicts 5 字典）/模板页（getTemplates 4 模板）/设置页渲染；双击卡片表编辑对话框打开；全程 0 页面错误
+- README 同步：技术栈表（状态管理=reactive+provide/inject 无 Pinia）、命令速查（build=库构建两文件）、新增「库构建与宿主接入」章节（产物表/构建配置要点/宿主接入示例/peer 依赖说明）、注入链路重写、项目结构（src/index.ts、stores/context、styles 内联说明）、目录锚点、截图表新增宿主冒烟行（自检脚本表格串块特性需文字行隔离单列表格）
+- 留档：patch/20260911163351.patch（17 文件 76K）；download/graph-db-model-editor.zip（122 文件 5.6M）
+
+Stage Summary:
+- Pinia 完全移除（依赖、注册、全部 8 仓库）——状态为 DBManagerView 实例级注入（reactive 工厂 + provide/inject），useXxxStore() 调用面零改动；库组件可在同一宿主页面多实例共存且状态互不串扰
+- vite 构建改为库模式：产物仅 dist/DBManager.js（ES 单文件、样式内联、三个 UI 框架依赖外部化）+ dist/DBManager.d.ts（单一滚动声明）；宿主冒烟页验证外部解析与样式注入可用
+- 关键决策：① rolldown 底座 libInjectCss 失效 → 自写 inline-lib-css.mjs 等效内联 + 白名单清理；② vite-plugin-dts v5 选项更名（bundleTypes/outDirs）+ api-extractor 显式安装；③ CSS 随库内联（含 body 级基础样式）换取宿主零配置外观一致
+- 交付物：dist/DBManager.js + dist/DBManager.d.ts、patch/20260911163351.patch、download/graph-db-model-editor.zip、截图 docs/screenshots/host-smoke-lib.png
+- 本次修改已提交并推送 GitHub（bkbits/dbm-editor main）
+
+---
 Task ID: 14
 Agent: main (Super Z)
 Task: 配置 GitHub 远程仓库（bkbits/dbm-editor）+ 历史规整 + 建立任务完成即提交推送的约定

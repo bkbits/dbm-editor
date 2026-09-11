@@ -1,29 +1,34 @@
 /**
  * 字典仓库：数据字典 CRUD + 模糊搜索
- * 数据读写经 ManagerApi（新增字典的 id 由本地生成后随载荷提交）
+ * （reactive 对象工厂形态，由 DBManagerView 经上下文注入，不依赖 Pinia；
+ *   数据读写经 ManagerApi，新增字典的 id 由本地生成后随载荷提交）
  */
-import { defineStore } from 'pinia'
+import { reactive } from 'vue'
 import { message } from 'antdv-next'
-import type { Dict } from '@/types/model'
-import { getManagerApi, errorMessageOf } from '@/api/manager-api'
+import { useDBManagerContext } from './context'
+import type { Dict, ManagerApi } from '@/types/model'
+import { errorMessageOf } from '@/api/manager-api'
 import { uid } from '@/utils/id'
 
 function clone<T>(v: T): T {
   return JSON.parse(JSON.stringify(v)) as T
 }
 
-export const useDictStore = defineStore('dict', {
-  state: () => ({
+/** 工厂依赖 */
+export interface DictDeps {
+  getApi: () => ManagerApi
+}
+
+export function createDictStore(deps: DictDeps) {
+  return reactive({
     loaded: false,
     loading: false,
     dicts: [] as Dict[],
     keyword: '',
     selectedDictId: '',
-  }),
 
-  getters: {
     /** 模糊搜索：字典键/标签/注释 或 其值的 值键/标签/注释 命中即保留 */
-    filteredDicts(): Dict[] {
+    get filteredDicts(): Dict[] {
       const kw = this.keyword.trim().toLowerCase()
       if (!kw) return this.dicts
       return this.dicts.filter((d) => {
@@ -40,14 +45,14 @@ export const useDictStore = defineStore('dict', {
         )
       })
     },
-    selectedDict(): Dict | undefined {
+    get selectedDict(): Dict | undefined {
       return this.dicts.find((d) => d.id === this.selectedDictId)
     },
-    dictKeys(): string[] {
+    get dictKeys(): string[] {
       return this.dicts.map((d) => d.dictKey)
     },
     /** 某值键是否命中搜索（用于高亮） */
-    isValueHit(): (dictId: string, valueId: string) => boolean {
+    get isValueHit(): (dictId: string, valueId: string) => boolean {
       const kw = this.keyword.trim().toLowerCase()
       return (dictId, valueId) => {
         if (!kw) return false
@@ -61,14 +66,12 @@ export const useDictStore = defineStore('dict', {
         )
       }
     },
-  },
 
-  actions: {
     async init() {
       if (this.loaded || this.loading) return
       this.loading = true
       try {
-        this.dicts = (await getManagerApi().getDicts()).map(clone)
+        this.dicts = (await deps.getApi().getDicts()).map(clone)
         this.loaded = true
         if (!this.selectedDictId && this.dicts.length) this.selectedDictId = this.dicts[0].id
       } catch (e) {
@@ -81,7 +84,7 @@ export const useDictStore = defineStore('dict', {
       try {
         const dict = clone(draft)
         if (!dict.id) dict.id = uid('dict-')
-        const api = getManagerApi()
+        const api = deps.getApi()
         if (draft.id) {
           await api.updateDict(dict)
           const idx = this.dicts.findIndex((d) => d.id === draft.id)
@@ -99,7 +102,7 @@ export const useDictStore = defineStore('dict', {
     },
     async removeDict(id: string) {
       try {
-        await getManagerApi().removeDict(id)
+        await deps.getApi().removeDict(id)
         this.dicts = this.dicts.filter((d) => d.id !== id)
         if (this.selectedDictId === id) {
           this.selectedDictId = this.dicts[0]?.id ?? ''
@@ -121,5 +124,12 @@ export const useDictStore = defineStore('dict', {
         color: '',
       }
     },
-  },
-})
+  })
+}
+
+export type DictStore = ReturnType<typeof createDictStore>
+
+/** 子组件取用字典仓库（须处于 DBManagerView 组件树内） */
+export function useDictStore(): DictStore {
+  return useDBManagerContext().dict
+}
