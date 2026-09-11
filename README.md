@@ -70,6 +70,8 @@ const myApi: ManagerApi = {
 
 `src/api/demo-manager-api.ts`：数据存于内存（`src/mock/db.ts`）并持久化到 `localStorage`（`gdbme:db:v2`）；除 `replace` 的 zip 解析外全部同步完成，校验失败抛出含中文业务提示的 `Error`。数据重置：左下大纲面板「重置演示数据」按钮。
 
+所有方法经 Proxy 包装打印调用日志：每次契约调用在控制台输出 `[DemoManagerApi] <方法>() 入参` 与 `返回`（抛错时 `console.error` 后原样抛出），内部辅助方法互调不打日志——联调时可在控制台按 `[DemoManagerApi]` 过滤，直接观测各契约方法的实际调用时机与参数（如应用启动即触发 `getSettings` / `load`）。
+
 ## 快速开始
 
 前置：全局安装 Vite+ CLI（一次即可）

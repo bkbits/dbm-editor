@@ -30,6 +30,9 @@ export const SETTINGS_JAVA_TYPES = [
   'Timestamp',
 ] as const
 
+/** 在途加载 Promise：并发调用方共享同一次加载并等待其完成；结束后清空（失败可重试） */
+let initInFlight: Promise<void> | null = null
+
 export const useSettingsStore = defineStore('settings', {
   state: () => ({
     loaded: false,
@@ -62,19 +65,31 @@ export const useSettingsStore = defineStore('settings', {
   },
 
   actions: {
-    async init() {
-      if (this.loaded || this.loading) return
-      this.loading = true
-      try {
-        const settings = getManagerApi().getSettings()
-        this.indexTypes = (settings.indexTypes || []).map(String)
-        this.typeMappings = (settings.typeMappings || []).map(clone)
-        this.loaded = true
-      } catch (e) {
-        message.error(errorMessageOf(e, '设置加载失败'))
-      } finally {
-        this.loading = false
+    /**
+     * 加载设置（幂等；并发调用共享同一次在途加载）。
+     * 此前"loading 时直接早退"会让后续 await init() 的调用方在加载
+     * 完成前拿到空规则（自定义异步 api 实现场景的竞态）；现在
+     * 在途 Promise 被共享并真正被 await。
+     */
+    async init(): Promise<void> {
+      if (this.loaded) return
+      if (!initInFlight) {
+        this.loading = true
+        initInFlight = (async () => {
+          try {
+            const settings = getManagerApi().getSettings()
+            this.indexTypes = (settings.indexTypes || []).map(String)
+            this.typeMappings = (settings.typeMappings || []).map(clone)
+            this.loaded = true
+          } catch (e) {
+            message.error(errorMessageOf(e, '设置加载失败'))
+          } finally {
+            this.loading = false
+            initInFlight = null
+          }
+        })()
       }
+      await initInFlight
     },
 
     async save(settings: Settings) {

@@ -79,10 +79,13 @@ watch(
 )
 
 function initPage(page: string) {
+  // 设置（索引类型列表 + 列类型映射）是编辑器/导入能力共用的全局配置：
+  // 视图启动即预载（init 幂等）。此前仅惰性触发（打开表编辑/导入对话框、
+  // 进入设置页时才调 getSettings），应用启动阶段契约方法从未被调用。
+  settingsStore.init()
   if (page === 'editor') model.init()
   else if (page === 'dict') dict.init()
   else if (page === 'template') templateStore.init()
-  else if (page === 'settings') settingsStore.init()
 }
 </script>
 

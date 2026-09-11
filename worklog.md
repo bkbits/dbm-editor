@@ -299,3 +299,33 @@ Stage Summary:
 - 关键决策：提供 ComputedRef 注入（api prop 切换可传导）；store 经全局激活实例桥接（inject 与 getManagerApi 双通道）；模型变更统一「本地先行 + persist 失败回滚」事务模式；全量 save 语义取代原 13 个细粒度 REST 端点；localStorage v2 不升版本、旧设置读取时迁移并归一落盘；DBColumn.notNull 作为 demo 扩展可选字段保持导入体验
 - 交付物：snapshot/20260909151406.zip（改前快照）、patch/20260909153429.patch（本次改动）、download/graph-db-model-editor.zip（110 文件）+ download/README.md
 - 截图：docs/screenshots/dbmanager-light.png、dbmanager-dark.png、settings-index-types-dark.png
+
+---
+Task ID: 9
+Agent: main (Super Z)
+Task: DemoManagerApi 全部方法添加 console.log（入参/结果）+ 确认并修复 ManagerApi 设置 API 未在合适时机调用的问题
+
+Work Log:
+- 修改前快照：scripts/snapshot.sh → snapshot/20260911065109.zip（135 文件）
+- 问题确认（调用链路分析）：getSettings() 仅经 settingsStore.init() 惰性触发——打开表编辑对话框（TableEditDialog watch）、打开数据库导入对话框（ImportDBDialog watch）、用户切到设置页（initPage 'settings' 分支）、model.importFromDB 前置 ensure、resetDemoData 重载；应用默认页为 editor（ui store），启动时 initPage('editor') 只调 model.init() → api.load()，**getSettings() 在整个启动阶段从未被调用**；加载前索引类型下拉走硬编码兜底 ['UNIQUE','NORMAL','FULLTEXT']、导入类型推导回退内置映射。saveSettings() 调用链正常（SettingsView.save → settingsStore.save）
+- demo-manager-api.ts：新增 withCallLogging(instance, label) Proxy 包装，构造函数 return withCallLogging(this, 'DemoManagerApi')——所有契约方法（含 resetDemo 扩展）自动覆盖，无需逐方法插桩；每次外部调用输出「入参 args 数组 + 返回结果」两条日志，抛错时 console.error 后原样抛出；包装函数以原始实例为 this 执行（内部 this.assembleTables 等辅助互调不经过代理、不打日志）；同名方法包装结果缓存于 Map（方法引用稳定）
+- DBManagerView.vue：initPage() 无条件调用 settingsStore.init()（幂等，loaded 守卫）——视图启动（ui.page watch immediate）、任意页面切换、api 热切换重载均触发设置预载；移除原 'settings' 分支的专属调用
+- settings.ts：init() 并发竞态加固——原「loading 时直接早退」会让后续 await init() 的调用方（如 model.importFromDB）在加载完成前拿到空规则（自定义异步 api 实现场景）；改为模块级 initInFlight Promise 共享：并发调用方 await 同一次在途加载，finally 清空（失败可重试、重置后可重载）
+- README：DemoManagerApi 章节补充调用日志说明（[DemoManagerApi] 前缀过滤、启动即触发 getSettings/load）
+- 验证（agent-browser 真实浏览器，localhost:3000，vp dev）：
+  * 启动日志：[DemoManagerApi] getSettings() 入参 [] / 返回 {indexTypes: 3, typeMappings: 14} + load() 入参/返回 —— 修复前启动阶段无 getSettings
+  * 幂等：切到设置页、打开表编辑对话框均无重复 getSettings 调用（对话框仅触发 getDicts）
+  * saveSettings：设置页添加 SPATIAL 索引类型 → 保存 → 入参/返回日志 + localStorage 持久化确认
+  * importFromDB：打开导入对话框 → 入参/返回（5 表）日志
+  * updateTablePos：真实拖拽 sys_user 卡片 → 入参/返回日志
+  * resetDemo：动态 import 调用 → 日志 + 种子还原（SPATIAL 测试数据清理）
+  * 错误路径：eval 调用 updateTablePos('t-nonexistent') → console.error 抛错日志 + 原样重抛（caught: 表不存在）
+  * 内部辅助不打日志：load() 仅 2 条日志（内部 assembleTables 无输出）
+  * 页面 0 错误、0 控制台异常；截图 docs/screenshots/api-call-logs.png
+- vue-tsc 通过；vp build 通过（2.85s）
+- patch 留档：patch/20260911065517.patch（4 文件 8.0K：demo-manager-api.ts / DBManagerView.vue / settings.ts / README.md）；重新打包 download/graph-db-model-editor.zip（111 文件 5.1M）
+
+Stage Summary:
+- 两项需求完成：(1) DemoManagerApi 所有方法（含 resetDemo）控制台打印入参与结果，Proxy 包装实现零逐方法插桩、内部互调不打扰、方法引用稳定；(2) 设置 API 调用时机问题确认并修复——根因是设置完全惰性加载导致启动阶段 getSettings() 从未调用，改为视图启动即幂等预载（任意页面、api 热切换、页面切换全覆盖），并加固 init() 并发等待语义
+- 关键决策：日志用 Proxy 统一包装而非逐方法插桩（新增契约方法自动覆盖）；包装函数绑定原始实例为 this 避免内部辅助方法重复打日志；settings init 用在途 Promise 替代 loading 早退（异步 api 实现下 await 语义正确）
+- 交付物：snapshot/20260911065109.zip（改前快照）、patch/20260911065517.patch、download/graph-db-model-editor.zip（111 文件）；截图 docs/screenshots/api-call-logs.png
