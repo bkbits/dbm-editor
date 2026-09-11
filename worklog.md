@@ -1,6 +1,25 @@
 # 工作日志
 
 ---
+Task ID: 14
+Agent: main (Super Z)
+Task: 配置 GitHub 远程仓库（bkbits/dbm-editor）+ 历史规整 + 建立任务完成即提交推送的约定
+
+Work Log:
+- 用户提供 GitHub PAT 与仓库地址 → `git remote add origin`（凭据嵌入远程 URL，仅存 .git/config，未写入任何被跟踪文件；worklog/README 均不含 token）
+- 推送前审计：远程仓库为空（ls-remote 无 refs，可安全重写本地历史）；tracked 文件中发现会话产物（tool-results/ 8 个文件、download/README.md）与初始提交遗留 .env（仅本地路径 DATABASE_URL，无凭据）——均不应出现在公开仓库
+- 历史规整（scripts/rewrite-git-history.sh，一次性脚本，已入 .git/info/exclude 本地忽略）：git filter-branch 三合一——① 15 个提交信息由 UUID 改写为 conventional commits 中文任务描述（映射自 worklog 各 Task 标题：feat 需求全量实现 / fix 交互缺陷 / feat 自动美化与对齐分布 / refactor DBManagerView 封装 / feat 细粒度契约 + vite-plus 迁移 / feat Logger / docs README / feat 批量 updateTablePos + 快捷键 / refactor 全异步化等）；② index-filter 从全部历史移除 tool-results/、download/README.md、.env（download/README.md 由 package.sh 每次打包重新生成，无损失）；③ env-filter 作者/提交者统一 dbm-editor-agent \<agent@dbm-editor.dev\>；refs/original 清理 + reflog expire + gc --prune=now
+- .gitignore 末尾新增 tool-results/（与 snapshot/、patch/、download/ 同类会话产物）；git config user.name/email 设置为 dbm-editor-agent（本地 config，后续提交沿用）
+- AGENTS.md 新增「Git 提交与推送约定」章节：每个任务完成并通过校验（bun run typecheck + vp check）后必须提交并推送、conventional commits 中文信息格式、会话产物不入库、凭据安全约束
+- 提交 20051f7「chore: GitHub 远程发布准备（忽略会话产物 tool-results/）」（pre-commit vp staged 检查通过）→ `git push -u origin main` 成功（新分支 main，15+1=16 提交全量推送）；ls-remote 复核远程 HEAD=20051f7 与本地一致、main 已跟踪 origin/main
+- 历史规整后快速回归：git status 干净、git ls-files 无 tool-results/download/.env 残留、工作区源码未受影响（zip 等未跟踪产物保留）
+
+Stage Summary:
+- 项目已发布至 GitHub：https://github.com/bkbits/dbm-editor（main 分支，16 提交，提交历史可读——每任务一条 conventional commit）
+- 关键决策：① 远程为空时本地历史可安全重写（UUID 信息对公开仓库不可读，按 worklog 任务映射改写）；② 会话产物（tool-results/download//.env）从历史彻底移除而非仅停止跟踪，保证公开仓库整洁；③ 推送约定写入 AGENTS.md 使后续会话自动遵循
+- 约定落地：此后每个任务完成 → 校验（typecheck + vp check）→ conventional commit → git push（含本条 worklog 与 AGENTS.md 更新的提交）
+
+---
 Task ID: 9
 Agent: main (Super Z)
 Task: ManagerApi 对齐用户原型（细粒度 CRUD 契约）+ Table.hidden 数据化 + vite-plus 迁移（vp dev）+ 依赖全量升级

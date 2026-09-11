@@ -24,4 +24,10 @@ release. Add a tool name to select part of the graph. For example, run
 - [ ] Check if there are `vite.config.ts` tasks or `package.json` scripts necessary for validation, run via `vp run <script>`.
 - [ ] If setup, runtime, or package-manager behavior looks wrong, run `vp env doctor` and include its output when asking for help.
 
+## Git 提交与推送约定
+
+- 远程仓库：`origin` → `https://github.com/bkbits/dbm-editor.git`（main 分支，凭据保存在本地 `.git/config`，严禁写入任何被跟踪文件）
+- **每个任务完成并通过校验（`bun run typecheck` + `vp check`）后，必须提交并推送**：提交信息使用 conventional commits 中文描述（如 `feat: xxx` / `fix: xxx` / `docs: xxx` / `refactor: xxx` / `chore: xxx`），随后 `git push`
+- 会话产物目录（`snapshot/`、`patch/`、`tool-results/`、`download/`）不入库；新增一次性维护脚本放入 `.git/info/exclude` 本地忽略
+
 <!--VITE PLUS END-->
