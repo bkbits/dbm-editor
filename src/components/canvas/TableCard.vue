@@ -51,7 +51,7 @@ const isConnectTarget = computed(
 
 const catColor = computed(() => {
   const idx = model.categories.findIndex((c) => c.id === table.value?.categoryId)
-  return `var(--cat-${Math.max(0, idx) % 8})`
+  return `var(--dbm-cat-${Math.max(0, idx) % 8})`
 })
 
 /** 隐藏导航摘要：对端表被隐藏的导航 */
@@ -275,10 +275,10 @@ onBeforeUnmount(() => {
 <style lang="scss" scoped>
 .table-card {
   position: absolute;
-  background: var(--card-bg);
-  border: 1.5px solid var(--card-border);
-  border-radius: var(--radius-m);
-  box-shadow: var(--card-shadow);
+  background: var(--dbm-card-bg);
+  border: 1.5px solid var(--dbm-card-border);
+  border-radius: var(--dbm-radius-m);
+  box-shadow: var(--dbm-card-shadow);
   font-size: 12px;
   z-index: 2;
   transition:
@@ -295,19 +295,19 @@ onBeforeUnmount(() => {
   }
 
   &:hover {
-    box-shadow: var(--card-shadow-hover);
+    box-shadow: var(--dbm-card-shadow-hover);
   }
 
   &.selected {
-    border-color: var(--card-border-selected);
+    border-color: var(--dbm-card-border-selected);
     box-shadow:
-      0 0 0 3px var(--primary-weak),
-      var(--card-shadow-hover);
+      0 0 0 3px var(--dbm-primary-weak),
+      var(--dbm-card-shadow-hover);
   }
 
   &.connect-target {
-    border-color: var(--primary);
-    box-shadow: 0 0 0 4px var(--primary-weak);
+    border-color: var(--dbm-primary);
+    box-shadow: 0 0 0 4px var(--dbm-primary-weak);
   }
 
   &.mapping .card-head {
@@ -324,9 +324,9 @@ onBeforeUnmount(() => {
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: var(--bg-panel);
-  border: 1.5px solid var(--card-conn);
-  color: var(--text-3);
+  background: var(--dbm-bg-panel);
+  border: 1.5px solid var(--dbm-card-conn);
+  color: var(--dbm-text-3);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -343,8 +343,8 @@ onBeforeUnmount(() => {
     color 0.12s ease;
 
   &:hover {
-    background: var(--primary);
-    border-color: var(--primary);
+    background: var(--dbm-primary);
+    border-color: var(--dbm-primary);
     color: #fff;
   }
 }
@@ -386,9 +386,9 @@ onBeforeUnmount(() => {
 /* 表头 */
 .card-head {
   padding: 7px 10px 6px;
-  background: var(--card-head-bg);
-  border-bottom: 1px solid var(--border);
-  border-radius: var(--radius-m) var(--radius-m) 0 0;
+  background: var(--dbm-card-head-bg);
+  border-bottom: 1px solid var(--dbm-border);
+  border-radius: var(--dbm-radius-m) var(--dbm-radius-m) 0 0;
   position: relative;
   overflow: hidden;
 
@@ -410,7 +410,7 @@ onBeforeUnmount(() => {
 
   .head-name {
     font-weight: 600;
-    color: var(--card-head-text);
+    color: var(--dbm-card-head-text);
     font-size: 12.5px;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -419,16 +419,16 @@ onBeforeUnmount(() => {
   }
 
   .head-mapping {
-    color: var(--text-3);
+    color: var(--dbm-text-3);
     flex-shrink: 0;
   }
   .head-hidden {
-    color: var(--text-3);
+    color: var(--dbm-text-3);
     flex-shrink: 0;
   }
 
   .head-tree {
-    color: var(--success);
+    color: var(--dbm-success);
     flex-shrink: 0;
   }
 
@@ -445,7 +445,7 @@ onBeforeUnmount(() => {
     border: none;
     border-radius: 4px;
     background: transparent;
-    color: var(--text-3);
+    color: var(--dbm-text-3);
     cursor: pointer;
     opacity: 0;
     pointer-events: none;
@@ -455,15 +455,15 @@ onBeforeUnmount(() => {
       color 0.12s ease;
 
     &:hover {
-      background: var(--danger-weak);
-      color: var(--danger);
+      background: var(--dbm-danger-weak);
+      color: var(--dbm-danger);
     }
   }
 
   .head-comment {
     margin-top: 2px;
     font-size: 11px;
-    color: var(--text-3);
+    color: var(--dbm-text-3);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -484,11 +484,11 @@ onBeforeUnmount(() => {
   transition: background-color 0.12s ease;
 
   &:hover {
-    background: var(--card-row-hover);
+    background: var(--dbm-card-row-hover);
   }
 
   &.pk .col-name {
-    color: var(--text-1);
+    color: var(--dbm-text-1);
     font-weight: 600;
   }
 
@@ -499,18 +499,18 @@ onBeforeUnmount(() => {
     width: 26px;
 
     .icon-pk {
-      color: var(--warning);
+      color: var(--dbm-warning);
     }
     .icon-null {
-      color: var(--success);
+      color: var(--dbm-success);
     }
     .icon-notnull {
-      color: var(--text-3);
+      color: var(--dbm-text-3);
     }
   }
 
   .col-name {
-    color: var(--text-1);
+    color: var(--dbm-text-1);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -523,8 +523,8 @@ onBeforeUnmount(() => {
     overflow: hidden;
     text-overflow: ellipsis;
     font-size: 10.5px;
-    color: var(--primary-text);
-    background: var(--primary-weak);
+    color: var(--dbm-primary-text);
+    background: var(--dbm-primary-weak);
     border-radius: 3px;
     padding: 0 4px;
     line-height: 16px;
@@ -533,8 +533,8 @@ onBeforeUnmount(() => {
   .col-dict {
     flex-shrink: 0;
     font-size: 10px;
-    color: var(--info);
-    background: var(--info-weak);
+    color: var(--dbm-info);
+    background: var(--dbm-info-weak);
     border-radius: 3px;
     padding: 0 4px;
     line-height: 16px;
@@ -545,7 +545,7 @@ onBeforeUnmount(() => {
   }
 
   .col-comment {
-    color: var(--text-3);
+    color: var(--dbm-text-3);
     font-size: 10.5px;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -564,20 +564,20 @@ onBeforeUnmount(() => {
   gap: 4px;
   padding: 3px 0;
   margin: 1px 6px 3px;
-  color: var(--text-3);
+  color: var(--dbm-text-3);
   font-size: 11px;
   cursor: pointer;
-  border-radius: var(--radius-s);
-  border: 1px dashed var(--border);
+  border-radius: var(--dbm-radius-s);
+  border: 1px dashed var(--dbm-border);
   transition:
     color 0.15s ease,
     border-color 0.15s ease,
     background-color 0.15s ease;
 
   &:hover {
-    color: var(--primary-text);
-    border-color: var(--primary);
-    background: var(--primary-weak);
+    color: var(--dbm-primary-text);
+    border-color: var(--dbm-primary);
+    background: var(--dbm-primary-weak);
   }
 
   svg {
@@ -592,12 +592,12 @@ onBeforeUnmount(() => {
 .idx-empty {
   padding: 6px 0;
   text-align: center;
-  color: var(--text-3);
+  color: var(--dbm-text-3);
   font-size: 11px;
 }
 
 .card-indexes {
-  border-top: 1px dashed var(--border);
+  border-top: 1px dashed var(--dbm-border);
   padding: 3px 0 4px;
 }
 
@@ -615,22 +615,22 @@ onBeforeUnmount(() => {
     line-height: 15px;
 
     &.unique {
-      color: var(--warning);
-      background: var(--warning-weak);
+      color: var(--dbm-warning);
+      background: var(--dbm-warning-weak);
     }
     &.normal {
-      color: var(--info);
-      background: var(--info-weak);
+      color: var(--dbm-info);
+      background: var(--dbm-info-weak);
     }
     &.fulltext {
-      color: var(--primary-text);
-      background: var(--primary-weak);
+      color: var(--dbm-primary-text);
+      background: var(--dbm-primary-weak);
     }
   }
 
   .idx-name {
     font-size: 11px;
-    color: var(--text-1);
+    color: var(--dbm-text-1);
     max-width: 40%;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -639,7 +639,7 @@ onBeforeUnmount(() => {
 
   .idx-cols {
     font-size: 10px;
-    color: var(--text-3);
+    color: var(--dbm-text-3);
     flex: 1;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -650,16 +650,16 @@ onBeforeUnmount(() => {
 
 /* 隐藏导航摘要 */
 .card-hidden-navs {
-  border-top: 1px dashed var(--border);
-  background: var(--bg-2);
-  border-radius: 0 0 var(--radius-m) var(--radius-m);
+  border-top: 1px dashed var(--dbm-border);
+  background: var(--dbm-bg-2);
+  border-radius: 0 0 var(--dbm-radius-m) var(--dbm-radius-m);
   padding: 4px 10px 5px;
 
   .hidden-navs-title {
     display: flex;
     align-items: center;
     gap: 4px;
-    color: var(--text-3);
+    color: var(--dbm-text-3);
     font-size: 10.5px;
     margin-bottom: 2px;
   }
@@ -671,8 +671,8 @@ onBeforeUnmount(() => {
     font-size: 11px;
 
     .nav-type {
-      color: var(--info);
-      background: var(--info-weak);
+      color: var(--dbm-info);
+      background: var(--dbm-info-weak);
       border-radius: 3px;
       padding: 0 4px;
       line-height: 16px;
@@ -680,7 +680,7 @@ onBeforeUnmount(() => {
     }
 
     .nav-target {
-      color: var(--primary-text);
+      color: var(--dbm-primary-text);
       cursor: pointer;
       transition: color 0.12s ease;
 

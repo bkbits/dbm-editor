@@ -371,8 +371,8 @@ const isEdit = computed(() => Boolean(draft.value.id))
   min-width: 216px;
   display: flex;
   flex-direction: column;
-  background: var(--bg-panel);
-  border-right: 1px solid var(--border);
+  background: var(--dbm-bg-panel);
+  border-right: 1px solid var(--dbm-border);
 
   .list-head {
     display: flex;
@@ -385,7 +385,7 @@ const isEdit = computed(() => Boolean(draft.value.id))
       align-items: center;
       gap: 6px;
       font-weight: 600;
-      color: var(--text-1);
+      color: var(--dbm-text-1);
     }
   }
 
@@ -397,10 +397,10 @@ const isEdit = computed(() => Boolean(draft.value.id))
 
   .list-foot {
     padding: 7px 12px;
-    border-top: 1px solid var(--border);
+    border-top: 1px solid var(--dbm-border);
     font-size: 10.5px;
-    color: var(--text-3);
-    font-family: var(--font-mono);
+    color: var(--dbm-text-3);
+    font-family: var(--dbm-font-mono);
   }
 }
 
@@ -409,23 +409,23 @@ const isEdit = computed(() => Boolean(draft.value.id))
   align-items: center;
   gap: 8px;
   padding: 7px 10px;
-  border-radius: var(--radius-m);
+  border-radius: var(--dbm-radius-m);
   cursor: pointer;
   margin-bottom: 2px;
 
   &:hover {
-    background: var(--bg-hover);
+    background: var(--dbm-bg-hover);
   }
 
   &.selected {
-    background: var(--primary-weak);
+    background: var(--dbm-primary-weak);
   }
 
   .tpl-name {
     flex: 1;
     font-size: 12.5px;
     font-weight: 600;
-    color: var(--text-1);
+    color: var(--dbm-text-1);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -433,15 +433,15 @@ const isEdit = computed(() => Boolean(draft.value.id))
 
   .tpl-size {
     font-size: 10px;
-    color: var(--text-3);
-    font-family: var(--font-mono);
+    color: var(--dbm-text-3);
+    font-family: var(--dbm-font-mono);
   }
 }
 
 .list-empty {
   padding: 30px 10px;
   text-align: center;
-  color: var(--text-3);
+  color: var(--dbm-text-3);
   font-size: 12px;
 }
 
@@ -467,7 +467,7 @@ const isEdit = computed(() => Boolean(draft.value.id))
 
     label {
       font-size: 11.5px;
-      color: var(--text-2);
+      color: var(--dbm-text-2);
     }
   }
 
@@ -491,9 +491,9 @@ const isEdit = computed(() => Boolean(draft.value.id))
   display: flex;
   flex-direction: column;
   min-height: 0;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-m);
-  background: var(--bg-panel);
+  border: 1px solid var(--dbm-border);
+  border-radius: var(--dbm-radius-m);
+  background: var(--dbm-bg-panel);
   overflow: hidden;
 }
 
@@ -502,15 +502,15 @@ const isEdit = computed(() => Boolean(draft.value.id))
   align-items: center;
   justify-content: space-between;
   padding: 7px 12px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--dbm-border);
   font-size: 11.5px;
-  color: var(--text-2);
+  color: var(--dbm-text-2);
   flex-shrink: 0;
 
   code {
-    font-family: var(--font-mono);
-    color: var(--primary-text);
-    background: var(--primary-weak);
+    font-family: var(--dbm-font-mono);
+    color: var(--dbm-primary-text);
+    background: var(--dbm-primary-weak);
     border-radius: 3px;
     padding: 0 4px;
   }
@@ -527,9 +527,9 @@ const isEdit = computed(() => Boolean(draft.value.id))
 .lang-chip {
   flex-shrink: 0;
   font-size: 10px;
-  color: var(--primary-text);
-  background: var(--primary-weak);
-  border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent);
+  color: var(--dbm-primary-text);
+  background: var(--dbm-primary-weak);
+  border: 1px solid color-mix(in srgb, var(--dbm-primary) 30%, transparent);
   border-radius: 4px;
   padding: 0 6px;
   line-height: 18px;
@@ -556,7 +556,7 @@ const isEdit = computed(() => Boolean(draft.value.id))
   padding: 12px 14px;
   font-size: 12px;
   line-height: 1.6;
-  font-family: var(--font-mono);
+  font-family: var(--dbm-font-mono);
   white-space: pre;
   word-wrap: normal;
   overflow-wrap: normal;
@@ -567,12 +567,12 @@ const isEdit = computed(() => Boolean(draft.value.id))
   z-index: 1;
   pointer-events: none;
   overflow: hidden;
-  color: var(--code-text);
-  background: var(--code-bg);
+  color: var(--dbm-code-text);
+  background: var(--dbm-code-bg);
 
   code {
     display: block;
-    font-family: var(--font-mono);
+    font-family: var(--dbm-font-mono);
     white-space: pre;
   }
 }
@@ -581,33 +581,33 @@ const isEdit = computed(() => Boolean(draft.value.id))
   z-index: 2;
   background: transparent;
   color: transparent;
-  caret-color: var(--primary-text);
+  caret-color: var(--dbm-primary-text);
   overflow: auto;
 
   &::placeholder {
-    color: var(--text-3);
+    color: var(--dbm-text-3);
   }
 
   &::selection {
-    background: var(--primary-weak);
+    background: var(--dbm-primary-weak);
   }
 }
 
 .preview-file {
   padding: 5px 12px;
   font-size: 10.5px;
-  color: var(--text-3);
-  border-bottom: 1px dashed var(--border);
-  background: var(--bg-2);
+  color: var(--dbm-text-3);
+  border-bottom: 1px dashed var(--dbm-border);
+  background: var(--dbm-bg-2);
   flex-shrink: 0;
 }
 
 .preview-error {
   padding: 6px 12px;
   font-size: 11px;
-  color: var(--danger);
-  background: var(--danger-weak);
-  border-bottom: 1px dashed var(--danger);
+  color: var(--dbm-danger);
+  background: var(--dbm-danger-weak);
+  border-bottom: 1px dashed var(--dbm-danger);
   flex-shrink: 0;
 }
 
@@ -615,28 +615,28 @@ const isEdit = computed(() => Boolean(draft.value.id))
   flex: 1;
   margin: 0;
   overflow: auto;
-  background: var(--code-bg);
+  background: var(--dbm-code-bg);
   padding: 12px 14px;
   font-size: 12px;
   line-height: 1.55;
 
   code {
-    font-family: var(--font-mono);
+    font-family: var(--dbm-font-mono);
     white-space: pre;
   }
 }
 
 .tpl-help {
   flex-shrink: 0;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-m);
-  background: var(--bg-2);
+  border: 1px solid var(--dbm-border);
+  border-radius: var(--dbm-radius-m);
+  background: var(--dbm-bg-2);
   padding: 8px 12px;
 
   .help-title {
     font-size: 11.5px;
     font-weight: 600;
-    color: var(--text-1);
+    color: var(--dbm-text-1);
     margin-bottom: 4px;
   }
 
@@ -649,12 +649,12 @@ const isEdit = computed(() => Boolean(draft.value.id))
   p {
     margin: 1.5px 0;
     font-size: 11px;
-    color: var(--text-3);
+    color: var(--dbm-text-3);
 
     code {
-      font-family: var(--font-mono);
-      color: var(--primary-text);
-      background: var(--primary-weak);
+      font-family: var(--dbm-font-mono);
+      color: var(--dbm-primary-text);
+      background: var(--dbm-primary-weak);
       border-radius: 3px;
       padding: 0 3px;
     }

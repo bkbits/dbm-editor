@@ -396,9 +396,9 @@ async function save() {
     justify-content: center;
     width: 32px;
     height: 32px;
-    border-radius: var(--radius-m);
-    background: var(--primary-weak);
-    color: var(--primary);
+    border-radius: var(--dbm-radius-m);
+    background: var(--dbm-primary-weak);
+    color: var(--dbm-primary);
     flex-shrink: 0;
   }
 
@@ -406,22 +406,22 @@ async function save() {
     h1 {
       font-size: 16px;
       font-weight: 600;
-      color: var(--text-1);
+      color: var(--dbm-text-1);
       line-height: 1.2;
     }
 
     p {
       font-size: 11.5px;
-      color: var(--text-3);
+      color: var(--dbm-text-3);
       margin-top: 2px;
     }
   }
 }
 
 .settings-card {
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-l);
+  background: var(--dbm-bg-panel);
+  border: 1px solid var(--dbm-border);
+  border-radius: var(--dbm-radius-l);
   padding: 14px 16px;
   margin-bottom: 14px;
 }
@@ -438,34 +438,34 @@ async function save() {
     gap: 5px;
     font-size: 13.5px;
     font-weight: 600;
-    color: var(--text-1);
+    color: var(--dbm-text-1);
   }
 
   .card-sub {
     font-size: 11.5px;
-    color: var(--text-3);
+    color: var(--dbm-text-3);
   }
 }
 
 .card-intro {
   font-size: 12px;
   line-height: 1.7;
-  color: var(--text-2);
-  background: var(--bg-2);
-  border: 1px dashed var(--border);
-  border-radius: var(--radius-m);
+  color: var(--dbm-text-2);
+  background: var(--dbm-bg-2);
+  border: 1px dashed var(--dbm-border);
+  border-radius: var(--dbm-radius-m);
   padding: 8px 12px;
   margin-bottom: 12px;
 
   code {
-    background: var(--bg-hover);
+    background: var(--dbm-bg-hover);
     border-radius: 3px;
     padding: 0 4px;
     font-size: 11px;
   }
 
   b {
-    color: var(--primary-text);
+    color: var(--dbm-primary-text);
   }
 }
 
@@ -480,8 +480,8 @@ async function save() {
   .r-head {
     padding: 2px 4px 6px;
     font-size: 11px;
-    color: var(--text-3);
-    border-bottom: 1px solid var(--border);
+    color: var(--dbm-text-3);
+    border-bottom: 1px solid var(--dbm-border);
 
     .h-sort,
     .h-center {
@@ -498,10 +498,10 @@ async function save() {
 
   .r-row {
     padding: 2px 2px;
-    border-radius: var(--radius-s);
+    border-radius: var(--dbm-radius-s);
 
     &:hover {
-      background: var(--bg-hover);
+      background: var(--dbm-bg-hover);
     }
 
     &.dragging {
@@ -509,11 +509,11 @@ async function save() {
     }
 
     &.drop-above {
-      box-shadow: 0 -2px 0 0 var(--primary);
+      box-shadow: 0 -2px 0 0 var(--dbm-primary);
     }
 
     &.drop-below {
-      box-shadow: 0 2px 0 0 var(--primary);
+      box-shadow: 0 2px 0 0 var(--dbm-primary);
     }
   }
 }
@@ -521,20 +521,20 @@ async function save() {
 .rule-index {
   text-align: center;
   font-size: 11px;
-  color: var(--text-3);
+  color: var(--dbm-text-3);
 }
 
 .pattern-cell {
   min-width: 0;
 
   &.invalid :deep(.ant-input) {
-    border-color: var(--danger);
+    border-color: var(--dbm-danger);
   }
 
   .pattern-err {
     display: block;
     font-size: 10.5px;
-    color: var(--danger);
+    color: var(--dbm-danger);
     line-height: 1.5;
     padding: 0 2px;
   }
@@ -547,7 +547,7 @@ async function save() {
 .rule-test {
   text-align: center;
   font-size: 10.5px;
-  color: var(--text-3);
+  color: var(--dbm-text-3);
   border-radius: 3px;
   padding: 1px 0;
   transition:
@@ -555,12 +555,12 @@ async function save() {
     background 0.15s ease;
 
   &.hit {
-    color: var(--warning);
+    color: var(--dbm-warning);
   }
 
   &.first {
-    color: var(--primary-text);
-    background: var(--primary-weak);
+    color: var(--dbm-primary-text);
+    background: var(--dbm-primary-weak);
     font-weight: 600;
   }
 }
@@ -568,7 +568,7 @@ async function save() {
 .r-empty {
   padding: 24px 0;
   text-align: center;
-  color: var(--text-3);
+  color: var(--dbm-text-3);
   font-size: 12px;
 }
 
@@ -579,7 +579,7 @@ async function save() {
   width: 20px;
   height: 22px;
   border-radius: 4px;
-  color: var(--text-3);
+  color: var(--dbm-text-3);
   cursor: grab;
   touch-action: none;
   transition:
@@ -587,8 +587,8 @@ async function save() {
     background 0.15s ease;
 
   &:hover {
-    color: var(--text-1);
-    background: var(--bg-hover);
+    color: var(--dbm-text-1);
+    background: var(--dbm-bg-hover);
   }
 
   &:active {
@@ -605,15 +605,15 @@ async function save() {
   border: none;
   border-radius: 3px;
   background: transparent;
-  color: var(--text-3);
+  color: var(--dbm-text-3);
   cursor: pointer;
   transition:
     background 0.15s ease,
     color 0.15s ease;
 
   &:hover {
-    background: var(--danger-weak);
-    color: var(--danger);
+    background: var(--dbm-danger-weak);
+    color: var(--dbm-danger);
   }
 }
 
@@ -628,9 +628,9 @@ async function save() {
   flex-wrap: wrap;
   margin-top: 12px;
   padding: 10px 12px;
-  background: var(--bg-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-m);
+  background: var(--dbm-bg-2);
+  border: 1px solid var(--dbm-border);
+  border-radius: var(--dbm-radius-m);
 
   .test-label {
     display: inline-flex;
@@ -638,7 +638,7 @@ async function save() {
     gap: 5px;
     font-size: 12px;
     font-weight: 600;
-    color: var(--text-2);
+    color: var(--dbm-text-2);
     flex-shrink: 0;
   }
 
@@ -651,27 +651,27 @@ async function save() {
     align-items: center;
     gap: 8px;
     font-size: 12px;
-    color: var(--text-2);
+    color: var(--dbm-text-2);
     min-width: 0;
     flex: 1;
   }
 
   .type-badge {
     flex-shrink: 0;
-    font-family: var(--font-mono);
+    font-family: var(--dbm-font-mono);
     font-size: 11.5px;
     font-weight: 600;
     border-radius: 4px;
     padding: 1px 8px;
 
     &.hit {
-      color: var(--primary-text);
-      background: var(--primary-weak);
+      color: var(--dbm-primary-text);
+      background: var(--dbm-primary-weak);
     }
 
     &.fallback {
-      color: var(--warning);
-      background: var(--warning-weak);
+      color: var(--dbm-warning);
+      background: var(--dbm-warning-weak);
     }
   }
 
@@ -681,11 +681,11 @@ async function save() {
     white-space: nowrap;
 
     b {
-      color: var(--primary-text);
+      color: var(--dbm-primary-text);
     }
 
     code {
-      background: var(--bg-hover);
+      background: var(--dbm-bg-hover);
       border-radius: 3px;
       padding: 0 4px;
       font-size: 11px;
@@ -693,7 +693,7 @@ async function save() {
   }
 
   .test-placeholder {
-    color: var(--text-3);
+    color: var(--dbm-text-3);
     font-size: 11.5px;
   }
 }
@@ -713,17 +713,17 @@ async function save() {
     gap: 5px;
     font-size: 11.5px;
     font-weight: 600;
-    color: var(--primary-text);
-    background: var(--primary-weak);
+    color: var(--dbm-primary-text);
+    background: var(--dbm-primary-weak);
     border: 1px solid transparent;
-    border-radius: var(--radius-m);
+    border-radius: var(--dbm-radius-m);
     padding: 2px 4px 2px 9px;
     transition:
       border-color 0.15s ease,
       background 0.15s ease;
 
     &:hover {
-      border-color: var(--primary);
+      border-color: var(--dbm-primary);
     }
 
     .chip-close {
@@ -735,22 +735,22 @@ async function save() {
       border: none;
       border-radius: 4px;
       background: transparent;
-      color: var(--text-3);
+      color: var(--dbm-text-3);
       cursor: pointer;
       transition:
         background 0.15s ease,
         color 0.15s ease;
 
       &:hover {
-        background: var(--danger-weak);
-        color: var(--danger);
+        background: var(--dbm-danger-weak);
+        color: var(--dbm-danger);
       }
     }
   }
 
   .index-empty {
     font-size: 12px;
-    color: var(--warning);
+    color: var(--dbm-warning);
   }
 }
 
@@ -772,15 +772,15 @@ async function save() {
   justify-content: space-between;
   margin-top: 2px;
   padding: 10px 4px 0;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--dbm-border);
 
   .dirty-tip {
     font-size: 11.5px;
-    color: var(--text-3);
+    color: var(--dbm-text-3);
     transition: color 0.15s ease;
 
     &.dirty {
-      color: var(--warning);
+      color: var(--dbm-warning);
     }
   }
 

@@ -138,7 +138,7 @@ async function copyCode() {
   .file-path {
     flex: 1;
     font-size: 11px;
-    color: var(--text-3);
+    color: var(--dbm-text-3);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -147,9 +147,9 @@ async function copyCode() {
   .lang-chip {
     flex-shrink: 0;
     font-size: 10px;
-    color: var(--primary-text);
-    background: var(--primary-weak);
-    border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent);
+    color: var(--dbm-primary-text);
+    background: var(--dbm-primary-weak);
+    border: 1px solid color-mix(in srgb, var(--dbm-primary) 30%, transparent);
     border-radius: 4px;
     padding: 0 6px;
     line-height: 18px;
@@ -160,27 +160,27 @@ async function copyCode() {
   margin: 0;
   max-height: 460px;
   overflow: auto;
-  background: var(--code-bg);
-  border: 1px solid var(--code-border);
-  border-radius: var(--radius-m);
+  background: var(--dbm-code-bg);
+  border: 1px solid var(--dbm-code-border);
+  border-radius: var(--dbm-radius-m);
   padding: 12px 14px;
   font-size: 12px;
   line-height: 1.55;
 
   code {
-    font-family: var(--font-mono);
+    font-family: var(--dbm-font-mono);
     white-space: pre;
   }
 }
 
 .render-error {
   padding: 12px 14px;
-  border: 1px solid var(--danger);
-  background: var(--danger-weak);
-  color: var(--danger);
-  border-radius: var(--radius-m);
+  border: 1px solid var(--dbm-danger);
+  background: var(--dbm-danger-weak);
+  color: var(--dbm-danger);
+  border-radius: var(--dbm-radius-m);
   font-size: 12px;
-  font-family: var(--font-mono);
+  font-family: var(--dbm-font-mono);
   white-space: pre-wrap;
 }
 </style>

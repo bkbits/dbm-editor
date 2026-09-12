@@ -26,7 +26,7 @@ function catColorOf(categoryId: string): string {
   return (
     getComputedStyle(document.documentElement)
       .getPropertyValue(
-        `--cat-${model.categories.findIndex((c) => c.id === categoryId) % 8 >= 0 ? model.categories.findIndex((c) => c.id === categoryId) % 8 : 0}`,
+        `--dbm-cat-${model.categories.findIndex((c) => c.id === categoryId) % 8 >= 0 ? model.categories.findIndex((c) => c.id === categoryId) % 8 : 0}`,
       )
       .trim() || '#888'
   )
@@ -45,9 +45,11 @@ function draw() {
   const ctx = cv.getContext('2d')
   if (!ctx) return
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-  const styles = getComputedStyle(document.documentElement)
-  const bg = styles.getPropertyValue('--bg-panel').trim()
-  const border = styles.getPropertyValue('--border').trim()
+  // 从小地图画布元素读取 CSS 变量（而非 documentElement）：
+  // antd-theme 映射作用于 .app-provider / css-var 作用域内，documentElement 上只有静态基线值
+  const styles = getComputedStyle(cv)
+  const bg = styles.getPropertyValue('--dbm-bg-panel').trim()
+  const border = styles.getPropertyValue('--dbm-border').trim()
   ctx.clearRect(0, 0, MAP_W, MAP_H)
   ctx.fillStyle = bg
   ctx.fillRect(0, 0, MAP_W, MAP_H)
@@ -94,10 +96,10 @@ function draw() {
 
   // 视口矩形
   const vr = canvas.viewportWorldRect
-  ctx.strokeStyle = styles.getPropertyValue('--primary').trim()
+  ctx.strokeStyle = styles.getPropertyValue('--dbm-primary').trim()
   ctx.lineWidth = 1.5
   ctx.strokeRect(vr.x * scale + offX, vr.y * scale + offY, vr.w * scale, vr.h * scale)
-  ctx.fillStyle = 'rgba(13,148,136,0.08)'
+  ctx.fillStyle = styles.getPropertyValue('--dbm-primary-weak').trim()
   ctx.fillRect(vr.x * scale + offX, vr.y * scale + offY, vr.w * scale, vr.h * scale)
 
   ctx.strokeStyle = border
@@ -181,11 +183,11 @@ onBeforeUnmount(() => {
   right: 14px;
   bottom: 14px;
   z-index: 6;
-  border-radius: var(--radius-m);
+  border-radius: var(--dbm-radius-m);
   overflow: hidden;
-  border: 1px solid var(--border);
-  box-shadow: var(--card-shadow);
-  background: var(--bg-panel);
+  border: 1px solid var(--dbm-border);
+  box-shadow: var(--dbm-card-shadow);
+  background: var(--dbm-bg-panel);
 
   canvas {
     display: block;

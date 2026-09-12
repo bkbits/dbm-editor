@@ -173,17 +173,17 @@ async function doImport() {
 
     label {
       font-size: 11.5px;
-      color: var(--text-2);
+      color: var(--dbm-text-2);
     }
   }
 }
 
 .import-tip {
   font-size: 11.5px;
-  color: var(--text-3);
-  background: var(--bg-2);
-  border: 1px dashed var(--border);
-  border-radius: var(--radius-m);
+  color: var(--dbm-text-3);
+  background: var(--dbm-bg-2);
+  border: 1px dashed var(--dbm-border);
+  border-radius: var(--dbm-radius-m);
   padding: 6px 10px;
   margin-bottom: 10px;
   line-height: 1.6;
@@ -192,8 +192,8 @@ async function doImport() {
 .db-table-list {
   max-height: 320px;
   overflow-y: auto;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-m);
+  border: 1px solid var(--dbm-border);
+  border-radius: var(--dbm-radius-m);
   padding: 4px;
 }
 
@@ -202,15 +202,15 @@ async function doImport() {
   align-items: center;
   gap: 10px;
   padding: 6px 10px;
-  border-radius: var(--radius-s);
+  border-radius: var(--dbm-radius-s);
   cursor: pointer;
 
   &:hover {
-    background: var(--bg-hover);
+    background: var(--dbm-bg-hover);
   }
 
   &.checked {
-    background: var(--primary-weak);
+    background: var(--dbm-primary-weak);
   }
 
   .db-table-info {
@@ -220,12 +220,12 @@ async function doImport() {
     .db-name {
       font-size: 12.5px;
       font-weight: 600;
-      color: var(--text-1);
+      color: var(--dbm-text-1);
     }
 
     .db-comment {
       font-size: 11px;
-      color: var(--text-3);
+      color: var(--dbm-text-3);
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -234,7 +234,7 @@ async function doImport() {
 
   .db-cols {
     font-size: 11px;
-    color: var(--text-3);
+    color: var(--dbm-text-3);
     flex-shrink: 0;
   }
 }

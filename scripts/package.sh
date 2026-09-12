@@ -15,7 +15,9 @@ rsync -a --delete \
   --exclude 'dist' \
   --exclude '.git' \
   --exclude '.zscripts' \
-  --exclude 'skills' \
+  --include 'skills/DBManager' \
+  --include 'skills/DBManager/***' \
+  --exclude 'skills/*' \
   --exclude 'zip-stage' \
   --exclude 'download' \
   --exclude 'upload' \
@@ -24,8 +26,6 @@ rsync -a --delete \
   --exclude '.vite-hooks' \
   --exclude '.env' \
   --exclude '.env.*' \
-  --exclude 'snapshot' \
-  --exclude 'patch' \
   --exclude '*.log' \
   --exclude '.DS_Store' \
   ./ "$STAGE/graph-db-model-editor/"

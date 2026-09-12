@@ -535,10 +535,10 @@ async function save() {
 
   label {
     font-size: 11.5px;
-    color: var(--text-2);
+    color: var(--dbm-text-2);
 
     .req {
-      color: var(--danger);
+      color: var(--dbm-danger);
     }
   }
 }
@@ -546,17 +546,17 @@ async function save() {
 .section-title {
   margin-top: 4px;
   padding-top: 8px;
-  border-top: 1px dashed var(--border);
+  border-top: 1px dashed var(--dbm-border);
   font-size: 12px;
   font-weight: 600;
-  color: var(--text-1);
+  color: var(--dbm-text-1);
 }
 
 .mapping-hint {
   font-size: 11px;
-  color: var(--text-3);
-  background: var(--bg-2);
-  border-radius: var(--radius-s);
+  color: var(--dbm-text-3);
+  background: var(--dbm-bg-2);
+  border-radius: var(--dbm-radius-s);
   padding: 6px 10px;
 }
 
@@ -565,9 +565,9 @@ async function save() {
   flex-wrap: wrap;
   gap: 6px 14px;
   font-size: 11px;
-  color: var(--text-3);
-  background: var(--bg-2);
-  border-radius: var(--radius-s);
+  color: var(--dbm-text-3);
+  background: var(--dbm-bg-2);
+  border-radius: var(--dbm-radius-s);
   padding: 6px 10px;
 }
 </style>

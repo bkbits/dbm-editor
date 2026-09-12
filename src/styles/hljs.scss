@@ -2,56 +2,56 @@
  * highlight.js 令牌配色（基于 CSS 变量，自动适配亮暗主题）
  */
 .hljs {
-  color: var(--code-text);
+  color: var(--dbm-code-text);
   background: transparent;
 }
 .hljs-comment,
 .hljs-quote {
-  color: var(--code-comment);
+  color: var(--dbm-code-comment);
   font-style: italic;
 }
 .hljs-keyword,
 .hljs-selector-tag,
 .hljs-subst {
-  color: var(--code-keyword);
+  color: var(--dbm-code-keyword);
 }
 .hljs-string,
 .hljs-regexp,
 .hljs-addition,
 .hljs-attribute {
-  color: var(--code-string);
+  color: var(--dbm-code-string);
 }
 .hljs-number,
 .hljs-literal {
-  color: var(--code-number);
+  color: var(--dbm-code-number);
 }
 .hljs-title,
 .hljs-section,
 .hljs-name,
 .hljs-selector-id,
 .hljs-selector-class {
-  color: var(--code-title);
+  color: var(--dbm-code-title);
 }
 .hljs-meta,
 .hljs-doctag,
 .hljs-type {
-  color: var(--code-meta);
+  color: var(--dbm-code-meta);
 }
 .hljs-attr,
 .hljs-variable,
 .hljs-template-variable,
 .hljs-params {
-  color: var(--code-text);
+  color: var(--dbm-code-text);
 }
 .hljs-symbol,
 .hljs-bullet,
 .hljs-link {
-  color: var(--info);
+  color: var(--dbm-info);
 }
 .hljs-built_in,
 .hljs-builtin-name {
-  color: var(--code-number);
+  color: var(--dbm-code-number);
 }
 .hljs-deletion {
-  color: var(--danger);
+  color: var(--dbm-danger);
 }

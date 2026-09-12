@@ -117,10 +117,10 @@ async function refresh() {
   display: flex;
   align-items: center;
   gap: 16px;
-  height: var(--header-height);
-  padding: 0 var(--space-4);
-  background: var(--bg-panel);
-  border-bottom: 1px solid var(--border);
+  height: var(--dbm-header-height);
+  padding: 0 var(--dbm-space-4);
+  background: var(--dbm-bg-panel);
+  border-bottom: 1px solid var(--dbm-border);
   flex-shrink: 0;
   z-index: 20;
 }
@@ -137,22 +137,22 @@ async function refresh() {
     justify-content: center;
     width: 28px;
     height: 28px;
-    border-radius: var(--radius-m);
-    background: var(--primary-weak);
-    color: var(--primary);
+    border-radius: var(--dbm-radius-m);
+    background: var(--dbm-primary-weak);
+    color: var(--dbm-primary);
     flex-shrink: 0;
   }
 
   .brand-title {
     font-weight: 600;
     font-size: 14px;
-    color: var(--text-1);
+    color: var(--dbm-text-1);
     white-space: nowrap;
   }
 
   .brand-sub {
     font-size: 11px;
-    color: var(--text-3);
+    color: var(--dbm-text-3);
     white-space: nowrap;
     letter-spacing: 0.4px;
   }
@@ -163,8 +163,8 @@ async function refresh() {
   gap: 4px;
   margin-left: auto;
   padding: 3px;
-  background: var(--bg-2);
-  border-radius: var(--radius-m);
+  background: var(--dbm-bg-2);
+  border-radius: var(--dbm-radius-m);
 
   .nav-btn {
     display: inline-flex;
@@ -172,7 +172,7 @@ async function refresh() {
     gap: 6px;
     border: none;
     background: transparent;
-    color: var(--text-2);
+    color: var(--dbm-text-2);
     font-size: 13px;
     padding: 5px 12px;
     border-radius: 6px;
@@ -181,13 +181,13 @@ async function refresh() {
     white-space: nowrap;
 
     &:hover {
-      color: var(--text-1);
-      background: var(--bg-hover);
+      color: var(--dbm-text-1);
+      background: var(--dbm-bg-hover);
     }
 
     &.active {
-      background: var(--bg-panel);
-      color: var(--primary-text);
+      background: var(--dbm-bg-panel);
+      color: var(--dbm-primary-text);
       box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
     }
   }
@@ -206,17 +206,17 @@ async function refresh() {
   justify-content: center;
   width: 30px;
   height: 30px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-m);
-  background: var(--bg-panel);
-  color: var(--text-2);
+  border: 1px solid var(--dbm-border);
+  border-radius: var(--dbm-radius-m);
+  background: var(--dbm-bg-panel);
+  color: var(--dbm-text-2);
   cursor: pointer;
   transition: all 0.15s ease;
 
   &:hover {
-    color: var(--primary-text);
-    border-color: var(--primary);
-    background: var(--primary-weak);
+    color: var(--dbm-primary-text);
+    border-color: var(--dbm-primary);
+    background: var(--dbm-primary-weak);
   }
 
   &:disabled {

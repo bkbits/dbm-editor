@@ -485,3 +485,42 @@ Stage Summary:
 - 契约演进：ManagerApi 27 个契约方法 + resetDemo 扩展全部异步化（Promise 返回、校验失败 reject），UI 调用链路（4 store + 3 组件 + history restore）全量 await 适配，事务模式（本地先行 → await → 失败回滚）与顺序语义（syncToApi 分组 diff、逐表 await）完整保留；对接真实后端（HTTP/IPC）时零调整
 - 关键决策：① 日志 Proxy 异步感知——thenable 落定后打印 resolved 值/reject 时 error 级透传，保证可观测性不因异步化降级；② replace 错误处理语义上移——demo 内部 catch 改为 reject 向调用方传播（ReplaceConfirmModal 捕获提示），契约更符合「调用方决定如何反馈失败」；③ settings.save 改「api 成功后才更新本地」，消除异步下本地/持久层短暂不一致
 - 交付物：snapshot/20260911082250.zip、patch/20260911084001.patch（11 文件）、download/graph-db-model-editor.zip（115 文件）
+
+---
+Task ID: 14 / 15（补录）
+Agent: main (Super Z)
+Task: 14 GitHub 远程发布（历史规整 + 推送）；15 移除 Pinia（provide/inject 全局状态）+ vite 库模式构建
+
+Work Log:
+（补录说明：Task 14 期间的 git 历史规整使 worklog 对应条目散佚，此节按 git 提交记录回填，详细过程见各提交）
+- Task 14：filter-branch 规整 15 个 UUID 提交为 conventional commits、从历史移除 tool-results/.env/download/README.md、作者统一 dbm-editor-agent、`.gitignore` 补 tool-results/；推送 main 成功（20051f7、2bc8c81）
+- Task 15：DBManagerView 经 createDBManagerState + provide/inject 注入整套 reactive 仓库（theme/ui/model/canvas/dict/template/settings/history），删除 Pinia 依赖；vite 库模式（entry src/index.ts，产物 dist/DBManager.js + DBManager.d.ts，vue/antdv-next/@lucide/vue external，CSS 经 lib-inject-css 内联）；package.json 改库元数据（exports/types/peerDependencies）（0e19411）
+
+Stage Summary:
+- 仓库发布至 GitHub bkbits/dbm-editor（main）；库产物形态确立：单文件 ES 模块 + 滚动 d.ts
+
+---
+Task ID: 16
+Agent: main (Super Z)
+Task: ① 删除快照/补丁流程（snapshot/patch 目录与脚本）② 设计令牌 --dbm- 前缀化 + 新建 antd-theme.scss 同步 antd 主题 ③ AGENTS.md 完善为协作规范 ④ 新建 skills/DBManager 技能文档 ⑤ 提交推送
+
+Work Log:
+- 移除快照/补丁流程：git rm scripts/snapshot.sh scripts/patch.sh（目录本就不存在）；vite.config.ts fmt.ignorePatterns 与 .gitignore 删除 snapshot/patch 条目；scripts/package.sh 删除对应 rsync 排除项、新增 skills/DBManager 白名单包含规则
+- antdv-next cssVar 机制实测（先改 DBManagerView 临时加 cssVar: true 再浏览器验证后固化）：启用后 a-app 根元素与所有 antd 组件携带 `css-var-v-0` 类，`.css-var-v-0{--ant-*:值}` 样式注入运行时；65 个全局令牌可解析（--ant-color-primary/text/bg-container/bg-layout/border/margin 系/font-family-code 等，kebab-case 命名），:root 上为 0（作用域仅在带类元素子树）
+- 传送门验证：a-modal 传送到 body 下空 DIV（.app-provider 之外），但 .ant-modal-root 自带 css-var-v-0 类 → antd 变量在其上可解析，这决定了映射选择器需同时覆盖组件树与传送弹层
+- codemod（scripts/codemod-dbm-prefix.py，一次性，用后删除）：解析 variables.scss 全部 77 个令牌，按长度降序 + 负向前瞻防 --bg 误伤 --bg-2，五类形态全量替换——var(--x) 引用（467 处）、getPropertyValue('--x')（Minimap 3 处）、cssVar('--x')（ModelCanvas 2 处）、--x: 定义、`--cat-${` 模板字符串（Minimap）；改写 21 个文件；TableCard 局部变量 --cat-color 非 variables.scss 令牌，正确未动
+- 手工补漏三处：TableCard.vue:54 与 OutlinePanel.vue:78 的 `var(--cat-${...})`（codemod 模式未覆盖的书写形态）→ var(--dbm-cat-…)；Minimap getComputedStyle(documentElement) → getComputedStyle(cv)（小地图画布元素，antd 映射值才能被 JS 读到，documentElement 上只有静态基线）；Minimap 视口矩形硬编码 rgba(13,148,136,0.08) teal 填充 → 读 --dbm-primary-weak（跟随映射）；ModelCanvas cssVar 保持读 documentElement（网格线为未映射静态令牌，[data-theme] 翻转足够）
+- 新建 src/styles/antd-theme.scss：`.app-provider, [class*='css-var-']` 双选择器（前者=组件树根必带 antd css-var 类；后者属性子串匹配覆盖传送弹层根节点），全部可映射令牌重定义为 --ant-* 引用：字体（含 --ant-font-family-code）、圆角（radius-l 用 calc(lg+4px) 相对联动）、间距（对齐 antd margin 档位）、背景/文本/边框、品牌与语义色（weak→antd 对应 bg）、卡片/导航线/代码块底/阴影/蒙层/滚动条；edge-select-glow 用 color-mix(in srgb, --ant-color-primary 40%, transparent)；未映射令牌（网格线/代码高亮配色/分类色板/布局尺寸）沿用 variables.scss 静态基线并在文件头注释说明；index.scss 追加 @use；global.scss .app-shell 补 background: var(--dbm-bg)（整页跟随 antd 布局背景，body 静态色仅作挂载前兜底）
+- variables.scss 头注释更新为「--dbm- 命名空间 + 静态基线」定位说明
+- 浏览器实测（localhost:3000）：亮色 --dbm-primary=#1677ff/--dbm-bg=#f5f5f5/panel=#ffffff/radius-m=8px/space-4=16px、未映射令牌回落静态基线（grid/cat/code 正确）；暗色翻转 primary=#1668dc/bg=#000000/panel=#141414/text-1=rgba(255,255,255,.85)；传送 modal（body 下）rootPrimary=#1668dc 映射生效；var() 链在 getComputedStyle 下解析为具体值（Minimap JS 读取拿到映射色）；VLM 检查亮暗截图均无样式破损（主题色 teal→antd 蓝切换完整、无残留）
+- 构建校验：vp build 通过，dist/DBManager.js 479KB（内联 CSS 56K 字符），含 661 处 --dbm- 令牌、antd-theme 选择器 `app-provider,[class*=css-var-]`、零残留未加前缀老令牌
+- AGENTS.md 重写：保留 vp 注入段落，新增项目概览（库定位/远程/GitHub）、常用命令表、架构关键约定（无 Pinia provide/inject、ManagerApi 异步契约、主题三层结构、库构建 external、环境目录边界）、代码风格、任务工作流（校验链→worklog→中文 conventional commit→push）、目录导读
+- 新建 skills/DBManager/SKILL.md（frontmatter name/description + 宿主集成三步/ManagerApi 契约全方法示例/主题三层定制指南/快捷键/本地开发/常见排查表）；.gitignore `/skills/` 改为 `/skills/*` + `!/skills/DBManager/` 白名单（目录排除需先改为通配才能再包含）
+- README 同步：删除「源码快照与修改补丁」整节（TOC/脚本表两行/目录树三行/文末章节）、脚本表 package.sh 行补 skills 说明、目录树加 skills/DBManager、styles 行改「--dbm- 设计令牌（静态基线）/ antd 主题同步层」、主题章节重写为三层结构说明；check-readme.py 通过（29 标题）
+- 验证链全绿：vue-tsc 通过；vp check --fix（README/DictView 格式）后 60 文件格式 + 51 文件 lint 零告警；check-readme.py 通过；vp build 通过；浏览器回归（拖拽/四页切换/modal 开关/控制台零错误）
+
+Stage Summary:
+- 主题体系演进为三层：--dbm- 命名空间静态基线（variables.scss，亮暗双套）→ antd 同步层（antd-theme.scss，映射 --ant-*）→ 未映射令牌回落基线；组件外观从此跟随宿主 antd 主题（品牌色/暗色算法/令牌覆盖自动联动），主色由内置 teal 切换为 antd 蓝
+- 关键决策：① 映射作用域双选择器 .app-provider + [class*=css-var-]——实测确认 antd 弹层传送到 body 但自带 css-var 类，单靠组件树选择器会漏弹层；② Minimap 改从画布元素读变量（documentElement 读不到映射值）；③ color-mix 用于 antd 无对应物的透明度派生色（select-glow）；④ grid/代码高亮/分类色板保持静态（无 antd 对应物，映射反而降级设计）
+- 流程瘦身：删除快照/补丁脚本与全部引用（vite.config/.gitignore/package.sh/README），会话留档统一收敛到 worklog.md + git 提交
+- 交付物：skills/DBManager/SKILL.md（随仓库发布的技能文档）、docs/screenshots/theme-antd-{light,dark}.png、dist/DBManager.js + DBManager.d.ts

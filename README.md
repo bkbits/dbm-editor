@@ -16,7 +16,6 @@
 - [开发与调试](#开发与调试)
 - [常见问题（FAQ）](#常见问题faq)
 - [界面截图](#界面截图)
-- [源码快照与修改补丁](#源码快照与修改补丁)
 
 ## 技术栈
 
@@ -81,9 +80,7 @@ bun run dev
 | `vp install`                      | 安装依赖                                                                                                                        |
 | `bun scripts/eta-smoke.mjs`       | Eta 模板引擎 API 冒烟测试（模板功能改动前的快速回归）                                                                           |
 | `python3 scripts/check-readme.py` | README 链接 / 锚点 / 表格自检                                                                                                   |
-| `bash scripts/snapshot.sh`        | 快照当前源码到 `snapshot/`（见[源码快照与修改补丁](#源码快照与修改补丁)）                                                       |
-| `bash scripts/patch.sh`           | 保存当前修改的 patch 到 `patch/`                                                                                                |
-| `bash scripts/package.sh`         | 打包源码为交付 zip（`download/graph-db-model-editor.zip`）                                                                      |
+| `bash scripts/package.sh`         | 打包源码为交付 zip（`download/graph-db-model-editor.zip`，含 skills/DBManager 技能文档）                                        |
 
 ## 库构建与宿主接入
 
@@ -230,7 +227,8 @@ Eta 语法：`<% %>` 逻辑、`<%= %>` 输出、`<%# %>` 自定义注释标签�
 
 ### 主题
 
-- 全部颜色/间距/圆角/阴影通过 CSS 变量定义（`src/styles/variables.scss`），可在外部覆盖定制主题
+- 全部颜色/间距/圆角/阴影通过 CSS 变量定义（`src/styles/variables.scss`），统一携带 `--dbm-` 前缀（与宿主项目变量隔离），可在外部覆盖定制主题；无 antd 对应物的令牌（画布网格线、代码高亮配色、分类色板 `--dbm-cat-*`、布局尺寸）直接覆盖 `--dbm-*` 变量即可
+- `src/styles/antd-theme.scss` 为 **antd 主题同步层**：把可映射的 `--dbm-*` 令牌重定义为 antdv-next 的 `--ant-*` CSS 变量（内部 a-config-provider 已开 `theme.cssVar`），组件外观跟随宿主 antd 主题（品牌色、令牌覆盖、暗色算法）自动联动；此类令牌请通过宿主 antd 主题配置，而非覆盖 `--dbm-*`
 - 顶栏按钮切换亮色/暗色，同步根元素 `data-theme`，CSS 变量与 antdv-next 主题算法自动切换，偏好持久化
 
 ## 页面封装与数据能力注入（DBManagerView / ManagerApi）
@@ -335,9 +333,8 @@ Logger.setLevel('INFO') // 或 Logger.level = 'INFO' / Logger.getLevel()
 ├─ vite.config.ts          # Vite+ 配置（@ 别名 / 端口 3000 / allowedHosts / lint / fmt / staged / 库构建）
 ├─ tsconfig.json
 ├─ docs/screenshots/       # 界面截图
-├─ scripts/                # 开发辅助脚本（Eta 冒烟 / README 自检 / 快照 / patch / 打包 / 库产物 CSS 内联）
-├─ snapshot/               # 源码快照存档（scripts/snapshot.sh 生成，gitignore）
-├─ patch/                  # 修改补丁存档（scripts/patch.sh 生成，gitignore）
+├─ scripts/                # 开发辅助脚本（Eta 冒烟 / README 自检 / 库产物 CSS 内联 / 打包）
+├─ skills/DBManager/       # 本仓库使用方法技能文档（SKILL.md，随仓库发布）
 └─ src/
    ├─ index.ts             # 库入口（导出 DBManagerView 组件 + ManagerApi 契约类型）
    ├─ main.ts              # 演示应用入口（注册 antdv-next，无 Pinia）
@@ -349,7 +346,7 @@ Logger.setLevel('INFO') // 或 Logger.level = 'INFO' / Logger.getLevel()
    ├─ stores/              # 状态注入体系：context（工厂+provide/inject）+ model / canvas / dict / template / theme / ui / history / settings 八个 reactive 仓库
    ├─ types/               # 数据模型类型（含 ManagerApi 契约，与规格说明书一致）
    ├─ utils/               # 字符串 / Java 类型映射 / 导航推导 / 几何 / 力导向布局 / Eta 渲染 / 高亮
-   ├─ styles/              # CSS 变量（亮暗双主题）/ 全局样式 / hljs 配色（库构建时内联进 JS）
+   ├─ styles/              # --dbm- 设计令牌（静态基线）/ antd 主题同步层 / 全局样式 / hljs 配色（库构建时内联进 JS）
    ├─ views/               # DBManagerView（页面封装+状态注入入口）/ EditorView / DictView / TemplateView / SettingsView
    └─ components/
       ├─ layout/           # AppHeader
@@ -454,15 +451,3 @@ DemoManagerApi 将模型持久化到浏览器 `localStorage`（key 为 `gdbme:db
 | 页面封装 · DBManagerView（亮色）                      | 页面封装 · DBManagerView（暗色）                     |
 | ----------------------------------------------------- | ---------------------------------------------------- |
 | ![DBManager 亮](docs/screenshots/dbmanager-light.png) | ![DBManager 暗](docs/screenshots/dbmanager-dark.png) |
-
-## 源码快照与修改补丁
-
-开发过程中可在任意时点留档：
-
-```bash
-bash scripts/snapshot.sh   # 快照当前源码到 snapshot/[年月日时分秒].zip
-bash scripts/patch.sh      # 保存当前修改的 patch 到 patch/[年月日时分秒].patch
-bash scripts/package.sh    # 打包源码为交付 zip（download/graph-db-model-editor.zip，含 README）
-```
-
-`patch/` 中的补丁为 git 工作区相对最近一次提交的源码 diff（新增源文件以 intent-to-add 纳入），可用 `git apply patch/xxx.patch` 复现改动。`snapshot/` 与 `patch/` 已加入 `.gitignore`，不会影响版本管理与源码打包。

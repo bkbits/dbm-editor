@@ -39,6 +39,9 @@ state.theme.init()
 
 const antdThemeConfig = computed(() => ({
   algorithm: state.theme.isDark ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
+  // 启用 antd CSS 变量模式：antd 令牌以 --ant-* 变量挂载到 css-var-* 类元素上，
+  // antd-theme.scss 据此把 --dbm-* 设计令牌映射为 antd 令牌，实现主题联动
+  cssVar: true,
 }))
 
 // api 切换时全量重载各仓库数据（不重置 UI 页面）；隐藏态随模型数据（Table.hidden）恢复

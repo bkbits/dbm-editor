@@ -56,7 +56,7 @@ const path = computed(() => {
 
   .draft-line {
     fill: none;
-    stroke: var(--primary);
+    stroke: var(--dbm-primary);
     stroke-width: 2;
     stroke-dasharray: 6 5;
     vector-effect: non-scaling-stroke;
@@ -64,8 +64,8 @@ const path = computed(() => {
   }
 
   .draft-end {
-    fill: var(--primary);
-    stroke: var(--bg-panel);
+    fill: var(--dbm-primary);
+    stroke: var(--dbm-bg-panel);
     stroke-width: 2;
     vector-effect: non-scaling-stroke;
   }

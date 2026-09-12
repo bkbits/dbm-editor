@@ -289,7 +289,7 @@ onBeforeUnmount(() => {
 
   .edge-line {
     fill: none;
-    stroke: var(--edge);
+    stroke: var(--dbm-edge);
     stroke-width: 2;
     vector-effect: non-scaling-stroke;
     pointer-events: none;
@@ -305,16 +305,16 @@ onBeforeUnmount(() => {
   .edge-mark {
     pointer-events: none;
     rect {
-      fill: var(--edge-label-bg);
-      stroke: var(--edge-pill-border);
+      fill: var(--dbm-edge-label-bg);
+      stroke: var(--dbm-edge-pill-border);
       stroke-width: 1;
       vector-effect: non-scaling-stroke;
       transition: stroke 0.18s ease;
     }
     text {
       font-size: 11px;
-      font-family: var(--font-mono);
-      fill: var(--edge-label-text);
+      font-family: var(--dbm-font-mono);
+      fill: var(--dbm-edge-label-text);
       font-weight: 600;
       transition: fill 0.18s ease;
     }
@@ -326,8 +326,8 @@ onBeforeUnmount(() => {
     pointer-events: all;
     cursor: pointer;
     rect {
-      fill: var(--edge-pill-bg);
-      stroke: var(--edge-pill-border);
+      fill: var(--dbm-edge-pill-bg);
+      stroke: var(--dbm-edge-pill-border);
       stroke-width: 1;
       vector-effect: non-scaling-stroke;
       transition:
@@ -336,27 +336,27 @@ onBeforeUnmount(() => {
     }
     .pill-label {
       font-size: 11px;
-      font-family: var(--font-mono);
-      fill: var(--edge-label-text);
+      font-family: var(--dbm-font-mono);
+      fill: var(--dbm-edge-label-text);
       transition: fill 0.18s ease;
     }
     .pill-plus-bg {
-      fill: var(--primary-weak);
+      fill: var(--dbm-primary-weak);
       stroke: none;
       transition: fill 0.18s ease;
     }
     .pill-plus {
-      stroke: var(--primary-text);
+      stroke: var(--dbm-primary-text);
       stroke-width: 1.6;
       vector-effect: non-scaling-stroke;
       transition: stroke 0.18s ease;
     }
     &:hover {
       rect {
-        stroke: var(--primary);
+        stroke: var(--dbm-primary);
       }
       .pill-label {
-        fill: var(--primary-text);
+        fill: var(--dbm-primary-text);
       }
     }
   }
@@ -366,16 +366,16 @@ onBeforeUnmount(() => {
     /* 提示层淡入，避免悬停/选中时突兀弹出 */
     animation: edge-tip-in 0.16s ease both;
     rect {
-      fill: var(--bg-panel);
-      stroke: var(--border-strong);
+      fill: var(--dbm-bg-panel);
+      stroke: var(--dbm-border-strong);
       stroke-width: 1;
       vector-effect: non-scaling-stroke;
       filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.12));
     }
     .tip-main {
       font-size: 10.5px;
-      font-family: var(--font-mono);
-      fill: var(--text-2);
+      font-family: var(--dbm-font-mono);
+      fill: var(--dbm-text-2);
     }
   }
 
@@ -384,12 +384,12 @@ onBeforeUnmount(() => {
   &.hovered,
   &.related-hover {
     .edge-line {
-      stroke: var(--edge-hover);
+      stroke: var(--dbm-edge-hover);
       stroke-width: 2.8;
       stroke-opacity: 0.85;
     }
     .edge-mark text {
-      fill: var(--primary-text);
+      fill: var(--dbm-primary-text);
     }
   }
 
@@ -399,19 +399,19 @@ onBeforeUnmount(() => {
   &.selected,
   &.related-selected {
     .edge-line {
-      stroke: var(--primary);
+      stroke: var(--dbm-primary);
       stroke-width: 3.4;
       stroke-opacity: 1;
-      filter: drop-shadow(0 0 4px var(--edge-select-glow));
+      filter: drop-shadow(0 0 4px var(--dbm-edge-select-glow));
     }
     .edge-mark rect {
-      stroke: var(--primary);
+      stroke: var(--dbm-primary);
     }
     .edge-mark text {
-      fill: var(--primary-text);
+      fill: var(--dbm-primary-text);
     }
     .nn-pill rect {
-      stroke: var(--primary);
+      stroke: var(--dbm-primary);
     }
   }
 }

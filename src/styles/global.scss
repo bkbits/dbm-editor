@@ -16,16 +16,16 @@ body,
 }
 
 body {
-  font-family: var(--font-sans);
+  font-family: var(--dbm-font-sans);
   font-size: 13px;
-  color: var(--text-1);
-  background: var(--bg);
+  color: var(--dbm-text-1);
+  background: var(--dbm-bg);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
 ::selection {
-  background: var(--primary-weak);
+  background: var(--dbm-primary-weak);
 }
 
 /* 滚动条 */
@@ -34,25 +34,25 @@ body {
   height: 9px;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--scrollbar-thumb);
+  background: var(--dbm-scrollbar-thumb);
   border-radius: 8px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
 ::-webkit-scrollbar-track {
-  background: var(--scrollbar-track);
+  background: var(--dbm-scrollbar-track);
 }
 
 /* 通用工具类 */
 .mono {
-  font-family: var(--font-mono);
+  font-family: var(--dbm-font-mono);
 }
 
 .text-secondary {
-  color: var(--text-2);
+  color: var(--dbm-text-2);
 }
 .text-tertiary {
-  color: var(--text-3);
+  color: var(--dbm-text-3);
 }
 
 /* 应用骨架 */
@@ -61,6 +61,9 @@ body {
   flex-direction: column;
   height: 100%;
   overflow: hidden;
+  /* 页面可见底色走 antd-theme 映射层（跟随 --ant-color-bg-layout）；
+     body 上的静态基线仅作挂载前兜底 */
+  background: var(--dbm-bg);
 }
 
 .app-main {
@@ -81,8 +84,8 @@ body {
 
 /* highlight.js 搜索命中高亮 */
 mark.search-hit {
-  background: var(--warning-weak);
-  color: var(--warning);
+  background: var(--dbm-warning-weak);
+  color: var(--dbm-warning);
   border-radius: 2px;
   padding: 0 1px;
 }

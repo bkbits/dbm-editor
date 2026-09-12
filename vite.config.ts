@@ -23,8 +23,6 @@ export default defineConfig({
       'docs/**',
       'download/**',
       'upload/**',
-      'snapshot/**',
-      'patch/**',
       'worklog.md',
       'AGENTS.md',
     ],

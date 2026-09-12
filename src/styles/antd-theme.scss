@@ -1,0 +1,101 @@
+/**
+ * antd-next 主题同步层：把 --dbm-* 设计令牌重定义为 antdv-next 的 CSS 变量，
+ * 使 DBManager 的外观跟随宿主项目的 antd 主题（令牌覆盖、品牌色、暗色算法）联动。
+ *
+ * 生效前提与作用域：
+ * - DBManagerView 内部的 a-config-provider 已启用 theme.cssVar，
+ *   antd 令牌以 --ant-*（kebab-case）CSS 变量形式挂载在带 css-var-* 类的元素上；
+ * - 选择器取 `.app-provider`（DBManagerView 渲染的 a-app 根元素，必带 antd css-var 类）
+ *   与 `[class*='css-var-']`（antd 组件与其传送到 body 的弹层根节点都携带该类），
+ *   双选择器覆盖「组件树内部 + 传送门弹层（modal/select 下拉等渲染在 body 下）」两类位置；
+ * - 亮暗切换无需在本文件区分：antd 变量值随 darkAlgorithm / defaultAlgorithm 自动翻转，
+ *   [data-theme] 静态基线仅作为无 antd 变量环境下的兜底。
+ *
+ * 未映射令牌（沿用 variables.scss 静态值）：画布网格线（--dbm-grid-*，画布绘制
+ * 经 documentElement 读取静态值）、代码高亮配色（--dbm-code-keyword 等）、
+ * 分类色板（--dbm-cat-*）、布局尺寸（header 高度/大纲宽度）、滚动条轨道、
+ * 以及内部引用型令牌（--dbm-card-border-selected / --dbm-edge-hover 引用
+ * --dbm-primary，var() 引用在元素作用域解析，自动跟随本层的重定义）。
+ */
+.app-provider,
+[class*='css-var-'] {
+  /* 字体 */
+  --dbm-font-sans: var(--ant-font-family);
+  --dbm-font-mono: var(--ant-font-family-code);
+
+  /* 圆角（antd 无 12px 档位，--dbm-radius-l 以 calc 相对 lg 联动） */
+  --dbm-radius-s: var(--ant-border-radius-sm);
+  --dbm-radius-m: var(--ant-border-radius-lg);
+  --dbm-radius-l: calc(var(--ant-border-radius-lg) + 4px);
+
+  /* 间距（对齐 antd margin 令牌档位 4/8/12/16/20/24） */
+  --dbm-space-1: var(--ant-margin-xxs);
+  --dbm-space-2: var(--ant-margin-xs);
+  --dbm-space-3: var(--ant-margin-sm);
+  --dbm-space-4: var(--ant-margin);
+  --dbm-space-5: var(--ant-margin-md);
+  --dbm-space-6: var(--ant-margin-lg);
+
+  /* 背景与文本 */
+  --dbm-bg: var(--ant-color-bg-layout);
+  --dbm-bg-2: var(--ant-color-fill-quaternary);
+  --dbm-bg-panel: var(--ant-color-bg-container);
+  --dbm-bg-hover: var(--ant-color-bg-text-hover);
+  --dbm-bg-active: var(--ant-color-bg-text-active);
+  --dbm-bg-raise: var(--ant-color-bg-elevated);
+  --dbm-text-1: var(--ant-color-text);
+  --dbm-text-2: var(--ant-color-text-secondary);
+  --dbm-text-3: var(--ant-color-text-tertiary);
+  --dbm-text-inverse: var(--ant-color-text-light-solid);
+
+  /* 边框 */
+  --dbm-border: var(--ant-color-border-secondary);
+  --dbm-border-strong: var(--ant-color-border);
+
+  /* 品牌与语义色（weak 系列为 antd 对应色浅底） */
+  --dbm-primary: var(--ant-color-primary);
+  --dbm-primary-strong: var(--ant-color-primary-active);
+  --dbm-primary-weak: var(--ant-color-primary-bg);
+  --dbm-primary-text: var(--ant-color-primary);
+  --dbm-danger: var(--ant-color-error);
+  --dbm-danger-weak: var(--ant-color-error-bg);
+  --dbm-warning: var(--ant-color-warning);
+  --dbm-warning-weak: var(--ant-color-warning-bg);
+  --dbm-success: var(--ant-color-success);
+  --dbm-success-weak: var(--ant-color-success-bg);
+  --dbm-info: var(--ant-color-info);
+  --dbm-info-weak: var(--ant-color-info-bg);
+
+  /* 画布底色（网格线走静态基线，见文件头说明） */
+  --dbm-canvas-bg: var(--ant-color-bg-container);
+
+  /* 表卡片 */
+  --dbm-card-bg: var(--ant-color-bg-container);
+  --dbm-card-border: var(--ant-color-border-secondary);
+  --dbm-card-head-bg: var(--ant-color-fill-alter);
+  --dbm-card-head-text: var(--ant-color-text);
+  --dbm-card-row-hover: var(--ant-color-fill-tertiary);
+  --dbm-card-conn: var(--ant-color-text-quaternary);
+  --dbm-card-shadow: var(--ant-box-shadow-card);
+  --dbm-card-shadow-hover: var(--ant-box-shadow);
+
+  /* 导航线 */
+  --dbm-edge: var(--ant-color-icon);
+  --dbm-edge-select-glow: color-mix(in srgb, var(--ant-color-primary) 40%, transparent);
+  --dbm-edge-label-bg: var(--ant-color-bg-elevated);
+  --dbm-edge-label-text: var(--ant-color-text-secondary);
+  --dbm-edge-pill-bg: var(--ant-color-bg-container);
+  --dbm-edge-pill-border: var(--ant-color-border);
+
+  /* 代码块底色（语法高亮配色走静态基线） */
+  --dbm-code-bg: var(--ant-color-fill-tertiary);
+  --dbm-code-border: var(--ant-color-border-secondary);
+  --dbm-code-text: var(--ant-color-text);
+
+  /* 阴影与蒙层 */
+  --dbm-shadow-pop: var(--ant-box-shadow-secondary);
+  --dbm-mask: var(--ant-color-bg-mask);
+
+  /* 滚动条 */
+  --dbm-scrollbar-thumb: var(--ant-color-text-quaternary);
+}

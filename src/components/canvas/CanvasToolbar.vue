@@ -181,8 +181,8 @@ async function replace() {
   align-items: center;
   gap: 8px;
   padding: 6px 10px;
-  background: var(--bg-panel);
-  border-bottom: 1px solid var(--border);
+  background: var(--dbm-bg-panel);
+  border-bottom: 1px solid var(--dbm-border);
   flex-shrink: 0;
   flex-wrap: wrap;
 }
@@ -196,25 +196,25 @@ async function replace() {
 .tool-sep {
   width: 1px;
   height: 18px;
-  background: var(--border);
+  background: var(--dbm-border);
   margin: 0 2px;
 }
 
 .zoom-display {
-  border: 1px solid var(--border);
-  background: var(--bg-2);
-  color: var(--text-2);
+  border: 1px solid var(--dbm-border);
+  background: var(--dbm-bg-2);
+  color: var(--dbm-text-2);
   font-size: 12px;
-  font-family: var(--font-mono);
-  border-radius: var(--radius-s);
+  font-family: var(--dbm-font-mono);
+  border-radius: var(--dbm-radius-s);
   padding: 0 8px;
   height: 24px;
   min-width: 52px;
   cursor: pointer;
 
   &:hover {
-    color: var(--primary-text);
-    border-color: var(--primary);
+    color: var(--dbm-primary-text);
+    border-color: var(--dbm-primary);
   }
 }
 
@@ -229,7 +229,7 @@ async function replace() {
     align-items: center;
     gap: 4px;
     font-size: 11px;
-    color: var(--text-3);
+    color: var(--dbm-text-3);
     max-width: 220px;
     overflow: hidden;
     text-overflow: ellipsis;

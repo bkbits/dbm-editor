@@ -586,10 +586,10 @@ async function save() {
 
     label {
       font-size: 11.5px;
-      color: var(--text-2);
+      color: var(--dbm-text-2);
 
       .req {
-        color: var(--danger);
+        color: var(--dbm-danger);
         margin-left: 2px;
       }
     }
@@ -634,8 +634,8 @@ async function save() {
 .columns-head {
   padding: 2px 4px 6px;
   font-size: 11px;
-  color: var(--text-3);
-  border-bottom: 1px solid var(--border);
+  color: var(--dbm-text-3);
+  border-bottom: 1px solid var(--dbm-border);
 
   .h-sort,
   .h-center {
@@ -650,10 +650,10 @@ async function save() {
 
   .column-row {
     padding: 2px 2px;
-    border-radius: var(--radius-s);
+    border-radius: var(--dbm-radius-s);
 
     &:hover {
-      background: var(--bg-hover);
+      background: var(--dbm-bg-hover);
     }
 
     &.dragging {
@@ -661,11 +661,11 @@ async function save() {
     }
 
     &.drop-above {
-      box-shadow: 0 -2px 0 0 var(--primary);
+      box-shadow: 0 -2px 0 0 var(--dbm-primary);
     }
 
     &.drop-below {
-      box-shadow: 0 2px 0 0 var(--primary);
+      box-shadow: 0 2px 0 0 var(--dbm-primary);
     }
   }
 }
@@ -677,7 +677,7 @@ async function save() {
   width: 20px;
   height: 22px;
   border-radius: 4px;
-  color: var(--text-3);
+  color: var(--dbm-text-3);
   cursor: grab;
   touch-action: none;
   transition:
@@ -685,8 +685,8 @@ async function save() {
     background 0.15s ease;
 
   &:hover {
-    color: var(--text-1);
-    background: var(--bg-hover);
+    color: var(--dbm-text-1);
+    background: var(--dbm-bg-hover);
   }
 
   &:active {
@@ -707,12 +707,12 @@ async function save() {
   border: none;
   border-radius: 3px;
   background: transparent;
-  color: var(--text-3);
+  color: var(--dbm-text-3);
   cursor: pointer;
 
   &:hover {
-    background: var(--danger-weak);
-    color: var(--danger);
+    background: var(--dbm-danger-weak);
+    color: var(--dbm-danger);
   }
 }
 
@@ -734,8 +734,8 @@ async function save() {
   align-items: center;
   gap: 10px;
   padding: 6px 8px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-m);
+  border: 1px solid var(--dbm-border);
+  border-radius: var(--dbm-radius-m);
   margin-bottom: 6px;
   font-size: 12px;
 
@@ -747,35 +747,35 @@ async function save() {
     line-height: 18px;
 
     &.t-11 {
-      color: var(--info);
-      background: var(--info-weak);
+      color: var(--dbm-info);
+      background: var(--dbm-info-weak);
     }
     &.t-1n {
-      color: var(--success);
-      background: var(--success-weak);
+      color: var(--dbm-success);
+      background: var(--dbm-success-weak);
     }
     &.t-n1 {
-      color: var(--warning);
-      background: var(--warning-weak);
+      color: var(--dbm-warning);
+      background: var(--dbm-warning-weak);
     }
     &.t-nn {
-      color: var(--primary-text);
-      background: var(--primary-weak);
+      color: var(--dbm-primary-text);
+      background: var(--dbm-primary-weak);
     }
   }
 
   .nav-tables {
     font-weight: 600;
-    color: var(--text-1);
+    color: var(--dbm-text-1);
 
     .nav-arrow {
-      color: var(--text-3);
+      color: var(--dbm-text-3);
       font-weight: 400;
     }
   }
 
   .nav-props {
-    color: var(--text-2);
+    color: var(--dbm-text-2);
     flex: 1;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -783,7 +783,7 @@ async function save() {
   }
 
   .nav-cascade {
-    color: var(--text-3);
+    color: var(--dbm-text-3);
     font-size: 11px;
     flex-shrink: 0;
   }

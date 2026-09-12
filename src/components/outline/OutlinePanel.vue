@@ -75,7 +75,7 @@ function toggleExpand(categoryId: string) {
 }
 
 function catColor(categoryId: string, index: number) {
-  return `var(--cat-${index % 8})`
+  return `var(--dbm-cat-${index % 8})`
 }
 
 /** 点击大纲表名：双向联动高亮 + 画布居中定位 */
@@ -283,11 +283,11 @@ watch(
 .outline-panel {
   display: flex;
   flex-direction: column;
-  width: var(--outline-width);
-  min-width: var(--outline-width);
+  width: var(--dbm-outline-width);
+  min-width: var(--dbm-outline-width);
   height: 100%;
-  background: var(--bg-panel);
-  border-right: 1px solid var(--border);
+  background: var(--dbm-bg-panel);
+  border-right: 1px solid var(--dbm-border);
   flex-shrink: 0;
 }
 
@@ -303,7 +303,7 @@ watch(
     gap: 6px;
     font-weight: 600;
     font-size: 13px;
-    color: var(--text-1);
+    color: var(--dbm-text-1);
   }
 
   .outline-actions {
@@ -319,19 +319,19 @@ watch(
   width: 22px;
   height: 22px;
   border: none;
-  border-radius: var(--radius-s);
+  border-radius: var(--dbm-radius-s);
   background: transparent;
-  color: var(--text-3);
+  color: var(--dbm-text-3);
   cursor: pointer;
 
   &:hover {
-    background: var(--primary-weak);
-    color: var(--primary-text);
+    background: var(--dbm-primary-weak);
+    color: var(--dbm-primary-text);
   }
 
   &.danger:hover {
-    background: var(--danger-weak);
-    color: var(--danger);
+    background: var(--dbm-danger-weak);
+    color: var(--dbm-danger);
   }
 }
 
@@ -344,22 +344,22 @@ watch(
     left: 8px;
     top: 50%;
     transform: translateY(-50%);
-    color: var(--text-3);
+    color: var(--dbm-text-3);
   }
 
   input {
     width: 100%;
     height: 28px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-m);
-    background: var(--bg-2);
-    color: var(--text-1);
+    border: 1px solid var(--dbm-border);
+    border-radius: var(--dbm-radius-m);
+    background: var(--dbm-bg-2);
+    color: var(--dbm-text-1);
     padding: 0 8px 0 28px;
     font-size: 12px;
     outline: none;
 
     &:focus {
-      border-color: var(--primary);
+      border-color: var(--dbm-primary);
     }
   }
 }
@@ -380,20 +380,20 @@ watch(
   align-items: center;
   gap: 4px;
   padding: 4px 6px;
-  border-radius: var(--radius-s);
+  border-radius: var(--dbm-radius-s);
   cursor: pointer;
 
   &:hover {
-    background: var(--bg-hover);
+    background: var(--dbm-bg-hover);
     .cat-actions {
       opacity: 1;
     }
   }
 
   &.selected {
-    background: var(--primary-weak);
+    background: var(--dbm-primary-weak);
     .cat-name {
-      color: var(--primary-text);
+      color: var(--dbm-primary-text);
     }
   }
 
@@ -401,7 +401,7 @@ watch(
     display: inline-flex;
     border: none;
     background: none;
-    color: var(--text-3);
+    color: var(--dbm-text-3);
     cursor: pointer;
     padding: 0;
     width: 16px;
@@ -421,7 +421,7 @@ watch(
     flex: 1;
     font-size: 12.5px;
     font-weight: 600;
-    color: var(--text-1);
+    color: var(--dbm-text-1);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -429,8 +429,8 @@ watch(
 
   .cat-count {
     font-size: 10.5px;
-    color: var(--text-3);
-    font-family: var(--font-mono);
+    color: var(--dbm-text-3);
+    font-family: var(--dbm-font-mono);
     flex-shrink: 0;
   }
 
@@ -445,7 +445,7 @@ watch(
 .cat-package {
   padding: 1px 6px 3px 30px;
   font-size: 10px;
-  color: var(--text-3);
+  color: var(--dbm-text-3);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -461,46 +461,46 @@ watch(
   gap: 6px;
   padding: 3px 6px 3px 8px;
   margin-left: 12px;
-  border-left: 1px solid var(--border);
-  border-radius: 0 var(--radius-s) var(--radius-s) 0;
+  border-left: 1px solid var(--dbm-border);
+  border-radius: 0 var(--dbm-radius-s) var(--dbm-radius-s) 0;
   cursor: pointer;
 
   &:hover {
-    background: var(--bg-hover);
+    background: var(--dbm-bg-hover);
     .t-eye {
       opacity: 1;
     }
   }
 
   &.selected {
-    background: var(--primary-weak);
-    border-left-color: var(--primary);
+    background: var(--dbm-primary-weak);
+    border-left-color: var(--dbm-primary);
     .t-name {
-      color: var(--primary-text);
+      color: var(--dbm-primary-text);
       font-weight: 600;
     }
   }
 
   &.hidden .t-name {
-    color: var(--text-3);
+    color: var(--dbm-text-3);
   }
 
   .t-icon {
-    color: var(--text-3);
+    color: var(--dbm-text-3);
     flex-shrink: 0;
   }
 
   .t-name {
     flex: 1;
     font-size: 12px;
-    color: var(--text-1);
+    color: var(--dbm-text-1);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   .t-mapping {
-    color: var(--text-3);
+    color: var(--dbm-text-3);
     flex-shrink: 0;
   }
 
@@ -513,15 +513,15 @@ watch(
     border: none;
     border-radius: 3px;
     background: transparent;
-    color: var(--text-3);
+    color: var(--dbm-text-3);
     cursor: pointer;
     opacity: 0;
     flex-shrink: 0;
     padding: 0;
 
     &:hover {
-      background: var(--primary-weak);
-      color: var(--primary-text);
+      background: var(--dbm-primary-weak);
+      color: var(--dbm-primary-text);
     }
   }
 
@@ -533,7 +533,7 @@ watch(
 .table-empty,
 .tree-empty {
   padding: 4px 10px;
-  color: var(--text-3);
+  color: var(--dbm-text-3);
   font-size: 11.5px;
 }
 
@@ -551,10 +551,10 @@ watch(
   justify-content: space-around;
   gap: 6px;
   padding: 7px 8px;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--dbm-border);
   font-size: 10.5px;
-  color: var(--text-3);
-  font-family: var(--font-mono);
+  color: var(--dbm-text-3);
+  font-family: var(--dbm-font-mono);
   flex-shrink: 0;
 }
 </style>

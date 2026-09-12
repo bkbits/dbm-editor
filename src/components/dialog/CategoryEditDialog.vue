@@ -124,10 +124,10 @@ async function save() {
 
   label {
     font-size: 11.5px;
-    color: var(--text-2);
+    color: var(--dbm-text-2);
 
     .req {
-      color: var(--danger);
+      color: var(--dbm-danger);
     }
   }
 }

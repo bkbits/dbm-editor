@@ -346,10 +346,10 @@ onBeforeUnmount(() => {
   position: absolute;
   z-index: 30;
   min-width: 178px;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-m);
-  box-shadow: var(--shadow-pop);
+  background: var(--dbm-bg-panel);
+  border: 1px solid var(--dbm-border);
+  border-radius: var(--dbm-radius-m);
+  box-shadow: var(--dbm-shadow-pop);
   padding: 4px;
   /* 弹出过渡：淡入 + 轻微上移，避免生硬闪现 */
   animation: ctx-menu-in 0.14s ease both;
@@ -370,7 +370,7 @@ onBeforeUnmount(() => {
   padding: 5px 8px 2px;
   font-size: 10.5px;
   font-weight: 600;
-  color: var(--text-3);
+  color: var(--dbm-text-3);
   letter-spacing: 0.5px;
   pointer-events: none;
   user-select: none;
@@ -379,7 +379,7 @@ onBeforeUnmount(() => {
 .ctx-divider {
   margin: 3px 4px;
   height: 1px;
-  background: var(--border);
+  background: var(--dbm-border);
   pointer-events: none;
 }
 
@@ -390,9 +390,9 @@ onBeforeUnmount(() => {
   width: 100%;
   padding: 6px 8px;
   border: none;
-  border-radius: var(--radius-s);
+  border-radius: var(--dbm-radius-s);
   background: transparent;
-  color: var(--text-1);
+  color: var(--dbm-text-1);
   font-size: 12.5px;
   cursor: pointer;
   text-align: left;
@@ -410,18 +410,18 @@ onBeforeUnmount(() => {
   }
 
   &:hover:not(.disabled) {
-    background: var(--bg-hover);
+    background: var(--dbm-bg-hover);
   }
 
   &.danger {
-    color: var(--danger);
+    color: var(--dbm-danger);
     &:hover {
-      background: var(--danger-weak);
+      background: var(--dbm-danger-weak);
     }
   }
 
   &.disabled {
-    color: var(--text-3);
+    color: var(--dbm-text-3);
     cursor: not-allowed;
   }
 }

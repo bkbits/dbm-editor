@@ -32,15 +32,14 @@ pnpm-debug.log*
 test
 prompt
 
-# Skills directory（环境内部目录）
-/skills/
+# Skills directory（环境内部目录；DBManager 技能文档随仓库发布）
+/skills/*
+!/skills/DBManager/
 .zscripts/
 Caddyfile
 upload/
 download/
 agent-ctx/
 
-# 快照与补丁（会话产物目录，不纳入版本管理）
-snapshot/
-patch/
+# 会话产物目录（不纳入版本管理）
 tool-results/

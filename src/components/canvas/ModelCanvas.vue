@@ -89,9 +89,9 @@ function drawGrid() {
   const major = minor * 5
 
   ctx.lineWidth = 1 // 网格线粗细固定 1px，不随缩放变化
-  ctx.strokeStyle = cssVar('--grid-minor')
+  ctx.strokeStyle = cssVar('--dbm-grid-minor')
   drawGridLines(ctx, w, h, minor, canvas.panX, canvas.panY)
-  ctx.strokeStyle = cssVar('--grid-major')
+  ctx.strokeStyle = cssVar('--dbm-grid-major')
   drawGridLines(ctx, w, h, major, canvas.panX, canvas.panY)
 }
 
@@ -348,7 +348,7 @@ defineExpose({ rootRef })
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: var(--canvas-bg);
+  background: var(--dbm-canvas-bg);
   touch-action: none;
   user-select: none;
 
@@ -385,8 +385,8 @@ defineExpose({ rootRef })
 .selection-rect {
   position: absolute;
   z-index: 5;
-  border: 1px solid var(--primary);
-  background: var(--primary-weak);
+  border: 1px solid var(--dbm-primary);
+  background: var(--dbm-primary-weak);
   pointer-events: none;
 }
 
@@ -399,20 +399,20 @@ defineExpose({ rootRef })
   align-items: center;
   gap: 10px;
   padding: 4px 10px;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-m);
-  box-shadow: var(--card-shadow);
+  background: var(--dbm-bg-panel);
+  border: 1px solid var(--dbm-border);
+  border-radius: var(--dbm-radius-m);
+  box-shadow: var(--dbm-card-shadow);
   font-size: 11px;
-  color: var(--text-2);
+  color: var(--dbm-text-2);
   pointer-events: none;
 
   .status-item {
-    color: var(--text-2);
+    color: var(--dbm-text-2);
   }
   .status-hint {
-    color: var(--text-3);
-    border-left: 1px solid var(--border);
+    color: var(--dbm-text-3);
+    border-left: 1px solid var(--dbm-border);
     padding-left: 10px;
   }
 }
@@ -425,7 +425,7 @@ defineExpose({ rootRef })
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  color: var(--text-2);
+  color: var(--dbm-text-2);
   pointer-events: none;
   font-size: 14px;
 }
@@ -437,6 +437,6 @@ defineExpose({ rootRef })
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--mask);
+  background: var(--dbm-mask);
 }
 </style>

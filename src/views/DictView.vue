@@ -66,14 +66,19 @@ watch(
 const isEdit = computed(() => Boolean(draft.value.id))
 
 const labelTypeOptions: Array<{ value: DictValueLabelType; label: string; color: string }> = [
-  { value: 'I', label: 'I · Info', color: 'var(--info)' },
-  { value: 'S', label: 'S · Success', color: 'var(--success)' },
-  { value: 'W', label: 'W · Warning', color: 'var(--warning)' },
-  { value: 'D', label: 'D · Danger', color: 'var(--danger)' },
+  { value: 'I', label: 'I · Info', color: 'var(--dbm-info)' },
+  { value: 'S', label: 'S · Success', color: 'var(--dbm-success)' },
+  { value: 'W', label: 'W · Warning', color: 'var(--dbm-warning)' },
+  { value: 'D', label: 'D · Danger', color: 'var(--dbm-danger)' },
 ]
 
 const typeColor = (t: DictValueLabelType) =>
-  ({ I: 'var(--info)', S: 'var(--success)', W: 'var(--warning)', D: 'var(--danger)' })[t]
+  ({
+    I: 'var(--dbm-info)',
+    S: 'var(--dbm-success)',
+    W: 'var(--dbm-warning)',
+    D: 'var(--dbm-danger)',
+  })[t]
 
 function typeStyle(v: DictValue) {
   return {
@@ -349,10 +354,10 @@ const isValueHit = (v: DictValue) => {
 
           <div class="values-legend">
             <span>值类型：</span>
-            <span class="lg" :style="{ color: 'var(--info)' }">I=Info</span>
-            <span class="lg" :style="{ color: 'var(--success)' }">S=Success</span>
-            <span class="lg" :style="{ color: 'var(--warning)' }">W=Warning</span>
-            <span class="lg" :style="{ color: 'var(--danger)' }">D=Danger</span>
+            <span class="lg" :style="{ color: 'var(--dbm-info)' }">I=Info</span>
+            <span class="lg" :style="{ color: 'var(--dbm-success)' }">S=Success</span>
+            <span class="lg" :style="{ color: 'var(--dbm-warning)' }">W=Warning</span>
+            <span class="lg" :style="{ color: 'var(--dbm-danger)' }">D=Danger</span>
             <span class="lg-tip">字段编辑时可通过字典标识关联，卡片字段行将显示字典小徽标</span>
           </div>
         </div>
@@ -377,8 +382,8 @@ const isValueHit = (v: DictValue) => {
   min-width: 288px;
   display: flex;
   flex-direction: column;
-  background: var(--bg-panel);
-  border-right: 1px solid var(--border);
+  background: var(--dbm-bg-panel);
+  border-right: 1px solid var(--dbm-border);
 
   .list-head {
     display: flex;
@@ -391,7 +396,7 @@ const isValueHit = (v: DictValue) => {
       align-items: center;
       gap: 6px;
       font-weight: 600;
-      color: var(--text-1);
+      color: var(--dbm-text-1);
     }
   }
 
@@ -404,22 +409,22 @@ const isValueHit = (v: DictValue) => {
       left: 8px;
       top: 50%;
       transform: translateY(-50%);
-      color: var(--text-3);
+      color: var(--dbm-text-3);
     }
 
     input {
       width: 100%;
       height: 28px;
-      border: 1px solid var(--border);
-      border-radius: var(--radius-m);
-      background: var(--bg-2);
-      color: var(--text-1);
+      border: 1px solid var(--dbm-border);
+      border-radius: var(--dbm-radius-m);
+      background: var(--dbm-bg-2);
+      color: var(--dbm-text-1);
       padding: 0 8px 0 28px;
       font-size: 12px;
       outline: none;
 
       &:focus {
-        border-color: var(--primary);
+        border-color: var(--dbm-primary);
       }
     }
   }
@@ -432,33 +437,33 @@ const isValueHit = (v: DictValue) => {
 
   .list-foot {
     padding: 7px 12px;
-    border-top: 1px solid var(--border);
+    border-top: 1px solid var(--dbm-border);
     font-size: 10.5px;
-    color: var(--text-3);
-    font-family: var(--font-mono);
+    color: var(--dbm-text-3);
+    font-family: var(--dbm-font-mono);
   }
 }
 
 .dict-item {
   padding: 7px 10px;
-  border-radius: var(--radius-m);
+  border-radius: var(--dbm-radius-m);
   cursor: pointer;
   margin-bottom: 2px;
   border: 1px solid transparent;
 
   &:hover {
-    background: var(--bg-hover);
+    background: var(--dbm-bg-hover);
   }
 
   &.selected {
-    background: var(--primary-weak);
-    border-color: color-mix(in srgb, var(--primary) 35%, transparent);
+    background: var(--dbm-primary-weak);
+    border-color: color-mix(in srgb, var(--dbm-primary) 35%, transparent);
   }
 
   .item-key {
     font-size: 12.5px;
     font-weight: 600;
-    color: var(--text-1);
+    color: var(--dbm-text-1);
   }
 
   .item-label {
@@ -469,21 +474,21 @@ const isValueHit = (v: DictValue) => {
 
     .item-label-text {
       font-size: 11.5px;
-      color: var(--text-2);
+      color: var(--dbm-text-2);
     }
 
     .item-count {
       margin-left: auto;
       font-size: 10px;
-      color: var(--text-3);
-      font-family: var(--font-mono);
+      color: var(--dbm-text-3);
+      font-family: var(--dbm-font-mono);
     }
   }
 
   .item-comment {
     margin-top: 1px;
     font-size: 10.5px;
-    color: var(--text-3);
+    color: var(--dbm-text-3);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -493,7 +498,7 @@ const isValueHit = (v: DictValue) => {
 .list-empty {
   padding: 30px 10px;
   text-align: center;
-  color: var(--text-3);
+  color: var(--dbm-text-3);
   font-size: 12px;
 }
 
@@ -512,7 +517,7 @@ const isValueHit = (v: DictValue) => {
     align-items: center;
     justify-content: center;
     gap: 8px;
-    color: var(--text-3);
+    color: var(--dbm-text-3);
 
     svg {
       opacity: 0.4;
@@ -541,10 +546,10 @@ const isValueHit = (v: DictValue) => {
 
     label {
       font-size: 11.5px;
-      color: var(--text-2);
+      color: var(--dbm-text-2);
 
       .req {
-        color: var(--danger);
+        color: var(--dbm-danger);
       }
     }
   }
@@ -568,13 +573,13 @@ const isValueHit = (v: DictValue) => {
 
     .values-title {
       font-weight: 600;
-      color: var(--text-1);
+      color: var(--dbm-text-1);
       font-size: 13px;
 
       .hit-tip {
         margin-left: 8px;
         font-size: 11px;
-        color: var(--warning);
+        color: var(--dbm-warning);
         font-style: normal;
         font-weight: 400;
       }
@@ -590,18 +595,18 @@ const isValueHit = (v: DictValue) => {
 }
 
 .values-table {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-m);
-  background: var(--bg-panel);
+  border: 1px solid var(--dbm-border);
+  border-radius: var(--dbm-radius-m);
+  background: var(--dbm-bg-panel);
 
   .v-head {
     padding: 8px 12px;
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--dbm-border);
     font-size: 11.5px;
-    color: var(--text-2);
+    color: var(--dbm-text-2);
 
     .req {
-      color: var(--danger);
+      color: var(--dbm-danger);
     }
   }
 
@@ -616,8 +621,8 @@ const isValueHit = (v: DictValue) => {
     padding: 4px 0;
 
     &.hit {
-      background: var(--warning-weak);
-      border-radius: var(--radius-s);
+      background: var(--dbm-warning-weak);
+      border-radius: var(--dbm-radius-s);
       padding: 4px 6px;
       margin: 0 -6px;
     }
@@ -645,9 +650,9 @@ const isValueHit = (v: DictValue) => {
   .color-input {
     width: 26px;
     height: 24px;
-    border: 1px solid var(--border);
+    border: 1px solid var(--dbm-border);
     border-radius: 4px;
-    background: var(--bg-2);
+    background: var(--dbm-bg-2);
     cursor: pointer;
     padding: 2px;
   }
@@ -655,13 +660,13 @@ const isValueHit = (v: DictValue) => {
   .color-clear {
     border: none;
     background: transparent;
-    color: var(--text-3);
+    color: var(--dbm-text-3);
     cursor: pointer;
     font-size: 14px;
     line-height: 1;
 
     &:hover {
-      color: var(--danger);
+      color: var(--dbm-danger);
     }
   }
 }
@@ -675,19 +680,19 @@ const isValueHit = (v: DictValue) => {
   border: none;
   border-radius: 4px;
   background: transparent;
-  color: var(--text-3);
+  color: var(--dbm-text-3);
   cursor: pointer;
 
   &:hover {
-    background: var(--danger-weak);
-    color: var(--danger);
+    background: var(--dbm-danger-weak);
+    color: var(--dbm-danger);
   }
 }
 
 .v-empty {
   padding: 26px 0;
   text-align: center;
-  color: var(--text-3);
+  color: var(--dbm-text-3);
   font-size: 12px;
 }
 
@@ -698,10 +703,10 @@ const isValueHit = (v: DictValue) => {
   flex-wrap: wrap;
   gap: 10px;
   font-size: 11px;
-  color: var(--text-3);
+  color: var(--dbm-text-3);
 
   .lg {
-    font-family: var(--font-mono);
+    font-family: var(--dbm-font-mono);
     font-weight: 600;
   }
 

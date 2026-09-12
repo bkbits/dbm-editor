@@ -80,10 +80,10 @@ async function confirmReplace() {
   display: flex;
   gap: 10px;
   padding: 10px 12px;
-  border: 1px solid var(--warning);
-  background: var(--warning-weak);
-  color: var(--warning);
-  border-radius: var(--radius-m);
+  border: 1px solid var(--dbm-warning);
+  background: var(--dbm-warning-weak);
+  color: var(--dbm-warning);
+  border-radius: var(--dbm-radius-m);
   font-size: 12.5px;
 
   svg {
@@ -108,15 +108,15 @@ async function confirmReplace() {
 
   .files-title {
     font-size: 11.5px;
-    color: var(--text-2);
+    color: var(--dbm-text-2);
     margin-bottom: 4px;
   }
 
   .files-body {
     max-height: 240px;
     overflow-y: auto;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-m);
+    border: 1px solid var(--dbm-border);
+    border-radius: var(--dbm-radius-m);
     padding: 6px 10px;
     font-size: 11px;
 
@@ -126,13 +126,13 @@ async function confirmReplace() {
       padding: 1.5px 0;
 
       .tpl-name {
-        color: var(--primary-text);
+        color: var(--dbm-primary-text);
         width: 80px;
         flex-shrink: 0;
       }
 
       .file-path {
-        color: var(--text-2);
+        color: var(--dbm-text-2);
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
@@ -140,7 +140,7 @@ async function confirmReplace() {
     }
 
     .more {
-      color: var(--text-3);
+      color: var(--dbm-text-3);
       padding-top: 4px;
     }
   }

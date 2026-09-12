@@ -1,181 +1,187 @@
 /**
- * 设计令牌：全部颜色/间距/圆角/阴影均通过 CSS 变量定义，
+ * 设计令牌（--dbm- 命名空间）：全部颜色/间距/圆角/阴影均通过 CSS 变量定义，
+ * 统一携带 --dbm- 前缀，避免与宿主项目 CSS 变量冲突；
  * 用户可在外部覆盖变量值定制主题；[data-theme] 切换亮暗。
+ *
+ * 本文件是「静态基线」：antd-theme.scss 会把可对应的令牌重定义为
+ * antdv-next 的 CSS 变量（--ant-*，随宿主 antd 主题联动），
+ * 未被映射的令牌（画布网格线、代码高亮配色、分类色板、布局尺寸等
+ * 无 antd 对应物的令牌）继续沿用此处的静态值。
  */
 
 :root,
 [data-theme='light'] {
   /* 字体 */
-  --font-sans:
+  --dbm-font-sans:
     -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
     'Microsoft YaHei', 'Noto Sans SC', 'Helvetica Neue', Arial, sans-serif;
-  --font-mono:
+  --dbm-font-mono:
     ui-monospace, 'SF Mono', SFMono-Regular, 'JetBrains Mono', 'Cascadia Code', Menlo, Consolas,
     'Liberation Mono', monospace;
 
   /* 布局尺寸 */
-  --header-height: 52px;
-  --outline-width: 268px;
-  --radius-s: 4px;
-  --radius-m: 8px;
-  --radius-l: 12px;
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 20px;
-  --space-6: 24px;
+  --dbm-header-height: 52px;
+  --dbm-outline-width: 268px;
+  --dbm-radius-s: 4px;
+  --dbm-radius-m: 8px;
+  --dbm-radius-l: 12px;
+  --dbm-space-1: 4px;
+  --dbm-space-2: 8px;
+  --dbm-space-3: 12px;
+  --dbm-space-4: 16px;
+  --dbm-space-5: 20px;
+  --dbm-space-6: 24px;
 
   /* 背景与文本 */
-  --bg: #eef1f4;
-  --bg-2: #f5f7f9;
-  --bg-panel: #ffffff;
-  --bg-hover: rgba(15, 23, 32, 0.05);
-  --bg-active: rgba(15, 23, 32, 0.09);
-  --bg-raise: #ffffff;
-  --text-1: #1c2128;
-  --text-2: #4d5761;
-  --text-3: #8b949e;
-  --text-inverse: #ffffff;
+  --dbm-bg: #eef1f4;
+  --dbm-bg-2: #f5f7f9;
+  --dbm-bg-panel: #ffffff;
+  --dbm-bg-hover: rgba(15, 23, 32, 0.05);
+  --dbm-bg-active: rgba(15, 23, 32, 0.09);
+  --dbm-bg-raise: #ffffff;
+  --dbm-text-1: #1c2128;
+  --dbm-text-2: #4d5761;
+  --dbm-text-3: #8b949e;
+  --dbm-text-inverse: #ffffff;
 
   /* 边框 */
-  --border: #dfe3e8;
-  --border-strong: #c6ccd4;
+  --dbm-border: #dfe3e8;
+  --dbm-border-strong: #c6ccd4;
 
   /* 品牌与语义色 */
-  --primary: #0d9488;
-  --primary-strong: #0b7a70;
-  --primary-weak: rgba(13, 148, 136, 0.12);
-  --primary-text: #0b7a70;
-  --danger: #d5424a;
-  --danger-weak: rgba(213, 66, 74, 0.1);
-  --warning: #d97706;
-  --warning-weak: rgba(217, 119, 6, 0.12);
-  --success: #238348;
-  --success-weak: rgba(35, 131, 72, 0.12);
-  --info: #0b73bf;
-  --info-weak: rgba(11, 115, 191, 0.1);
+  --dbm-primary: #0d9488;
+  --dbm-primary-strong: #0b7a70;
+  --dbm-primary-weak: rgba(13, 148, 136, 0.12);
+  --dbm-primary-text: #0b7a70;
+  --dbm-danger: #d5424a;
+  --dbm-danger-weak: rgba(213, 66, 74, 0.1);
+  --dbm-warning: #d97706;
+  --dbm-warning-weak: rgba(217, 119, 6, 0.12);
+  --dbm-success: #238348;
+  --dbm-success-weak: rgba(35, 131, 72, 0.12);
+  --dbm-info: #0b73bf;
+  --dbm-info-weak: rgba(11, 115, 191, 0.1);
 
   /* 画布 */
-  --canvas-bg: #fbfcfd;
-  --grid-minor: rgba(28, 33, 40, 0.055);
-  --grid-major: rgba(28, 33, 40, 0.12);
+  --dbm-canvas-bg: #fbfcfd;
+  --dbm-grid-minor: rgba(28, 33, 40, 0.055);
+  --dbm-grid-major: rgba(28, 33, 40, 0.12);
 
   /* 表卡片 */
-  --card-bg: #ffffff;
-  --card-border: #d7dce2;
-  --card-border-selected: var(--primary);
-  --card-head-bg: #f4f6f8;
-  --card-head-text: #242a33;
-  --card-row-hover: #f5f8f7;
-  --card-conn: #b8c0c9;
-  --card-shadow: 0 1px 3px rgba(16, 24, 40, 0.08), 0 4px 14px rgba(16, 24, 40, 0.05);
-  --card-shadow-hover: 0 3px 8px rgba(16, 24, 40, 0.12), 0 10px 26px rgba(16, 24, 40, 0.09);
+  --dbm-card-bg: #ffffff;
+  --dbm-card-border: #d7dce2;
+  --dbm-card-border-selected: var(--dbm-primary);
+  --dbm-card-head-bg: #f4f6f8;
+  --dbm-card-head-text: #242a33;
+  --dbm-card-row-hover: #f5f8f7;
+  --dbm-card-conn: #b8c0c9;
+  --dbm-card-shadow: 0 1px 3px rgba(16, 24, 40, 0.08), 0 4px 14px rgba(16, 24, 40, 0.05);
+  --dbm-card-shadow-hover: 0 3px 8px rgba(16, 24, 40, 0.12), 0 10px 26px rgba(16, 24, 40, 0.09);
 
   /* 导航线 */
-  --edge: #7b8692;
-  --edge-hover: var(--primary);
-  --edge-select-glow: rgba(13, 148, 136, 0.4);
-  --edge-label-bg: #ffffff;
-  --edge-label-text: #4d5761;
-  --edge-pill-bg: #ffffff;
-  --edge-pill-border: #c6ccd4;
+  --dbm-edge: #7b8692;
+  --dbm-edge-hover: var(--dbm-primary);
+  --dbm-edge-select-glow: rgba(13, 148, 136, 0.4);
+  --dbm-edge-label-bg: #ffffff;
+  --dbm-edge-label-text: #4d5761;
+  --dbm-edge-pill-bg: #ffffff;
+  --dbm-edge-pill-border: #c6ccd4;
 
   /* 代码块 */
-  --code-bg: #f6f8fa;
-  --code-border: #e3e7eb;
-  --code-text: #24292f;
-  --code-keyword: #cf222e;
-  --code-string: #0a3069;
-  --code-comment: #6e7781;
-  --code-number: #0550ae;
-  --code-title: #8250df;
-  --code-meta: #116329;
+  --dbm-code-bg: #f6f8fa;
+  --dbm-code-border: #e3e7eb;
+  --dbm-code-text: #24292f;
+  --dbm-code-keyword: #cf222e;
+  --dbm-code-string: #0a3069;
+  --dbm-code-comment: #6e7781;
+  --dbm-code-number: #0550ae;
+  --dbm-code-title: #8250df;
+  --dbm-code-meta: #116329;
 
   /* 阴影与蒙层 */
-  --shadow-pop: 0 4px 16px rgba(16, 24, 40, 0.14);
-  --mask: rgba(15, 20, 26, 0.35);
+  --dbm-shadow-pop: 0 4px 16px rgba(16, 24, 40, 0.14);
+  --dbm-mask: rgba(15, 20, 26, 0.35);
 
   /* 滚动条 */
-  --scrollbar-thumb: #c3cad2;
-  --scrollbar-track: transparent;
+  --dbm-scrollbar-thumb: #c3cad2;
+  --dbm-scrollbar-track: transparent;
 }
 
 [data-theme='dark'] {
-  --bg: #14181e;
-  --bg-2: #1a1f26;
-  --bg-panel: #1d232b;
-  --bg-hover: rgba(255, 255, 255, 0.06);
-  --bg-active: rgba(255, 255, 255, 0.1);
-  --bg-raise: #232a33;
-  --text-1: #e6e9ed;
-  --text-2: #aab3bd;
-  --text-3: #78828d;
-  --text-inverse: #14181e;
+  --dbm-bg: #14181e;
+  --dbm-bg-2: #1a1f26;
+  --dbm-bg-panel: #1d232b;
+  --dbm-bg-hover: rgba(255, 255, 255, 0.06);
+  --dbm-bg-active: rgba(255, 255, 255, 0.1);
+  --dbm-bg-raise: #232a33;
+  --dbm-text-1: #e6e9ed;
+  --dbm-text-2: #aab3bd;
+  --dbm-text-3: #78828d;
+  --dbm-text-inverse: #14181e;
 
-  --border: #2e3641;
-  --border-strong: #3d4754;
+  --dbm-border: #2e3641;
+  --dbm-border-strong: #3d4754;
 
-  --primary: #2dd4bf;
-  --primary-strong: #14b8a6;
-  --primary-weak: rgba(45, 212, 191, 0.16);
-  --primary-text: #5eead4;
-  --danger: #f16a70;
-  --danger-weak: rgba(241, 106, 112, 0.16);
-  --warning: #f0a84c;
-  --warning-weak: rgba(240, 168, 76, 0.16);
-  --success: #4ade80;
-  --success-weak: rgba(74, 222, 128, 0.14);
-  --info: #63aee8;
-  --info-weak: rgba(99, 174, 232, 0.14);
+  --dbm-primary: #2dd4bf;
+  --dbm-primary-strong: #14b8a6;
+  --dbm-primary-weak: rgba(45, 212, 191, 0.16);
+  --dbm-primary-text: #5eead4;
+  --dbm-danger: #f16a70;
+  --dbm-danger-weak: rgba(241, 106, 112, 0.16);
+  --dbm-warning: #f0a84c;
+  --dbm-warning-weak: rgba(240, 168, 76, 0.16);
+  --dbm-success: #4ade80;
+  --dbm-success-weak: rgba(74, 222, 128, 0.14);
+  --dbm-info: #63aee8;
+  --dbm-info-weak: rgba(99, 174, 232, 0.14);
 
-  --canvas-bg: #161b21;
-  --grid-minor: rgba(230, 233, 237, 0.05);
-  --grid-major: rgba(230, 233, 237, 0.11);
+  --dbm-canvas-bg: #161b21;
+  --dbm-grid-minor: rgba(230, 233, 237, 0.05);
+  --dbm-grid-major: rgba(230, 233, 237, 0.11);
 
-  --card-bg: #20262e;
-  --card-border: #39424d;
-  --card-border-selected: var(--primary);
-  --card-head-bg: #262d36;
-  --card-head-text: #e6e9ed;
-  --card-row-hover: #273039;
-  --card-conn: #4a5560;
-  --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 6px 18px rgba(0, 0, 0, 0.32);
-  --card-shadow-hover: 0 3px 10px rgba(0, 0, 0, 0.5), 0 12px 30px rgba(0, 0, 0, 0.4);
+  --dbm-card-bg: #20262e;
+  --dbm-card-border: #39424d;
+  --dbm-card-border-selected: var(--dbm-primary);
+  --dbm-card-head-bg: #262d36;
+  --dbm-card-head-text: #e6e9ed;
+  --dbm-card-row-hover: #273039;
+  --dbm-card-conn: #4a5560;
+  --dbm-card-shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 6px 18px rgba(0, 0, 0, 0.32);
+  --dbm-card-shadow-hover: 0 3px 10px rgba(0, 0, 0, 0.5), 0 12px 30px rgba(0, 0, 0, 0.4);
 
-  --edge: #66707c;
-  --edge-hover: var(--primary);
-  --edge-select-glow: rgba(45, 212, 191, 0.5);
-  --edge-label-bg: #20262e;
-  --edge-label-text: #aab3bd;
-  --edge-pill-bg: #232a33;
-  --edge-pill-border: #3d4754;
+  --dbm-edge: #66707c;
+  --dbm-edge-hover: var(--dbm-primary);
+  --dbm-edge-select-glow: rgba(45, 212, 191, 0.5);
+  --dbm-edge-label-bg: #20262e;
+  --dbm-edge-label-text: #aab3bd;
+  --dbm-edge-pill-bg: #232a33;
+  --dbm-edge-pill-border: #3d4754;
 
-  --code-bg: #161b21;
-  --code-border: #2e3641;
-  --code-text: #d6dae0;
-  --code-keyword: #ff8a7a;
-  --code-string: #9ad3ff;
-  --code-comment: #78828d;
-  --code-number: #f0a84c;
-  --code-title: #d2a8ff;
-  --code-meta: #7ee2a8;
+  --dbm-code-bg: #161b21;
+  --dbm-code-border: #2e3641;
+  --dbm-code-text: #d6dae0;
+  --dbm-code-keyword: #ff8a7a;
+  --dbm-code-string: #9ad3ff;
+  --dbm-code-comment: #78828d;
+  --dbm-code-number: #f0a84c;
+  --dbm-code-title: #d2a8ff;
+  --dbm-code-meta: #7ee2a8;
 
-  --shadow-pop: 0 6px 22px rgba(0, 0, 0, 0.5);
-  --mask: rgba(5, 8, 12, 0.55);
+  --dbm-shadow-pop: 0 6px 22px rgba(0, 0, 0, 0.5);
+  --dbm-mask: rgba(5, 8, 12, 0.55);
 
-  --scrollbar-thumb: #3d4754;
-  --scrollbar-track: transparent;
+  --dbm-scrollbar-thumb: #3d4754;
+  --dbm-scrollbar-track: transparent;
 }
 
 /** 分类配色（卡片头/大纲圆点/小地图共用） */
 :root {
-  --cat-0: #0d9488;
-  --cat-1: #7c5cd6;
-  --cat-2: #d97706;
-  --cat-3: #d5427a;
-  --cat-4: #0b73bf;
-  --cat-5: #6d9a0e;
-  --cat-6: #c2540f;
-  --cat-7: #5260a8;
+  --dbm-cat-0: #0d9488;
+  --dbm-cat-1: #7c5cd6;
+  --dbm-cat-2: #d97706;
+  --dbm-cat-3: #d5427a;
+  --dbm-cat-4: #0b73bf;
+  --dbm-cat-5: #6d9a0e;
+  --dbm-cat-6: #c2540f;
+  --dbm-cat-7: #5260a8;
 }
