@@ -66,7 +66,7 @@ vp dev
 bun run dev
 ```
 
-启动后访问 <http://localhost:3000>（`server.host: 0.0.0.0`、`server.allowedHosts: true` 允许任意 Host / 内网 IP / 预览域名访问）。首次打开会自动加载内置演示数据（3 个分类 / 13 张表 / 10 条导航 / 5 个字典 / 4 个代码模板）。
+启动后访问 <http://localhost:3000>（`server.host: 0.0.0.0`、`server.allowedHosts: true` 允许任意 Host / 内网 IP / 预览域名访问）。首次打开会自动加载内置演示数据（3 个分类 / 13 张表 / 10 条导航 / 5 个字典 / 7 个代码模板）。
 
 ### 常用命令速查
 
@@ -215,7 +215,19 @@ interface TemplateContext {
 
 Eta 语法：`<% %>` 逻辑、`<%= %>` 输出、`<%# %>` 自定义注释标签（渲染前剥离）。模板内可直接访问 `context` 与 `utils` 顶层标识（`useWith` 模式）。
 
-内置 4 个模板：`entity`（Java 实体）、`dao`、`service`、`sql`（建表 DDL），可在「模板管理」中自由修改与新增。
+内置 7 个模板（solon3 + easy-query + satoken + antdv-next + MySQL 技术栈）：
+
+| 模板          | 产物                                                                               | 技术栈适配          |
+| ------------- | ---------------------------------------------------------------------------------- | ------------------- |
+| `entity`      | `entity/Xxx.java`（`@Table`/`@Column` + Lombok `@Data`）                           | easy-query          |
+| `service`     | `service/XxxService.java`（接口）                                                  | solon3 + easy-query |
+| `serviceImpl` | `service/impl/XxxServiceImpl.java`（`@Component` + `@Inject` `EasyQuery`）         | solon3 + easy-query |
+| `controller`  | `controller/XxxController.java`（`@Controller`/`@Mapping` + `@SaCheckPermission`） | solon3 + satoken    |
+| `vue`         | `views/xxx/Xxx.vue`（`a-table` 列表 + `a-modal` 表单）                             | antdv-next          |
+| `sql`         | `sql/表名.sql`（utf8mb4 建表 DDL，含索引与主键）                                   | MySQL               |
+| `menuSql`     | `sql/表名_menu.sql`（`sys_menu` 菜单 + 5 个按钮权限，权限码与 Controller 一致）    | MySQL               |
+
+可在「模板管理」中自由修改与新增；Controller 的权限码（`xxx:info/list/add/edit/del`）与 menuSql 生成的按钮权限一一对应，vue 模板的请求路径与 Controller 的 `@Mapping` 路由一致。
 
 ### 系统设置
 

@@ -524,3 +524,29 @@ Stage Summary:
 - 关键决策：① 映射作用域双选择器 .app-provider + [class*=css-var-]——实测确认 antd 弹层传送到 body 但自带 css-var 类，单靠组件树选择器会漏弹层；② Minimap 改从画布元素读变量（documentElement 读不到映射值）；③ color-mix 用于 antd 无对应物的透明度派生色（select-glow）；④ grid/代码高亮/分类色板保持静态（无 antd 对应物，映射反而降级设计）
 - 流程瘦身：删除快照/补丁脚本与全部引用（vite.config/.gitignore/package.sh/README），会话留档统一收敛到 worklog.md + git 提交
 - 交付物：skills/DBManager/SKILL.md（随仓库发布的技能文档）、docs/screenshots/theme-antd-{light,dark}.png、dist/DBManager.js + DBManager.d.ts
+
+---
+Task ID: 17
+Agent: main (Super Z)
+Task: Demo 脚本模板升级为 solon3 + easy-query + satoken 七件套（entity/service/serviceImpl/controller/vue/sql/menuSql），创建 devel 分支提交并推送
+
+Work Log:
+- SEED_TEMPLATES 重构（src/mock/seed.ts）：旧通用四件套（entity/dao/service/sql）替换为技术栈七件套，删除 dao（easy-query 下 Service 直注 EasyQuery，无 DAO 层）
+  - entity：easy-query `@Table`/`@Column` 显式列名 + Lombok `@Data` + Serializable；日期/BigDecimal/List import 按需收集去重；导航关系生成注释形态建议（@Navigate PropType 映射 1N→ONE_TO_MANY、NN→MANY_TO_MANY、11/N1→ONE_TO_ONE，默认注释掉避免生成未配置关系的错误映射）；主键 javadoc 标注（comment 已含「主键」时不重复追加）
+  - service / serviceImpl：接口五方法（getById/listAll/create/update/removeById，写操作返回 long 影响行数）；实现类 solon3 `@Component` + `@Inject EasyQuery`，CRUD 用 queryable().whereId().firstOrNull() / toList() / insertable().executeRows() / updatable().executeRows() / deletable().whereId().executeRows()
+  - controller：solon3 MVC（`@Controller` + 类级 `@Mapping("/api/<kebab>")` + 方法级 `@Get/@Post` + `@Param`/`@Body`）+ satoken `@SaCheckPermission("<mod>:info|list|add|edit|del")`；权限码与 menuSql 按钮权限一一对应，vue 请求路径与 @Mapping 路由一致（三模板联动约定）
+  - vue：antdv-next 标准管理页（a-card/a-table/a-modal/a-form；`import { message } from 'antdv-next'` 与本仓库风格一致）；interface/columns/emptyForm 按列生成，ts 类型按 javaType 映射（数值型→number 其余→string）；表单控件按类型路由（数值→a-input-number、LocalDateTime→a-date-picker+value-format、LONGTEXT→a-textarea、其余→a-input，主键列不进表单）；fetch 调用后端五个路由
+  - sql：MySQL 建表增强——单整数主键 AUTO_INCREMENT、PRIMARY KEY 行 + UNIQUE KEY/KEY/FULLTEXT INDEX 随表索引生成、显式 NULL/NOT NULL、COLLATE utf8mb4_general_ci；末项逗号按「列+尾部项」总数计算避免悬空逗号；COMMENT 全部单引号（sq 函数，内嵌单引号双写转义）
+  - menuSql：sys_menu 菜单（menu_type C + path kebab + component 指向 vue 产物）+ 5 个按钮权限（F）+ `SET @menuId = LAST_INSERT_ID()` 父子关联 + NOW()
+- **Eta 引号陷阱定位与修复**：sq 函数首版用 `.replace(/'/g, "''")`，Eta v4 解析器跟踪标签内引号状态时把正则字面量中的 `'` 误判为字符串开始 → 引号状态错乱 → `%>` 标签边界识别失败（Bad template syntax，26 处渲染失败）；scripts/eta-sq-debug.ts 三用例对比定位（正则含单引号两例均失败、split/join 通过），改为 `String(s).split("'").join("''")` 后全绿。结论：Eta 模板标签内避免使用含引号字符的正则字面量
+- db.ts v2 读取迁移：localStorage 旧数据仍为旧种子形态（含 tpl-dao 且无 tpl-controller）时整体替换 templates 为新七件套；templates 非数组亦重置；用户删光或已升级场景不受影响
+- README 同步：演示数据描述 4→7 个模板；「内置 4 个模板」改七件套表格（模板/产物/技术栈适配三列）+ 三模板权限码/路由联动说明
+- 渲染冒烟（scripts/render-demo.ts，一次性脚本已登记 .git/info/exclude 不入库）：13 种子表 × 7 模板 = 91 次渲染全通过（校验无异常/无 undefined/无 Eta 标签残留/fileName 均设置），产物存 tool-results/render-demo/ 人工抽查（联合索引、AUTO_INCREMENT、vue 模板字符串转义 `${API_BASE}` 原样输出、solon3/satoken 注解形态均正确）
+- 验证链：bun run typecheck 通过；vp check --fix（README 表格格式）后 60 文件格式 + 51 文件 lint 零告警；python3 scripts/check-readme.py 通过（29 标题）
+- 创建 devel 分支，提交后 `git push -u origin devel`
+
+Stage Summary:
+- 内置模板从「通用伪代码」升级为「可直接落地的 solon3 + easy-query + satoken + antdv-next + MySQL 全栈脚手架」：一套数据驱动七层产物（实体→服务→实现→接口→前端→建表→菜单权限），权限码与路由在 controller/menuSql/vue 三模板间自动对齐
+- 关键决策：① entity 导航属性以注释形态生成（避免未配置关系的 @Navigate 生成错误 SQL）；② 写操作返回影响行数（贴合 executeRows 返回值，便于 satoken 权限下审计）；③ MySQL 字符串一律单引号且经 sq 转义（utils.quote 双引号不符合 MySQL 惯例）
+- Eta 模板编写新增一条避坑经验：标签内正则字面量不得含引号字符（解析器引号状态机不识别正则上下文）
+- 工作分支策略变更：本次起功能开发走 devel 分支（main 保持稳定发布线）

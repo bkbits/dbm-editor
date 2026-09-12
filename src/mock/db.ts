@@ -117,6 +117,17 @@ function loadDB(): MockDB {
           }))
           migrated = true
         }
+        // 旧版模板种子（通用四件套，含 dao）升级为 solon3 七件套：
+        // 仅当仍为旧种子形态（含 tpl-dao 且无 tpl-controller）时整体替换，
+        // 用户已删光模板或已升级的场景不受影响
+        if (
+          !Array.isArray(parsed.templates) ||
+          (!parsed.templates.some((t) => t.id === 'tpl-controller') &&
+            parsed.templates.some((t) => t.id === 'tpl-dao'))
+        ) {
+          parsed.templates = clone(SEED_TEMPLATES)
+          migrated = true
+        }
         if (migrated) {
           db = parsed
           persistDB()

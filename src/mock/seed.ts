@@ -679,86 +679,408 @@ export const SEED_TEMPLATES: CodeTemplate[] = [
     id: 'tpl-entity',
     name: 'entity',
     content: `<%
-  context.fileName = utils.toCamelCase(context.table.className, true) + ".java";
+  context.fileName = context.table.className + ".java";
   context.filePath = (context.basePackage ? context.basePackage.replace(/\\./g, "/") + "/" : "") + "entity/" + context.fileName;
 %>
 package <%= utils.isEmpty(context.basePackage) ? "" : context.basePackage + "." %>entity;
+
+import com.easy.query.core.annotation.Column;
+import com.easy.query.core.annotation.Table;
+import lombok.Data;
+
 import java.io.Serializable;
-<% const needDate = context.table.columns.some(c => /LocalDate|LocalDateTime|LocalTime/.test(utils.getJavaType(c))); %>
+<% const dateTypes = [...new Set(context.table.columns.map(c => utils.getJavaType(c)).filter(t => /^Local(Date|Time|DateTime)$/.test(t)))]; %>
+<% const needDecimal = context.table.columns.some(c => utils.getJavaType(c) === "BigDecimal"); %>
 <% const needList = context.table.navigates.some(n => n.type === "1N" || n.type === "NN"); %>
-<% if (needDate) { %>
-import java.time.LocalDateTime;
+<% for (const dt of dateTypes) { %>import java.time.<%= dt %>;
 <% } %>
-<% if (needList) { %>
-import java.util.List;
+<% if (needDecimal) { %>import java.math.BigDecimal;
 <% } %>
-<%# ===== 实体类 ===== %>
-<% if (!utils.isBlank(context.table.comment)) { %>
+<% if (needList) { %>import java.util.List;
+<% } %>
+<%# ===== easy-query 实体（列名显式映射，与表结构一一对应） ===== %>
 /**
- * <%= context.table.comment %>
+ * <%= context.table.comment || context.table.tableName %>
  */
-<% } %>
+@Data
+@Table("<%= context.table.tableName %>")
 public class <%= context.table.className %> implements Serializable {
   private static final long serialVersionUID = 1L;
 <% for (const column of context.table.columns) { %>
-  <% if (!utils.isBlank(column.comment)) { %>
-  /** <%= column.comment %> */
+  <% const doc = column.comment || (column.primaryKey ? "主键" : ""); %>
+  <% const mark = column.primaryKey && doc.indexOf("主键") < 0 ? "（主键）" : ""; %>
+  <% if (doc) { %>
+  /** <%= doc + mark %> */
   <% } %>
+  @Column("<%= column.columnName %>")
   private <%= utils.getJavaType(column) %> <%= column.propertyName %>;
 <% } %>
-<% for (const nav of context.table.navigates) { %>
-  /** 导航(<%= nav.type %>): <%= nav.target.tableName %> */
-  private <%= (nav.type === "1N" || nav.type === "NN") ? "List<" + nav.target.className + ">" : nav.target.className %> <%= nav.propertyName %>;
+<% if (context.table.navigates.length) { %>
+  /* ---- 导航关系（easy-query @Navigate，按需启用并调整关系配置） ---- */
+  <% for (const nav of context.table.navigates) { %>
+  /** 导航(<%= nav.type %>): <%= nav.selfProperty.join(", ") %> -> <%= nav.target.tableName %>.<%= nav.targetProperty.join(", ") %> */
+  // @Navigate(<%= nav.type === "1N" ? "PropType.ONE_TO_MANY" : (nav.type === "NN" ? "PropType.MANY_TO_MANY" : "PropType.ONE_TO_ONE") %>)
+  // private <%= (nav.type === "1N" || nav.type === "NN") ? "List<" + nav.target.className + ">" : nav.target.className %> <%= nav.propertyName %>;
+  <% } %>
 <% } %>
-}`,
-  },
-  {
-    id: 'tpl-dao',
-    name: 'dao',
-    content: `<%
-  context.fileName = utils.toCamelCase(context.table.className, true) + "Dao.java";
-  context.filePath = (context.basePackage ? context.basePackage.replace(/\\./g, "/") + "/" : "") + "dao/" + context.fileName;
-%>
-package <%= utils.isEmpty(context.basePackage) ? "" : context.basePackage + "." %>dao;
-<% const pk = context.table.columns.find(c => c.primaryKey); %>
-<% const pkJava = pk ? utils.getJavaType(pk) : "Long"; %>
-<% const pkProp = pk ? utils.toCamelCase(pk.columnName, true) : "id"; %>
-<%# ===== 数据访问接口 ===== %>
-public interface <%= context.table.className %>Dao {
-  /** 根据主键查询 */
-  <%= context.table.className %> getBy<%= utils.toCamelCase(pk ? pk.columnName : "id") %>(<%= pkJava %> <%= pkProp %>);
-  /** 查询全部 */
-  java.util.List<<%= context.table.className %>> listAll();
-  /** 新增，返回影响行数 */
-  int insert(<%= context.table.className %> entity);
-  /** 更新，返回影响行数 */
-  int update(<%= context.table.className %> entity);
-  /** 删除，返回影响行数 */
-  int deleteBy<%= utils.toCamelCase(pk ? pk.columnName : "id") %>(<%= pkJava %> <%= pkProp %>);
 }`,
   },
   {
     id: 'tpl-service',
     name: 'service',
     content: `<%
-  context.fileName = utils.toCamelCase(context.table.className, true) + "Service.java";
+  context.fileName = context.table.className + "Service.java";
   context.filePath = (context.basePackage ? context.basePackage.replace(/\\./g, "/") + "/" : "") + "service/" + context.fileName;
 %>
-package <%= utils.isEmpty(context.basePackage) ? "" : context.basePackage + "." %>service;
 <% const pk = context.table.columns.find(c => c.primaryKey); %>
 <% const pkJava = pk ? utils.getJavaType(pk) : "Long"; %>
-<% const pkProp = pk ? utils.toCamelCase(pk.columnName, true) : "id"; %>
-<%# ===== 服务接口 ===== %>
+<% const pkProp = pk ? (pk.propertyName || utils.toCamelCase(pk.columnName, true)) : "id"; %>
+package <%= utils.isEmpty(context.basePackage) ? "" : context.basePackage + "." %>service;
+
+import java.util.List;
+
+import <%= utils.isEmpty(context.basePackage) ? "" : context.basePackage + "." %>entity.<%= context.table.className %>;
+
+<%# ===== 服务接口（solon3 + easy-query） ===== %>
+/**
+ * <%= context.table.comment || context.table.tableName %> 服务接口
+ */
 public interface <%= context.table.className %>Service {
-  /** 根据主键查询 */
+
+  /** 按主键查询 */
   <%= context.table.className %> getById(<%= pkJava %> <%= pkProp %>);
-  /** 新增 */
-  void create(<%= context.table.className %> entity);
-  /** 更新 */
-  void update(<%= context.table.className %> entity);
-  /** 删除 */
-  void remove(<%= pkJava %> <%= pkProp %>);
+
+  /** 查询全部 */
+  List<<%= context.table.className %>> listAll();
+
+  /** 新增（返回影响行数） */
+  long create(<%= context.table.className %> entity);
+
+  /** 按主键整实体更新（返回影响行数） */
+  long update(<%= context.table.className %> entity);
+
+  /** 按主键删除（返回影响行数） */
+  long removeById(<%= pkJava %> <%= pkProp %>);
 }`,
+  },
+  {
+    id: 'tpl-service-impl',
+    name: 'serviceImpl',
+    content: `<%
+  context.fileName = context.table.className + "ServiceImpl.java";
+  context.filePath = (context.basePackage ? context.basePackage.replace(/\\./g, "/") + "/" : "") + "service/impl/" + context.fileName;
+%>
+<% const pk = context.table.columns.find(c => c.primaryKey); %>
+<% const pkJava = pk ? utils.getJavaType(pk) : "Long"; %>
+<% const pkProp = pk ? (pk.propertyName || utils.toCamelCase(pk.columnName, true)) : "id"; %>
+package <%= utils.isEmpty(context.basePackage) ? "" : context.basePackage + "." %>service.impl;
+
+import com.easy.query.core.api.EasyQuery;
+import org.noear.solon.annotation.Component;
+import org.noear.solon.annotation.Inject;
+
+import java.util.List;
+
+import <%= utils.isEmpty(context.basePackage) ? "" : context.basePackage + "." %>entity.<%= context.table.className %>;
+import <%= utils.isEmpty(context.basePackage) ? "" : context.basePackage + "." %>service.<%= context.table.className %>Service;
+
+<%# ===== 服务实现（solon3 容器组件 + easy-query 门面注入） ===== %>
+/**
+ * <%= context.table.comment || context.table.tableName %> 服务实现
+ */
+@Component
+public class <%= context.table.className %>ServiceImpl implements <%= context.table.className %>Service {
+
+  @Inject
+  EasyQuery easyQuery;
+
+  @Override
+  public <%= context.table.className %> getById(<%= pkJava %> <%= pkProp %>) {
+    return easyQuery.queryable(<%= context.table.className %>.class).whereId(<%= pkProp %>).firstOrNull();
+  }
+
+  @Override
+  public List<<%= context.table.className %>> listAll() {
+    return easyQuery.queryable(<%= context.table.className %>.class).toList();
+  }
+
+  @Override
+  public long create(<%= context.table.className %> entity) {
+    return easyQuery.insertable(entity).executeRows();
+  }
+
+  @Override
+  public long update(<%= context.table.className %> entity) {
+    return easyQuery.updatable(entity).executeRows();
+  }
+
+  @Override
+  public long removeById(<%= pkJava %> <%= pkProp %>) {
+    return easyQuery.deletable(<%= context.table.className %>.class).whereId(<%= pkProp %>).executeRows();
+  }
+}`,
+  },
+  {
+    id: 'tpl-controller',
+    name: 'controller',
+    content: `<%
+  context.fileName = context.table.className + "Controller.java";
+  context.filePath = (context.basePackage ? context.basePackage.replace(/\\./g, "/") + "/" : "") + "controller/" + context.fileName;
+%>
+<% const pk = context.table.columns.find(c => c.primaryKey); %>
+<% const pkJava = pk ? utils.getJavaType(pk) : "Long"; %>
+<% const pkProp = pk ? (pk.propertyName || utils.toCamelCase(pk.columnName, true)) : "id"; %>
+<% const mod = utils.toCamelCase(context.table.className, true); %>
+<% const route = mod.replace(/([A-Z])/g, "-$1").toLowerCase(); %>
+package <%= utils.isEmpty(context.basePackage) ? "" : context.basePackage + "." %>controller;
+
+import cn.dev33.satoken.annotation.SaCheckPermission;
+import org.noear.solon.annotation.Body;
+import org.noear.solon.annotation.Controller;
+import org.noear.solon.annotation.Get;
+import org.noear.solon.annotation.Inject;
+import org.noear.solon.annotation.Mapping;
+import org.noear.solon.annotation.Param;
+import org.noear.solon.annotation.Post;
+
+import java.util.List;
+
+import <%= utils.isEmpty(context.basePackage) ? "" : context.basePackage + "." %>entity.<%= context.table.className %>;
+import <%= utils.isEmpty(context.basePackage) ? "" : context.basePackage + "." %>service.<%= context.table.className %>Service;
+
+<%# ===== 接口层（solon3 MVC + satoken 注解鉴权，权限码与 menuSql 模板对应） ===== %>
+/**
+ * <%= context.table.comment || context.table.tableName %> 管理接口
+ */
+@Controller
+@Mapping("/api/<%= route %>")
+public class <%= context.table.className %>Controller {
+
+  @Inject
+  <%= context.table.className %>Service <%= mod %>Service;
+
+  /** 按主键查询详情 */
+  @SaCheckPermission("<%= mod %>:info")
+  @Get
+  @Mapping("info")
+  public <%= context.table.className %> info(@Param("<%= pkProp %>") <%= pkJava %> <%= pkProp %>) {
+    return <%= mod %>Service.getById(<%= pkProp %>);
+  }
+
+  /** 查询列表 */
+  @SaCheckPermission("<%= mod %>:list")
+  @Get
+  @Mapping("list")
+  public List<<%= context.table.className %>> list() {
+    return <%= mod %>Service.listAll();
+  }
+
+  /** 新增 */
+  @SaCheckPermission("<%= mod %>:add")
+  @Post
+  @Mapping("add")
+  public long add(@Body <%= context.table.className %> entity) {
+    return <%= mod %>Service.create(entity);
+  }
+
+  /** 更新 */
+  @SaCheckPermission("<%= mod %>:edit")
+  @Post
+  @Mapping("edit")
+  public long edit(@Body <%= context.table.className %> entity) {
+    return <%= mod %>Service.update(entity);
+  }
+
+  /** 删除 */
+  @SaCheckPermission("<%= mod %>:del")
+  @Post
+  @Mapping("del")
+  public long del(@Param("<%= pkProp %>") <%= pkJava %> <%= pkProp %>) {
+    return <%= mod %>Service.removeById(<%= pkProp %>);
+  }
+}`,
+  },
+  {
+    id: 'tpl-vue',
+    name: 'vue',
+    content: `<%
+  context.fileName = context.table.className + ".vue";
+  context.filePath = "views/" + utils.toCamelCase(context.table.className, true).replace(/([A-Z])/g, "-$1").toLowerCase() + "/" + context.fileName;
+%>
+<% const pk = context.table.columns.find(c => c.primaryKey); %>
+<% const pkProp = pk ? (pk.propertyName || utils.toCamelCase(pk.columnName, true)) : "id"; %>
+<% const mod = utils.toCamelCase(context.table.className, true); %>
+<% const route = mod.replace(/([A-Z])/g, "-$1").toLowerCase(); %>
+<% const numTypes = ["Long", "Integer", "Short", "Double", "Float", "BigDecimal"]; %>
+<% const tsType = (jt) => numTypes.includes(jt) ? "number" : "string"; %>
+<% const defaultValue = (jt) => numTypes.includes(jt) ? "0" : "\\'\\'"; %>
+<template>
+  <div class="page">
+    <a-card>
+      <div class="table-toolbar">
+        <a-space>
+          <a-button type="primary" @click="openCreate">新增</a-button>
+          <a-button :loading="loading" @click="fetchList">刷新</a-button>
+        </a-space>
+      </div>
+      <a-table
+        :columns="columns"
+        :data-source="list"
+        :loading="loading"
+        :pagination="pagination"
+        row-key="<%= pkProp %>"
+      >
+        <template #bodyCell="{ column, record }">
+          <template v-if="column.key === 'action'">
+            <a-space>
+              <a-button size="small" @click="openEdit(record as <%= context.table.className %>)">编辑</a-button>
+              <a-popconfirm title="确定删除该记录？" @confirm="handleRemove(record as <%= context.table.className %>)">
+                <a-button size="small" danger>删除</a-button>
+              </a-popconfirm>
+            </a-space>
+          </template>
+        </template>
+      </a-table>
+    </a-card>
+
+    <a-modal
+      v-model:open="modalOpen"
+      :title="isEdit ? '编辑' : '新增'"
+      :confirm-loading="saving"
+      @ok="handleSave"
+    >
+      <a-form :model="form" layout="vertical">
+        <% for (const column of context.table.columns) { %>
+        <% if (column.primaryKey) { continue; } %>
+        <% const jt = utils.getJavaType(column); %>
+        <% const label = column.comment || column.propertyName; %>
+        <% const isNum = numTypes.includes(jt); %>
+        <% const isDate = /^Local(Date|Time|DateTime)$/.test(jt); %>
+        <% const dfmt = jt === "LocalDateTime" ? "YYYY-MM-DD HH:mm:ss" : "YYYY-MM-DD"; %>
+        <% const isText = /text/i.test(column.type); %>
+        <a-form-item label="<%= label %>" name="<%= column.propertyName %>">
+          <% if (isNum) { %>
+          <a-input-number v-model:value="form.<%= column.propertyName %>" style="width: 100%" />
+          <% } else if (isDate) { %>
+          <a-date-picker v-model:value="form.<%= column.propertyName %>" value-format="<%= dfmt %>" style="width: 100%" />
+          <% } else if (isText) { %>
+          <a-textarea v-model:value="form.<%= column.propertyName %>" :rows="3" />
+          <% } else { %>
+          <a-input v-model:value="form.<%= column.propertyName %>" allow-clear />
+          <% } %>
+        </a-form-item>
+        <% } %>
+      </a-form>
+    </a-modal>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { onMounted, reactive, ref } from 'vue'
+import { message } from 'antdv-next'
+import type { TableColumnsType } from 'antdv-next'
+
+/**
+ * <%= context.table.comment || context.table.tableName %> 实体（字段与后端 easy-query Entity 对齐）
+ */
+interface <%= context.table.className %> {
+<% for (const column of context.table.columns) { %>
+  /** <%= column.comment || column.propertyName %> */
+  <%= column.propertyName %>: <%= tsType(utils.getJavaType(column)) %>
+<% } %>
+}
+
+/** 后端接口前缀（solon Controller @Mapping） */
+const API_BASE = '/api/<%= route %>'
+
+const loading = ref(false)
+const saving = ref(false)
+const list = ref<<%= context.table.className %>[]>([])
+const modalOpen = ref(false)
+const isEdit = ref(false)
+const form = reactive<<%= context.table.className %>>(emptyForm())
+
+const pagination = { pageSize: 10, showSizeChanger: true }
+
+const columns: TableColumnsType = [
+<% for (const column of context.table.columns) { %>
+  { title: '<%= column.comment || column.propertyName %>', dataIndex: '<%= column.propertyName %>' },
+<% } %>
+  { title: '操作', key: 'action', width: 140 },
+]
+
+function emptyForm(): <%= context.table.className %> {
+  return {
+<% for (const column of context.table.columns) { %>
+    <%= column.propertyName %>: <%= defaultValue(utils.getJavaType(column)) %>,
+<% } %>
+  }
+}
+
+async function fetchList() {
+  loading.value = true
+  try {
+    const res = await fetch(\`\${API_BASE}/list\`)
+    if (!res.ok) throw new Error(\`HTTP \${res.status}\`)
+    list.value = (await res.json()) as <%= context.table.className %>[]
+  } catch (e) {
+    message.error(\`加载列表失败: \${(e as Error).message}\`)
+  } finally {
+    loading.value = false
+  }
+}
+
+function openCreate() {
+  isEdit.value = false
+  Object.assign(form, emptyForm())
+  modalOpen.value = true
+}
+
+function openEdit(record: <%= context.table.className %>) {
+  isEdit.value = true
+  Object.assign(form, record)
+  modalOpen.value = true
+}
+
+async function handleSave() {
+  saving.value = true
+  try {
+    const action = isEdit.value ? 'edit' : 'add'
+    const res = await fetch(\`\${API_BASE}/\${action}\`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(form),
+    })
+    if (!res.ok) throw new Error(\`HTTP \${res.status}\`)
+    message.success(isEdit.value ? '保存成功' : '新增成功')
+    modalOpen.value = false
+    await fetchList()
+  } catch (e) {
+    message.error(\`保存失败: \${(e as Error).message}\`)
+  } finally {
+    saving.value = false
+  }
+}
+
+async function handleRemove(record: <%= context.table.className %>) {
+  try {
+    const res = await fetch(\`\${API_BASE}/del?id=\${record.<%= pkProp %>}\`, { method: 'POST' })
+    if (!res.ok) throw new Error(\`HTTP \${res.status}\`)
+    message.success('删除成功')
+    await fetchList()
+  } catch (e) {
+    message.error(\`删除失败: \${(e as Error).message}\`)
+  }
+}
+
+onMounted(fetchList)
+</script>
+
+<style scoped>
+.table-toolbar {
+  margin-bottom: 16px;
+}
+</style>`,
   },
   {
     id: 'tpl-sql',
@@ -767,14 +1089,53 @@ public interface <%= context.table.className %>Service {
   context.fileName = context.table.tableName + ".sql";
   context.filePath = "sql/" + context.fileName;
 %>
-<%# ===== 建表语句 ===== %>
+<% const pks = context.table.columns.filter(c => c.primaryKey); %>
+<% const singleIntPk = pks.length === 1 && /^(tinyint|smallint|mediumint|int|integer|bigint)/i.test(pks[0].type); %>
+<% const keyType = (t) => t === "UNIQUE" ? "UNIQUE KEY" : (t === "FULLTEXT" ? "FULLTEXT INDEX" : "KEY"); %>
+<% const sq = (s) => "'" + String(s).split("'").join("''") + "'"; %>
+<% const tail = []; %>
+<% if (pks.length) { tail.push("  PRIMARY KEY (" + pks.map(c => "\`" + c.columnName + "\`").join(", ") + ")"); } %>
+<% for (const idx of context.table.indexes) { %>
+<% const idxBody = "  " + keyType(idx.type) + " \`" + idx.indexName + "\` (" + idx.columns.map(c => "\`" + c + "\`").join(", ") + ")" + (utils.isBlank(idx.comment) ? "" : " COMMENT " + sq(idx.comment)); %>
+<% tail.push(idxBody); %>
+<% } %>
+<% const total = context.table.columns.length + tail.length; %>
+<%# ===== MySQL 建表语句（utf8mb4 + 索引与主键随表结构生成） ===== %>
 DROP TABLE IF EXISTS \`<%= context.table.tableName %>\`;
 CREATE TABLE \`<%= context.table.tableName %>\` (
 <% for (let i = 0; i < context.table.columns.length; i++) { %>
 <% const column = context.table.columns[i]; %>
-  \`<%= column.columnName %>\` <%= column.type %><% if (column.notNull) { %> NOT NULL<% } %><% if (column.primaryKey) { %> PRIMARY KEY<% } %><% if (!utils.isBlank(column.comment)) { %> COMMENT <%= utils.quote(column.comment) %><% } %><% if (i < context.table.columns.length - 1) { %>,<% } %>
+  \`<%= column.columnName %>\` <%= column.type %><% if (column.notNull) { %> NOT NULL<% } else { %> NULL<% } %><% if (column.primaryKey && singleIntPk) { %> AUTO_INCREMENT<% } %><% if (!utils.isBlank(column.comment)) { %> COMMENT <%= sq(column.comment) %><% } %><% if (i < total - 1) { %>,<% } %>
 <% } %>
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT=<%= utils.quote(context.table.comment || context.table.tableName) %>;`,
+<% for (let j = 0; j < tail.length; j++) { %>
+<%= tail[j] %><% if (j < tail.length - 1) { %>,<% } %>
+<% } %>
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = <%= sq(context.table.comment || context.table.tableName) %>;`,
+  },
+  {
+    id: 'tpl-menu-sql',
+    name: 'menuSql',
+    content: `<%
+  context.fileName = context.table.tableName + "_menu.sql";
+  context.filePath = "sql/" + context.fileName;
+%>
+<% const mod = utils.toCamelCase(context.table.className, true); %>
+<% const route = mod.replace(/([A-Z])/g, "-$1").toLowerCase(); %>
+<% const sq = (s) => "'" + String(s).split("'").join("''") + "'"; %>
+<% const menuName = context.table.comment || context.table.className; %>
+<%# ===== MySQL 菜单与按钮权限初始化（sys_menu 为常见 RBAC 结构，字段按实际项目调整） ===== %>
+-- 一级菜单（parent_id = 0 为根目录，挂载位置按实际系统调整）
+INSERT INTO sys_menu (menu_name, parent_id, order_num, path, component, menu_type, visible, status, perms, icon, create_time)
+VALUES (<%= sq(menuName) %>, 0, 1, '<%= route %>', 'views/<%= route %>/<%= context.table.className %>', 'C', '0', '0', '<%= mod %>:list', 'list', NOW());
+
+-- 按钮权限（父菜单取上面新插入的记录；权限码与 Controller 模板的 @SaCheckPermission 一一对应）
+SET @menuId = LAST_INSERT_ID();
+INSERT INTO sys_menu (menu_name, parent_id, order_num, path, component, menu_type, visible, status, perms, icon, create_time) VALUES
+('查询', @menuId, 1, '', '', 'F', '0', '0', '<%= mod %>:info', '#', NOW()),
+('列表', @menuId, 2, '', '', 'F', '0', '0', '<%= mod %>:list', '#', NOW()),
+('新增', @menuId, 3, '', '', 'F', '0', '0', '<%= mod %>:add', '#', NOW()),
+('编辑', @menuId, 4, '', '', 'F', '0', '0', '<%= mod %>:edit', '#', NOW()),
+('删除', @menuId, 5, '', '', 'F', '0', '0', '<%= mod %>:del', '#', NOW());`,
   },
 ]
 
