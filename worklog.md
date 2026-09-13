@@ -579,3 +579,38 @@ Stage Summary:
 - 模板种子迁移从「形态嗅探」升级为「seedTemplatesVersion 版本号驱动」：旧库确定性升级（覆盖删过模板的边缘形态）、升级一次性、用户后续定制不受影响；未来种子模板变更只需递增版本常量
 - 首次加载（无有效存储）即落盘种子数据，localStorage 与内存态从首载起一致
 - 排障经验：会话沙箱在工具调用间隙自动把工作区切回 main——跨分支验证必须用 git worktree 隔离（.wt/devel，已登记 .git/info/exclude），跨分支操作须在单条命令内原子完成
+
+---
+Task ID: 19
+Agent: main (Super Z)
+Task: 全站移动端布局适配（≤768px 断点：顶栏/大纲抽屉/双栏视图堆叠/对话框响应式/多列表格横滚）；提交推送 devel
+
+Work Log:
+- 前置：合并 devel → main（fast-forward 0cc4a7a→5b3fba9）并推送 origin/main；此后 main 与 devel 同基，沙箱工具调用间隙的分支自动翻转不再影响未提交工作区内容
+- 顶栏（AppHeader.vue）：≤1024px 藏英文副标题；≤768px 藏中文标题（保留品牌图标）、导航改图标态（隐藏文字 span）、按钮/间距缩紧凑；导航按钮补 title + aria-label（图标态下保留可访问名称）
+- 大纲抽屉（OutlinePanel.vue + EditorView.vue + ui store）：ui 新增 mobileOutlineOpen / toggleMobileOutline / closeMobileOutline；≤768px 侧边栏转 fixed 滑入抽屉（min(300px, 84vw)、0.22s 过渡、投影），画布左上角悬浮开关（PanelLeft/X 图标切换，桌面 display:none）+ 遮罩层（z-index 30/40 分层）；选中表行后自动收起；matchMedia 监听窄屏→宽屏自动复位；触屏无 hover：分类行内操作按钮与眼睛按钮常显
+- 画布（CanvasToolbar / Minimap）：工具栏 ≤768px 紧凑间距、生成范围文字隐藏、toolbar-right 整行换行（原有 flex-wrap 保持）；小地图窄屏隐藏（display:none）
+- 字典管理（DictView.vue）：左右分栏改上下堆叠（列表 32vh 限高、边框改下沿）；字典值六列栅格（值键/标签/类型/颜色/注释/删除）改双列卡片——注释独占整行、删除按钮靠右、表头隐藏（输入框自带占位）、v-body 解除内部限高改外层滚动；图例提示换行
+- 模板管理（TemplateView.vue）：模板列表转顶部条区（26vh）；tpl-split 左右分屏改单列堆叠（编辑 minmax(180px,42%) / 预览 minmax(160px,1fr)）；tpl-head 允许换行；帮助面板双列改单列
+- 系统设置（SettingsView.vue）：内边距 18px 20px→12px；规则六列栅格隐藏 #序号列（:nth-child(2)）并收缩正则/类型列宽；底部操作栏允许换行
+- 对话框（6 个）：:width 固定像素改 width="min(设计宽, 94vw)" 字符串（480/620/640/880/980 六档）+ wrapClassName="dbm-modal-wrap"；global.scss 新增 .dbm-modal-wrap 内容体 max-height 滚动（桌面 100vh-200px / 移动 100vh-150px）与移动端水平钳制
+- TableEditDialog：字段/索引表格包 .grid-scroll 横滚容器（表头与数据行同滚，列对齐不漂移）；≤768px cols-grid min-width 780px、idx-grid 560px、基本信息四列改双列、columns-body 44vh；NavigateEditDialog 三/二列表单改单列（注意 :has 选择器特异性，媒体查询内并列声明覆盖）
+- 触屏细节（global.scss）：弹层/树/列表/代码区 -webkit-overflow-scrolling: touch；字典值删除按钮 24→28px 点按目标
+- 验证（agent-browser，390×844 / 768×1024 / 1920×1080 三档）：
+  * 顶栏：52px、标题 none、导航 4 图标态、无水平溢出；768 边界抽屉态生效
+  * 抽屉：开关点击开合、遮罩 block/z30、transform 全程断言、选表后自动收起、桌面复位
+  * 画布：全宽 390、小地图 none、工具栏 95px 换行 2-3 行、范围标签 none
+  * 字典：column 堆叠、列表 390×270（=32vh）、值网格 repeat(2, minmax(0,1fr))、表头 none
+  * 模板：列表 390×219（=26vh）、split 单列 370px、编辑区横滚（scrollWidth 1073/368）且高亮 overlay 滚动同步（scrollLeft 120/120）
+  * 设置：内边距 12px、规则 5 列（22px 120px 118px 44px 26px）、序号列 none
+  * 表编辑弹窗：宽 367px（≤94vw）、body max-height 694px、字段表横滚（scrollWidth 780/可视 319）
+  * 桌面回归：标题 block、大纲 268px static、小地图 block、悬浮开关 none、工具栏 37px 单行、无溢出
+  * 三档全程 0 控制台错误；VLM 四截图审查（编辑器/字典/模板/抽屉）——仅模板编辑区长行无换行一项，经 DOM 断言确认为代码编辑器正常横滚行为（静态截图不显示滚动条），非缺陷
+- 校验：bun run typecheck 通过；vp check --fix 60 文件格式 + 51 文件 lint 零告警；check-readme.py 通过（30 标题）
+- README：新增「响应式与移动端适配（≤768px）」小节（8 行为区域表）+ 非功能说明补窄屏兼容条目
+
+Stage Summary:
+- 全站 768px 断点自适应完成：顶栏图标化、大纲转滑入抽屉（开关/遮罩/自动收起/宽屏复位）、字典与模板视图上下堆叠、设置紧凑化、六对话框响应式宽度与内容体滚动、字段/索引多列表格整体横滚（表头行同滚保列对齐）
+- 设计原则：仅媒体查询覆盖 + 少量结构包装（grid-scroll），零业务逻辑改动；桌面布局零回归（1920×1080 全量断言通过）；触屏可用性细节（惯性滚动、去 hover 依赖、点按目标放大）
+- 已知边界：画布缩放在触屏上依赖工具栏按钮（双指捏合缩放未实现，列为后续增强项）；模板编辑器长行不自动换行（与桌面一致的代码编辑器横滚语义）
+- 本次修改提交推送到 devel 分支（main 已在本任务开头合并至同基 5b3fba9）

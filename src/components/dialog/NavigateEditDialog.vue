@@ -310,7 +310,8 @@ async function save() {
   <a-modal
     :open="dialogOpen"
     :title="isEdit ? `编辑导航${draft.id ? '' : ''}` : '新增导航'"
-    :width="640"
+    width="min(640px, 94vw)"
+    wrap-class-name="dbm-modal-wrap"
     :mask-closable="false"
     @cancel="ui.closeNavigateEdit()"
   >
@@ -569,5 +570,13 @@ async function save() {
   background: var(--dbm-bg-2);
   border-radius: var(--dbm-radius-s);
   padding: 6px 10px;
+}
+
+/* ===== 移动端适配：三/二列表单改单列 ===== */
+@media (max-width: 768px) {
+  .row,
+  .row:has(.ant-select-multiple) {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

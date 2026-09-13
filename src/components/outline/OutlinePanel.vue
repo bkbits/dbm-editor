@@ -78,10 +78,11 @@ function catColor(categoryId: string, index: number) {
   return `var(--dbm-cat-${index % 8})`
 }
 
-/** 点击大纲表名：双向联动高亮 + 画布居中定位 */
+/** 点击大纲表名：双向联动高亮 + 画布居中定位（移动端选中后自动收起抽屉） */
 function clickTable(tableId: string, e: MouseEvent) {
   canvas.selectTable(tableId, e.ctrlKey || e.shiftKey)
   canvas.centerOnTable(tableId)
+  ui.closeMobileOutline()
 }
 function dblClickTable(tableId: string) {
   ui.openTableEdit(tableId)
@@ -154,7 +155,7 @@ watch(
 </script>
 
 <template>
-  <aside class="outline-panel">
+  <aside class="outline-panel" :class="{ open: ui.mobileOutlineOpen }">
     <div class="outline-header">
       <span class="outline-title">
         <Folder :size="14" />
@@ -556,5 +557,36 @@ watch(
   color: var(--dbm-text-3);
   font-family: var(--dbm-font-mono);
   flex-shrink: 0;
+}
+
+/* ===== 移动端适配：侧边栏转为滑入抽屉 =====
+   （桌面样式不变；抽屉开关由 EditorView 悬浮按钮 + ui.mobileOutlineOpen 驱动） */
+@media (max-width: 768px) {
+  .outline-panel {
+    position: fixed;
+    top: var(--dbm-header-height);
+    left: 0;
+    bottom: 0;
+    width: min(300px, 84vw);
+    min-width: 0;
+    z-index: 40;
+    transform: translateX(-103%);
+    transition: transform 0.22s ease;
+    box-shadow: 8px 0 24px rgba(0, 0, 0, 0.22);
+
+    &.open {
+      transform: translateX(0);
+    }
+  }
+
+  /* 触屏无 hover：行内操作按钮常显，避免依赖 hover 态 */
+  .category-row .cat-actions {
+    opacity: 1;
+    display: inline-flex;
+  }
+
+  .table-row .t-eye {
+    opacity: 1;
+  }
 }
 </style>

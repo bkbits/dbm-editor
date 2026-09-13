@@ -72,6 +72,8 @@ async function refresh() {
         class="nav-btn"
         :class="{ active: ui.page === p.key }"
         type="button"
+        :title="p.label"
+        :aria-label="p.label"
         @click="switchPage(p.key)"
       >
         <component :is="p.icon" :size="14" :stroke-width="2" />
@@ -235,6 +237,55 @@ async function refresh() {
   }
   to {
     transform: rotate(360deg);
+  }
+}
+
+/* ===== 移动端适配 ===== */
+/* 中屏：藏英文副标题，给导航让位 */
+@media (max-width: 1024px) {
+  .brand-sub {
+    display: none;
+  }
+}
+
+/* 小屏：仅保留图标（品牌图标 / 导航图标 / 功能图标），导航改图标态 */
+@media (max-width: 768px) {
+  .app-header {
+    gap: 8px;
+    padding: 0 10px;
+  }
+
+  .brand {
+    gap: 6px;
+
+    .brand-title {
+      display: none;
+    }
+  }
+
+  .page-nav {
+    gap: 2px;
+    margin-left: auto;
+
+    .nav-btn {
+      padding: 5px 9px;
+      gap: 0;
+
+      /* 隐藏文字标签，仅图标（首个 span 为文字） */
+      span {
+        display: none;
+      }
+    }
+  }
+
+  .header-right {
+    margin-left: 4px;
+    gap: 6px;
+  }
+
+  .icon-btn {
+    width: 28px;
+    height: 28px;
   }
 }
 </style>

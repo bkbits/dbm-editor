@@ -99,7 +99,8 @@ async function doImport() {
   <a-modal
     :open="dialogOpen"
     title="从数据库导入表"
-    :width="640"
+    width="min(640px, 94vw)"
+    wrap-class-name="dbm-modal-wrap"
     :mask-closable="false"
     @cancel="ui.closeImportDB()"
   >

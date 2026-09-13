@@ -89,3 +89,39 @@ mark.search-hit {
   border-radius: 2px;
   padding: 0 1px;
 }
+
+/* ===== 弹窗通用（wrapClassName=dbm-modal-wrap 的对话框） ===== */
+/* 内容体超高时滚动（长表单/长列表），避免弹窗撑出视口 */
+.dbm-modal-wrap .ant-modal-body {
+  max-height: calc(100vh - 200px);
+  overflow-y: auto;
+}
+
+/* ===== 移动端全局适配 ===== */
+@media (max-width: 768px) {
+  /* 弹窗水平钳制（width 的 min() 之外的兜底）与纵向留白 */
+  .dbm-modal-wrap .ant-modal {
+    max-width: calc(100vw - 12px);
+    margin: 8px auto;
+  }
+
+  .dbm-modal-wrap .ant-modal-body {
+    max-height: calc(100vh - 150px);
+  }
+
+  /* 遮罩弹层内部滚动更顺滑（惯性滚动） */
+  .dbm-modal-wrap .ant-modal-body,
+  .outline-tree,
+  .list-body,
+  .v-body,
+  .r-body,
+  .editor-code-wrap {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* 触屏点按目标不小于 24px（mini 按钮已有尺寸，主要放大删除类按钮命中区） */
+  .v-del {
+    width: 28px;
+    height: 28px;
+  }
+}

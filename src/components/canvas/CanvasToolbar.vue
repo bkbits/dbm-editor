@@ -236,4 +236,22 @@ async function replace() {
     white-space: nowrap;
   }
 }
+
+/* ===== 移动端适配：紧凑间距 + 隐藏生成范围文字（按钮组自然换行） ===== */
+@media (max-width: 768px) {
+  .canvas-toolbar {
+    padding: 5px 8px;
+    gap: 6px;
+  }
+
+  .toolbar-right {
+    margin-left: 0;
+    width: 100%;
+    justify-content: flex-start;
+
+    .scope-label {
+      display: none;
+    }
+  }
+}
 </style>

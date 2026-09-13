@@ -714,4 +714,52 @@ const isValueHit = (v: DictValue) => {
     margin-left: auto;
   }
 }
+
+/* ===== 移动端适配：左右分栏改为上下堆叠，字典值六列栅格改双列卡片 ===== */
+@media (max-width: 768px) {
+  .dict-view {
+    flex-direction: column;
+  }
+
+  .dict-list {
+    width: 100%;
+    min-width: 0;
+    max-height: 32vh;
+    border-right: none;
+    border-bottom: 1px solid var(--dbm-border);
+  }
+
+  .dict-detail {
+    flex: 1;
+    min-height: 0;
+    padding: 12px 12px 20px;
+  }
+
+  /* 六列（值键/标签/类型/颜色/注释/删除）→ 双列卡片：注释独占一行，删除按钮靠右 */
+  .v-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px 8px;
+  }
+
+  .v-head {
+    display: none; /* 卡片化后表头语义不再成立，输入框自带占位提示 */
+  }
+
+  .v-grid > :nth-child(5) {
+    grid-column: 1 / -1; /* 值注释整行 */
+  }
+
+  .v-grid > :nth-child(6) {
+    justify-self: end; /* 删除按钮靠右 */
+  }
+
+  .values-table .v-body {
+    max-height: none;
+  }
+
+  .values-legend .lg-tip {
+    margin-left: 0;
+    flex-basis: 100%;
+  }
+}
 </style>

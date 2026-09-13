@@ -194,4 +194,11 @@ onBeforeUnmount(() => {
     cursor: crosshair;
   }
 }
+
+/* ===== 移动端适配：小屏画布空间有限，隐藏小地图 ===== */
+@media (max-width: 768px) {
+  .minimap {
+    display: none;
+  }
+}
 </style>

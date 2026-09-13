@@ -74,7 +74,8 @@ async function save() {
   <a-modal
     :open="dialogOpen"
     :title="isEdit ? `编辑分类 · ${draft.name}` : '新增分类'"
-    :width="480"
+    width="min(480px, 94vw)"
+    wrap-class-name="dbm-modal-wrap"
     :mask-closable="false"
     @cancel="ui.closeCategoryEdit()"
   >

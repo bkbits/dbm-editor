@@ -88,7 +88,8 @@ async function copyCode() {
   <a-modal
     :open="dialogOpen"
     title="代码生成预览"
-    :width="880"
+    width="min(880px, 94vw)"
+    wrap-class-name="dbm-modal-wrap"
     :footer="null"
     destroy-on-hidden
     @cancel="ui.closeCodePreview()"

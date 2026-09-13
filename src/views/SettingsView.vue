@@ -789,4 +789,34 @@ async function save() {
     gap: 8px;
   }
 }
+
+/* ===== 移动端适配：紧凑内边距 + 规则网格压缩（隐藏序号列，正则/类型列收缩） ===== */
+@media (max-width: 768px) {
+  .settings-inner {
+    padding: 12px 12px 24px;
+  }
+
+  .settings-card {
+    padding: 12px;
+  }
+
+  .r-grid {
+    grid-template-columns: 22px minmax(120px, 1fr) 118px 44px 26px;
+    gap: 4px 6px;
+
+    /* 隐藏 # 序号列（第 2 个子元素），排序语义由拖拽手柄承担 */
+    > :nth-child(2) {
+      display: none;
+    }
+  }
+
+  .settings-foot {
+    flex-wrap: wrap;
+    gap: 6px;
+
+    .foot-actions {
+      margin-left: auto;
+    }
+  }
+}
 </style>

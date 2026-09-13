@@ -36,7 +36,8 @@ async function confirmReplace() {
   <a-modal
     :open="dialogOpen"
     title="确认代码替换"
-    :width="620"
+    width="min(620px, 94vw)"
+    wrap-class-name="dbm-modal-wrap"
     :mask-closable="false"
     @cancel="ui.closeReplaceConfirm()"
   >

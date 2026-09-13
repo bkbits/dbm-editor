@@ -312,7 +312,8 @@ async function save() {
   <a-modal
     :open="dialogOpen"
     :title="isEdit ? `编辑表 · ${draft.tableName || ''}` : '新增表'"
-    :width="980"
+    width="min(980px, 94vw)"
+    wrap-class-name="dbm-modal-wrap"
     :mask-closable="false"
     @cancel="ui.closeTableEdit()"
   >
@@ -369,93 +370,95 @@ async function save() {
     </div>
 
     <a-tabs v-model:active-key="draft.activeTab" size="small" class="edit-tabs">
-      <!-- ========== 字段 ========== -->
+      <!-- ========== 字段（窄屏整体横向滚动：表头与行同滚） ========== -->
       <a-tab-pane key="columns" :tab="`字段（${draft.columns.length}）`">
-        <div class="columns-head cols-grid">
-          <span class="h-sort">排序</span>
-          <span>字段名</span>
-          <span>Java属性名</span>
-          <span>数据库类型</span>
-          <span>Java类型</span>
-          <span class="h-center">非空</span>
-          <span class="h-center">主键</span>
-          <span>字典</span>
-          <span>注释</span>
-          <span></span>
-        </div>
-        <div class="columns-body">
-          <div
-            v-for="(col, idx) in draft.columns"
-            :key="col.id"
-            class="column-row cols-grid"
-            :data-idx="idx"
-            :class="columnDrag.rowClass(idx)"
-            :draggable="columnDrag.state.from === idx"
-            @dragstart="columnDrag.onDragStart(idx, $event)"
-            @dragend="columnDrag.onDragEnd()"
-            @dragover.prevent="columnDrag.onDragOver(idx, $event)"
-            @drop.prevent="columnDrag.onDrop()"
-          >
-            <span class="drag-handle" title="拖拽排序" @pointerdown="columnDrag.handleDown(idx)">
-              <GripVertical :size="13" />
-            </span>
-            <a-input
-              v-model:value="col.columnName"
-              size="small"
-              class="mono"
-              placeholder="字段名"
-              @change="onColumnName(col)"
-            />
-            <a-input
-              v-model:value="col.propertyName"
-              size="small"
-              class="mono"
-              placeholder="小驼峰"
-              @change="col._propTouched = true"
-            />
-            <a-auto-complete
-              v-model:value="col.type"
-              :options="dbTypeOptions"
-              size="small"
-              class="mono"
-              placeholder="如 VARCHAR(50)"
-              :filter-option="
-                (input: string, option: any) =>
-                  String(option.value).toUpperCase().includes(input.toUpperCase())
-              "
-              @change="onTypeChange(col)"
-            />
-            <a-auto-complete
-              v-model:value="col.javaType"
-              :options="javaTypeOptions"
-              size="small"
-              class="mono"
-              placeholder="如 String"
-              :filter-option="
-                (input: string, option: any) =>
-                  String(option.value).toLowerCase().includes(input.toLowerCase())
-              "
-              @change="col._javaTouched = true"
-            />
-            <div class="center-cell">
-              <a-checkbox v-model:checked="col.notNull" />
+        <div class="grid-scroll">
+          <div class="columns-head cols-grid">
+            <span class="h-sort">排序</span>
+            <span>字段名</span>
+            <span>Java属性名</span>
+            <span>数据库类型</span>
+            <span>Java类型</span>
+            <span class="h-center">非空</span>
+            <span class="h-center">主键</span>
+            <span>字典</span>
+            <span>注释</span>
+            <span></span>
+          </div>
+          <div class="columns-body">
+            <div
+              v-for="(col, idx) in draft.columns"
+              :key="col.id"
+              class="column-row cols-grid"
+              :data-idx="idx"
+              :class="columnDrag.rowClass(idx)"
+              :draggable="columnDrag.state.from === idx"
+              @dragstart="columnDrag.onDragStart(idx, $event)"
+              @dragend="columnDrag.onDragEnd()"
+              @dragover.prevent="columnDrag.onDragOver(idx, $event)"
+              @drop.prevent="columnDrag.onDrop()"
+            >
+              <span class="drag-handle" title="拖拽排序" @pointerdown="columnDrag.handleDown(idx)">
+                <GripVertical :size="13" />
+              </span>
+              <a-input
+                v-model:value="col.columnName"
+                size="small"
+                class="mono"
+                placeholder="字段名"
+                @change="onColumnName(col)"
+              />
+              <a-input
+                v-model:value="col.propertyName"
+                size="small"
+                class="mono"
+                placeholder="小驼峰"
+                @change="col._propTouched = true"
+              />
+              <a-auto-complete
+                v-model:value="col.type"
+                :options="dbTypeOptions"
+                size="small"
+                class="mono"
+                placeholder="如 VARCHAR(50)"
+                :filter-option="
+                  (input: string, option: any) =>
+                    String(option.value).toUpperCase().includes(input.toUpperCase())
+                "
+                @change="onTypeChange(col)"
+              />
+              <a-auto-complete
+                v-model:value="col.javaType"
+                :options="javaTypeOptions"
+                size="small"
+                class="mono"
+                placeholder="如 String"
+                :filter-option="
+                  (input: string, option: any) =>
+                    String(option.value).toLowerCase().includes(input.toLowerCase())
+                "
+                @change="col._javaTouched = true"
+              />
+              <div class="center-cell">
+                <a-checkbox v-model:checked="col.notNull" />
+              </div>
+              <div class="center-cell">
+                <a-checkbox v-model:checked="col.primaryKey" />
+              </div>
+              <a-select
+                v-model:value="col.dict"
+                :options="dictOptions"
+                size="small"
+                placeholder="无"
+                allow-clear
+                show-search
+                option-filter-prop="label"
+              />
+              <a-input v-model:value="col.comment" size="small" placeholder="选填" />
+              <button class="row-del" type="button" title="删除字段" @click="removeColumn(idx)">
+                <Trash2 :size="12" />
+              </button>
             </div>
-            <div class="center-cell">
-              <a-checkbox v-model:checked="col.primaryKey" />
-            </div>
-            <a-select
-              v-model:value="col.dict"
-              :options="dictOptions"
-              size="small"
-              placeholder="无"
-              allow-clear
-              show-search
-              option-filter-prop="label"
-            />
-            <a-input v-model:value="col.comment" size="small" placeholder="选填" />
-            <button class="row-del" type="button" title="删除字段" @click="removeColumn(idx)">
-              <Trash2 :size="12" />
-            </button>
           </div>
         </div>
         <a-button size="small" type="dashed" block class="add-btn" @click="addColumn">
@@ -464,43 +467,45 @@ async function save() {
         </a-button>
       </a-tab-pane>
 
-      <!-- ========== 索引 ========== -->
+      <!-- ========== 索引（窄屏整体横向滚动） ========== -->
       <a-tab-pane key="indexes" :tab="`索引（${draft.indexes.length}）`">
-        <div class="columns-head idx-grid">
-          <span>索引名</span>
-          <span>索引类型</span>
-          <span>索引字段</span>
-          <span>注释</span>
-          <span></span>
-        </div>
-        <div class="columns-body">
-          <div v-for="(idx, i) in draft.indexes" :key="idx.id" class="column-row idx-grid">
-            <a-input
-              v-model:value="idx.indexName"
-              size="small"
-              class="mono"
-              placeholder="如 uk_username"
-            />
-            <a-select v-model:value="idx.type" :options="indexTypeOptions" size="small" />
-            <a-select
-              v-model:value="idx.columns"
-              :options="columnSelectOptions"
-              mode="multiple"
-              size="small"
-              placeholder="选择字段（可多选）"
-              :max-tag-count="3"
-              class="mono"
-            />
-            <a-input v-model:value="idx.comment" size="small" placeholder="选填" />
-            <button class="row-del" type="button" title="删除索引" @click="removeIndex(i)">
-              <Trash2 :size="12" />
-            </button>
+        <div class="grid-scroll">
+          <div class="columns-head idx-grid">
+            <span>索引名</span>
+            <span>索引类型</span>
+            <span>索引字段</span>
+            <span>注释</span>
+            <span></span>
           </div>
-          <a-empty
-            v-if="!draft.indexes.length"
-            description="暂无索引"
-            :image-style="{ height: '40px' }"
-          />
+          <div class="columns-body">
+            <div v-for="(idx, i) in draft.indexes" :key="idx.id" class="column-row idx-grid">
+              <a-input
+                v-model:value="idx.indexName"
+                size="small"
+                class="mono"
+                placeholder="如 uk_username"
+              />
+              <a-select v-model:value="idx.type" :options="indexTypeOptions" size="small" />
+              <a-select
+                v-model:value="idx.columns"
+                :options="columnSelectOptions"
+                mode="multiple"
+                size="small"
+                placeholder="选择字段（可多选）"
+                :max-tag-count="3"
+                class="mono"
+              />
+              <a-input v-model:value="idx.comment" size="small" placeholder="选填" />
+              <button class="row-del" type="button" title="删除索引" @click="removeIndex(i)">
+                <Trash2 :size="12" />
+              </button>
+            </div>
+            <a-empty
+              v-if="!draft.indexes.length"
+              description="暂无索引"
+              :image-style="{ height: '40px' }"
+            />
+          </div>
         </div>
         <a-button size="small" type="dashed" block class="add-btn" @click="addIndex">
           <template #icon><Plus :size="12" /></template>
@@ -629,6 +634,34 @@ async function save() {
   grid-template-columns: minmax(120px, 1fr) 128px minmax(200px, 1.6fr) minmax(80px, 1fr) 26px;
   gap: 4px 6px;
   align-items: center;
+}
+
+/* 字段/索引表整体横向滚动容器（表头与数据行同滚，列对齐不漂移） */
+.grid-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ===== 移动端适配 ===== */
+@media (max-width: 768px) {
+  /* 基本信息四列 → 双列 */
+  .form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 10px;
+  }
+
+  /* 十列字段表 / 五列索引表：保持列结构，整体横向滚动（min-width 保住列宽语义） */
+  .cols-grid {
+    min-width: 780px;
+  }
+
+  .idx-grid {
+    min-width: 560px;
+  }
+
+  .columns-body {
+    max-height: 44vh;
+  }
 }
 
 .columns-head {

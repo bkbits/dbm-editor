@@ -660,4 +660,48 @@ const isEdit = computed(() => Boolean(draft.value.id))
     }
   }
 }
+
+/* ===== 移动端适配：模板列表转顶部条区，编辑/预览单列堆叠 ===== */
+@media (max-width: 768px) {
+  .template-view {
+    flex-direction: column;
+  }
+
+  .tpl-list {
+    width: 100%;
+    min-width: 0;
+    max-height: 26vh;
+    border-right: none;
+    border-bottom: 1px solid var(--dbm-border);
+  }
+
+  .tpl-main {
+    flex: 1;
+    min-height: 0;
+    padding: 10px;
+    gap: 8px;
+  }
+
+  .tpl-head {
+    flex-wrap: wrap;
+    gap: 8px;
+
+    .tpl-actions {
+      margin-left: auto;
+    }
+  }
+
+  /* 桌面左右分屏 → 上下堆叠（编辑在上、预览在下，各自可滚） */
+  .tpl-split {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(180px, 42%) minmax(160px, 1fr);
+    gap: 8px;
+  }
+
+  .tpl-help {
+    .help-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+}
 </style>

@@ -47,8 +47,17 @@ export function createUiStore() {
     codePreview: { open: false, tableId: null as string | null },
     replaceConfirm: { open: false, files: [] as GeneratedFile[] } as ReplaceConfirmDialogState,
 
+    /** 移动端（≤768px）大纲抽屉开关：桌面侧边栏不受影响，抽屉样式由 OutlinePanel 媒体查询接管 */
+    mobileOutlineOpen: false,
+
     setPage(page: PageName) {
       this.page = page
+    },
+    toggleMobileOutline() {
+      this.mobileOutlineOpen = !this.mobileOutlineOpen
+    },
+    closeMobileOutline() {
+      this.mobileOutlineOpen = false
     },
     openTableEdit(
       tableId?: string | null,
