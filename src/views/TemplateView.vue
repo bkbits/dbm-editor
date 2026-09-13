@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { message, Modal } from 'antdv-next'
-import { Plus, Trash2, FileCode, Save } from '@lucide/vue'
+import { Plus, Trash2, FileCode, Save, ChevronDown, ChevronUp } from '@lucide/vue'
 import type { CodeTemplate } from '@/types/model'
 import { useTemplateStore } from '@/stores/template'
 import { useModelStore } from '@/stores/model'
@@ -154,6 +154,26 @@ function syncScroll() {
   pre.scrollTop = ta.scrollTop
   pre.scrollLeft = ta.scrollLeft
 }
+
+/* ==================== 帮助面板折叠（移动端默认折叠，转宽屏复位展开） ==================== */
+
+const helpOpen = ref(true)
+let helpMq: MediaQueryList | null = null
+
+function onHelpViewportChange(e: MediaQueryListEvent) {
+  /* 窄屏转宽屏：复位展开（桌面帮助面板始终可见）；反向切换保留用户当前状态 */
+  if (!e.matches) helpOpen.value = true
+}
+
+onMounted(() => {
+  helpMq = window.matchMedia('(max-width: 768px)')
+  helpOpen.value = !helpMq.matches
+  helpMq.addEventListener('change', onHelpViewportChange)
+})
+
+onBeforeUnmount(() => {
+  helpMq?.removeEventListener('change', onHelpViewportChange)
+})
 
 /* ==================== 保存 / 删除 ==================== */
 
@@ -320,8 +340,21 @@ const isEdit = computed(() => Boolean(draft.value.id))
       </div>
 
       <div class="tpl-help">
-        <div class="help-title">模板上下文变量（context）与工具（utils）</div>
-        <div class="help-grid">
+        <div class="help-title">
+          <span>模板上下文变量（context）与工具（utils）</span>
+          <button
+            class="help-toggle"
+            type="button"
+            :aria-expanded="helpOpen"
+            aria-label="展开 / 收起帮助面板"
+            title="展开 / 收起帮助面板"
+            @click="helpOpen = !helpOpen"
+          >
+            <ChevronUp v-if="helpOpen" :size="14" />
+            <ChevronDown v-else :size="14" />
+          </button>
+        </div>
+        <div v-show="helpOpen" class="help-grid">
           <div class="help-col">
             <p><code>context.templateName</code> 模板名称</p>
             <p><code>context.basePackage</code> 基础包名（表所属分类）</p>
@@ -661,7 +694,12 @@ const isEdit = computed(() => Boolean(draft.value.id))
   }
 }
 
-/* ===== 移动端适配：模板列表转顶部条区，编辑/预览单列堆叠 ===== */
+/* 帮助面板折叠开关：桌面隐藏（面板始终展开），移动端样式见下方媒体查询 */
+.help-toggle {
+  display: none;
+}
+
+/* ===== 移动端适配：模板列表转顶部条区，编辑/预览单列堆叠；帮助面板可折叠 ===== */
 @media (max-width: 768px) {
   .template-view {
     flex-direction: column;
@@ -691,14 +729,46 @@ const isEdit = computed(() => Boolean(draft.value.id))
     }
   }
 
-  /* 桌面左右分屏 → 上下堆叠（编辑在上、预览在下，各自可滚） */
+  /* 桌面左右分屏 → 上下堆叠（编辑在上、预览在下，各自可滚）。
+   * 行轨最小值必须归零：minmax(180px,…)/minmax(160px,…) 硬最小值之和超出弹性
+   * 剩余高度时，网格内容会溢出容器与下方帮助面板重叠（本块为该缺陷修复） */
   .tpl-split {
     grid-template-columns: 1fr;
-    grid-template-rows: minmax(180px, 42%) minmax(160px, 1fr);
+    grid-template-rows: minmax(0, 42fr) minmax(0, 58fr);
     gap: 8px;
   }
 
+  .help-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .help-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: var(--dbm-radius-s);
+    background: transparent;
+    color: var(--dbm-text-3);
+    cursor: pointer;
+
+    &:active {
+      background: var(--dbm-bg-hover);
+    }
+  }
+
+  /* 展开时限高内部滚动：单列自然高度约 400px，不限高会挤占代码区甚至溢出主区 */
   .tpl-help {
+    max-height: 40vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+
     .help-grid {
       grid-template-columns: 1fr;
     }
