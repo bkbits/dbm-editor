@@ -550,3 +550,32 @@ Stage Summary:
 - 关键决策：① entity 导航属性以注释形态生成（避免未配置关系的 @Navigate 生成错误 SQL）；② 写操作返回影响行数（贴合 executeRows 返回值，便于 satoken 权限下审计）；③ MySQL 字符串一律单引号且经 sq 转义（utils.quote 双引号不符合 MySQL 惯例）
 - Eta 模板编写新增一条避坑经验：标签内正则字面量不得含引号字符（解析器引号状态机不识别正则上下文）
 - 工作分支策略变更：本次起功能开发走 devel 分支（main 保持稳定发布线）
+
+---
+Task ID: 18
+Agent: main (Super Z)
+Task: 修复「首次加载 solon3 七件套模板未生效」——模板迁移改 seedTemplatesVersion 版本号驱动 + 首载即落盘种子；提交推送 devel
+
+Work Log:
+- 问题定位（agent-browser 1920×1080 实测，隔离 worktree 复跑 devel 代码）：
+  * 全新浏览器加载：七件套正常显示（createSeedDB 路径）✓
+  * 旧四件套 localStorage（含 tpl-dao）重载：形态嗅探迁移正常触发 ✓
+  * 七模板渲染复查：entity/service/serviceImpl/controller/vue/sql/menuSql 对种子表渲染标记全部存在（public class / public interface / EasyQuery / @Controller / template 标签 / CREATE TABLE / INSERT INTO），0 控制台错误 ✓
+  * 根因一（环境）：会话沙箱在工具调用间隙会把工作区自动切回 main——上一任务提交 devel 后工作区回落 main，预览/自测实际运行旧四件套代码（无迁移逻辑），表现即「首次加载未生效」
+  * 根因二（代码缺口）：Task 17 迁移条件为形态嗅探（含 tpl-dao 且无 tpl-controller）——用户曾删除 tpl-dao（或模板数组残缺）的旧库永远不满足条件，升级静默失效
+- 修复（src/mock/db.ts）：
+  * 新增 SEED_TEMPLATES_VERSION = 2 常量与 MockDB.seedTemplatesVersion 可选字段；createSeedDB 写入版本号
+  * 迁移条件改为 (seedTemplatesVersion ?? 1) < SEED_TEMPLATES_VERSION——旧库一律升级（与用户是否删过某个种子模板无关），升级后回写版本号，此后用户增删改模板不再被种子覆盖；删除形态嗅探分支
+  * loadDB 回退种子路径补 db = createSeedDB() + persistDB()——首次加载即落盘（消除「内存已有、存储为空」的首载分歧，宿主侧可直接观测 localStorage）
+- 验证（隔离 worktree + agent-browser，5 场景全部通过、0 控制台错误）：
+  * 全新加载：localStorage 立即含 7 模板 + 版本标记 2（新增首载落盘行为）
+  * 旧四件套（含 dao）重载 → 迁移命中：7 模板 + 版本 2
+  * 旧库曾删 dao（旧逻辑漏判场景）重载 → 迁移命中：7 模板 + 版本 2（本次修复核心）
+  * 版本已是 2 时删除 vue 模板重载 → 仍 6 个（用户定制不被种子恢复）
+  * bun run typecheck 通过；vp check 60 文件格式正确 + 51 文件 lint 零告警
+- 提交推送到 devel 分支
+
+Stage Summary:
+- 模板种子迁移从「形态嗅探」升级为「seedTemplatesVersion 版本号驱动」：旧库确定性升级（覆盖删过模板的边缘形态）、升级一次性、用户后续定制不受影响；未来种子模板变更只需递增版本常量
+- 首次加载（无有效存储）即落盘种子数据，localStorage 与内存态从首载起一致
+- 排障经验：会话沙箱在工具调用间隙自动把工作区切回 main——跨分支验证必须用 git worktree 隔离（.wt/devel，已登记 .git/info/exclude），跨分支操作须在单条命令内原子完成

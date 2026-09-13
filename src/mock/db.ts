@@ -2,7 +2,7 @@
  * Mock 数据库（demo 数据存储）：内存数据 + localStorage 持久化
  *
  * 由 DemoManagerApi 直接读写；原 axios mock 分发层已被 ManagerApi 体系取代。
- * 持久化键保持 v2 不变，并对旧版设置形态（columnTypeRules）做读取时迁移。
+ * 持久化键保持 v2 不变，读取时按需迁移（设置形态 / hidden 字段 / 模板种子版本）。
  */
 import type {
   CodeTemplate,
@@ -27,9 +27,18 @@ import {
 
 const STORAGE_KEY = 'gdbme:db:v2'
 const LEGACY_STORAGE_KEYS = ['gdbme:db:v1']
+/**
+ * 模板种子版本：种子模板集发生变更时递增（1=通用四件套，2=solon3 七件套）。
+ * 旧库不含 seedTemplatesVersion 字段（视为 1），读取时低于当前值即整体替换为
+ * 最新种子模板集并回写版本号——与「用户是否删过某个种子模板」无关，杜绝形态
+ * 嗅探漏判；此后用户对模板的增删改不再被种子覆盖（版本号已是最新）。
+ */
+const SEED_TEMPLATES_VERSION = 2
 
 export interface MockDB {
   version: number
+  /** 模板种子版本（旧库无此字段 = 1）：低于当前值时读取时升级模板种子 */
+  seedTemplatesVersion?: number
   categories: TableCategory[]
   tables: Table[]
   columns: TableColumn[]
@@ -55,6 +64,7 @@ function createSeedDB(): MockDB {
   })
   return {
     version: 2,
+    seedTemplatesVersion: SEED_TEMPLATES_VERSION,
     categories: clone(SEED_CATEGORIES),
     tables,
     columns,
@@ -117,15 +127,14 @@ function loadDB(): MockDB {
           }))
           migrated = true
         }
-        // 旧版模板种子（通用四件套，含 dao）升级为 solon3 七件套：
-        // 仅当仍为旧种子形态（含 tpl-dao 且无 tpl-controller）时整体替换，
-        // 用户已删光模板或已升级的场景不受影响
+        // 模板种子版本升级（1=通用四件套 → 2=solon3 七件套）：旧库无版本字段，
+        // 一律整体替换为当前种子模板集（含用户曾删光模板的场景）并回写版本号
         if (
           !Array.isArray(parsed.templates) ||
-          (!parsed.templates.some((t) => t.id === 'tpl-controller') &&
-            parsed.templates.some((t) => t.id === 'tpl-dao'))
+          (parsed.seedTemplatesVersion ?? 1) < SEED_TEMPLATES_VERSION
         ) {
           parsed.templates = clone(SEED_TEMPLATES)
+          parsed.seedTemplatesVersion = SEED_TEMPLATES_VERSION
           migrated = true
         }
         if (migrated) {
@@ -140,7 +149,10 @@ function loadDB(): MockDB {
   }
   // 清理旧版本存储（v1 缺少 parentIdColumn 等字段，直接回退种子）
   for (const key of LEGACY_STORAGE_KEYS) localStorage.removeItem(key)
-  return createSeedDB()
+  // 首次加载（无有效存储）即落盘种子：消除「内存已有、存储为空」的首载分歧
+  db = createSeedDB()
+  persistDB()
+  return db
 }
 
 /** 读取旧版隐藏表存储键（gdbme:hidden），迁移成功后清除该键 */
