@@ -801,3 +801,21 @@ Stage Summary:
 - 画布从「pointer 事件兼容触屏」升级为完整触屏手势体系：单指平移、双指缩放（中点锚定、边界内拖动平移、三指容错、抬一指无缝续平移）、长按 480ms 菜单（三类目标分流 + Android contextmenu 压制 + 触觉反馈）、双击卡片编辑；桌面鼠标路径（框选/中键平移/滚轮缩放/右键菜单）零回归
 - 触屏无 hover 的三处补偿：连接点命中区 28px（::after 外扩）、选中态显示连接点与隐藏按钮、长按菜单「全选表」补多选入口
 - 架构要点：手势层经 window 捕获相位接入（先于目标元素处理，跨画布边界持续跟踪）；闭包私有状态与响应式状态机正交；'pinch' 模式与既有延迟指针捕获机制共存
+
+---
+Task ID: 26
+Agent: main (Super Z)
+Task: 创建 pages 部署分支（GitHub Pages 专用）——应用模式构建演示应用，产物收录至仅存在于该分支的 pages/ 目录，提交推送该分支
+
+Work Log:
+- 基线：origin/devel 22bc289（触屏手势体系）；沙箱已清理 .wt/devel → worktree prune + fetch origin devel:devel（5410e91→22bc289）+ worktree add + bun install 恢复
+- 构建形态分析：现行 vite.config.ts 为库模式（产物仅 DBManager.js/.d.ts，无 index.html），GitHub Pages 需完整 SPA → 新建应用模式配置 vite.pages.config.ts（仅 vue 插件 + base './' 相对路径 + outDir dist；不挂 libInjectCss/dts/external）——本地未跟踪文件（.git/info/exclude 登记 /vite.pages.config.ts），源码分支零改动
+- 构建：./node_modules/.bin/vp build --config vite.pages.config.ts（vp build 参数透传至 Vite）——dist 产物 index.html(488B) + favicon.svg + assets/index-*.js(2.5MB, gzip 694KB) + index-*.css(67KB)，3.45s；index.html 资源引用全部为相对路径（./assets/...、./favicon.svg）
+- 冒烟验证（scripts/verify-pages-build.sh，9/9 全绿）：python http.server 模拟项目页子路径 /dbm-editor/ 托管——标题正确、JS/CSS/favicon 相对路径 200、真浏览器 .table-card 渲染 6 张演示表、0 页面错误、0 控制台 error 级消息；截图 scripts/inspect/pages-build-smoke.png
+- pages 分支：worktree add --detach .wt/pages → git switch --orphan pages（无父提交孤儿分支）→ dist 产物移入 pages/ 目录 + pages/.nojekyll（关闭 Jekyll）+ 分支根 README（用途说明）→ 提交并 push -u origin pages；favicon 权限位 755 修正 644 后 amend + force-with-lease，最终 9a49977；ls-remote 复核远端一致，文件树仅 README.md + pages/ 五项
+- 复用沉淀：scripts/deploy-pages.sh（同步 devel → 写入应用配置 → 构建 → 更新 pages 分支产物 → 提交推送，本地排除不入库）
+
+Stage Summary:
+- origin/pages 已建立：孤儿分支仅含 README.md 与 pages/{.nojekyll, index.html, favicon.svg, assets/}——演示应用构建产物（内置 DemoManagerApi 演示数据，无后端依赖，独立可用）
+- 关键决策：① 库模式与 Pages 需求冲突 → 独立应用模式配置而非改动库构建（源码分支零改动）；② base './' 相对路径使产物可托管于任意子路径（项目页 /<仓库名>/ 直接可用）；③ 孤儿分支 + 产物仅存于 pages/ 目录，满足「该目录仅存在于 pages 分支」
+- 服务配置提示：GitHub Pages 经典「Deploy from a branch」仅支持分支根目录或 /docs；内容位于 pages/ 子目录时需经 GitHub Actions 部署，或调整目录结构（如改放分支根/docs 后重推）
