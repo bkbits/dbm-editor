@@ -895,6 +895,12 @@ async function save() {
   grid-template-columns:
     28px minmax(96px, 1fr) minmax(84px, 1fr)
     132px 118px 44px 44px 108px minmax(72px, 1fr) 26px;
+  /*
+   * 盒宽下限 = 轨道最小宽之和（min-content）：列选项等动态列使轨道总最小宽超出容器时，
+   * 盒子随轨道加宽而非仅轨道溢出盒子——否则表头 border-bottom / 行悬停背景 /
+   * 拖拽指示线只画到盒子宽（=容器宽），滚动后新露出的表头段下边框缺失一截。
+   */
+  min-width: min-content;
   gap: 4px 6px;
   align-items: center;
 }
@@ -902,6 +908,8 @@ async function save() {
 .idx-grid {
   display: grid;
   grid-template-columns: minmax(120px, 1fr) 128px minmax(200px, 1.6fr) minmax(80px, 1fr) 26px;
+  /* 同 .cols-grid：盒宽跟随轨道最小宽，表头下边框覆盖全部列 */
+  min-width: min-content;
   gap: 4px 6px;
   align-items: center;
 }
@@ -926,15 +934,8 @@ async function save() {
     gap: 8px 10px;
   }
 
-  /* 十列字段表 / 五列索引表：保持列结构，整体横向滚动（min-width 保住列宽语义） */
-  .cols-grid {
-    min-width: 780px;
-  }
-
-  .idx-grid {
-    min-width: 560px;
-  }
-
+  /* 字段/索引表盒宽下限已由 .cols-grid/.idx-grid 的 min-width: min-content 按轨道最小宽
+     动态保证（含列选项动态列，随设置增减自适应），无需再按断点硬编码 780/560 */
   /* 纵向限高上移至 .grid-scroll（44vh 表体 + 28px 表头） */
   .grid-scroll {
     max-height: calc(44vh + 28px);

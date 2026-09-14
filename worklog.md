@@ -745,3 +745,27 @@ Stage Summary:
 - 字段/索引表从「外层横滚 + 表体纵滚」双容器结构改为「唯一滚动容器 + 表头 sticky 吸顶」标准表格范式：一条横向滚动条（表头行同滚、右缘完全可达）、一条纵向滚动条（表头悬浮遮挡行内容），双滚动条与右侧裁剪遮挡彻底消除
 - 排障结论沉淀：overflow-y: auto 会按规范把 overflow-x 的 visible 计算为 auto——「只想纵向滚」的容器必然同时成为横向滚动容器，凡表头在外、表体自滚的布局都潜藏此坑（SettingsView 规则表/选项定义表为单容器变体，桌面无溢出暂无症状）
 - 环境注意：agent-browser 会话的 localStorage 跨脚本运行持久（主题状态会带入后续验证脚本，可善用以覆盖暗色态）
+
+---
+Task ID: 24
+Agent: main (Super Z)
+Task: 修复「表头下边界样式在滚动后少了一截」（Task 23 修复后残留缺陷）；提交推送 devel
+
+Work Log:
+- 问题定位（用户报告：滚动后表头下边界横线缺一段）：
+  * 复现实测（1920×1080，sys_user 表）：表头盒子宽 932（=滚动容器 clientWidth 填满），而其网格轨道因列选项动态列总最小宽溢出到 1050——CSS 网格轨道最小宽之和超出容器时轨道溢出盒子、盒子不自撑宽
+  * border-bottom 只画盒子宽（932）：横向滚动 114px 后新露出的表头段（5 个列选项列 + 删除列，共 114px）完全没有下边框——即「少了一截」；行盒子同样只撑到 928，行悬停背景/拖拽指示线同族隐患
+  * 成因归属：上一任务把滚动容器归一后右侧内容可达，此存量视觉缺陷随之显形（修复前右缘被裁剪不可见）；与 antdv-next 无关
+- 修复（src/components/dialog/TableEditDialog.vue）：
+  * .cols-grid / .idx-grid 增加 `min-width: min-content`——盒宽下限 = 轨道最小宽之和，盒子随轨道加宽而非仅轨道溢出盒子；表头 border-bottom、行悬停背景、拖拽指示线随之覆盖全部列；列选项动态增删自动适应
+  * 删除移动端 `min-width: 780px/560px` 硬编码下限（会被 min-content 按轨道实际最小宽取代；保留反而在选项列较多时重新截断表头边框）
+- 验证（agent-browser + 隔离 worktree，`bun run dev --port 3000`——沙箱已清理旧 worktree，重建 + bun install 恢复）：
+  * 桌面 1920（亮色）：表头盒宽 932→1054（轨道 1050 + padding），borderMissingSpan -4（边框反超轨道 4px 至 padding 区）；滚到最右 headerNoBorderZone 114→0；表头/行 15 列 maxDiff=0 对齐；删除按钮可达；单滚动条回归通过（表体 computed overflow-x=visible）；补 12 行纵向滚动 scrollTop=120 表头 sticky 吸顶正常、盒宽保持 1054；VLM 截图复核边框连贯无中断
+  * 移动端 390（亮色）：表头盒宽 1054、滚到最右（scrollLeft 735）无下边框区域 0、删除按钮可达、对齐 maxDiff=0；0 控制台错误
+  * bun run typecheck 通过；vp check 61 文件格式 + 52 文件 lint 零告警；check-readme.py 通过（30 标题，README「表头与行同滚」描述无需变更）
+- 提交推送到 devel 分支
+
+Stage Summary:
+- 字段/索引表网格盒宽语义修正：盒子宽度下限绑定轨道最小宽之和（min-width: min-content），表头下边框/行悬停背景/拖拽指示线全部覆盖到最后一列，横向滚动任意位置表头下边框完整连续；移动端旧硬编码下限（780/560）随之退役，由轨道实际最小宽动态决定
+- 排障结论沉淀：CSS 网格「轨道溢出盒子」陷阱——grid-template-columns 各轨最小宽之和超过容器宽时轨道照常布局但盒子维持容器宽，border/背景/box-shadow 等按盒子的装饰全部只画到容器宽；动态列场景必须 min-width: min-content 让盒子跟随轨道
+- 环境注意：沙箱会周期性清理 .wt worktree 与 node_modules（bun install 442ms 可恢复）；dev server 启动命令为 `bun run dev --port 3000`（vp CLI），`bun x vite` 在新 worktree 不可用
