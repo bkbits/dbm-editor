@@ -716,3 +716,32 @@ Stage Summary:
 - 关键决策：① boolean 选项值缺省视为启用（单一规则向后兼容）；② service 丢弃采用字面规格（add/update/remove 全关即丢，query 不豁免），controller 在 service 缺席时 info 直查 easyEntityQuery 消除悬空引用；③ boolean 仅存 false 值（true=缺省），存储紧凑且语义不变；④ @Table 按新规格常驻（直转时省略参数）；⑤ import 空行为引擎级后处理保证（行级状态机兼容 java/js-ts 多行 import），不依赖模板作者
 - 顺手修复存量缺陷：模板页切换预览目标表不重渲染（补 previewTableId watcher）
 - 交付物：八件套模板（新增 mapper）、选项体系全链路（类型/存储/UI/渲染）、模板选择弹窗、README 30 节
+
+---
+Task ID: 23
+Agent: main (Super Z)
+Task: 修复表编辑对话框字段表双滚动条与表体右侧遮挡（Task 22 列选项追加后暴露）；定位归属并修复；提交推送 devel
+
+Work Log:
+- 问题定位（用户报告：字段表格因新增选项列出现「表头表体整体滚动条 + 表体滚动条」两条横向滚动条，滚动整体滚动条后表体右侧被遮挡）：
+  * 归属判定：字段表是手写 CSS 网格（.grid-scroll/.columns-head/.columns-body），非 antdv-next a-table —— 问题在本仓库 CSS，不涉及组件库
+  * 根因：`.columns-body` 声明 `overflow-y: auto`（纵向限高 320px），按 CSS Overflow 规范单轴非 visible 会把另一轴的 visible **计算值**改为 auto —— 表体意外成为第二个横向滚动容器；Task 22 给字段表追加 5 个列选项列（+约 240px 硬最小宽）后网格最小宽度 1046px 超出弹窗内容宽 932px（980px 弹窗），横向溢出在桌面端显形，双容器症状随之暴露
+  * 症状机理：两个滚动容器各自独立滚动——表头溢出驱动外层 .grid-scroll 滚动条（sw 1018），行溢出驱动表体自身滚动条（sw 1046）；滚外层时表体盒子整体平移但其裁剪边界（盒子右缘）不动，行内容超出盒子的 114px（remove 选项列 + 删除按钮列）永远不可见
+  * agent-browser 复现实测（1920×1080）：getComputedStyle 证实现算 overflowX=auto；滚 .grid-scroll 至最右后 deleteBtnVisible=false（右缘 1454 vs 裁剪边界 1340，被裁 114px）
+  * 附带发现（存量缺陷，同根因）：旧结构表体出现纵向滚动条时其内容宽缩窄约 15px，1fr 轨道与表头错位（最大约 11px 累积漂移）
+- 修复（src/components/dialog/TableEditDialog.vue，字段/索引两页签共用类，一处修复两处生效）：
+  * 滚动容器归一：.grid-scroll 改 `overflow: auto` + `max-height: 348px`（原表体 320px + 表头实测 26px）；移动端 44vh → calc(44vh + 28px) 上移至 .grid-scroll
+  * .columns-body 撤销 max-height/overflow-y（保留 padding），不再自建滚动容器——横向与纵向溢出统一交给唯一滚动容器
+  * .columns-head 吸顶：`position: sticky; top: 0; z-index: 2` + 不透明背景 `var(--dbm-bg-raise)`（= antd colorBgElevated，与弹窗表面同色；浏览器实测亮 #ffffff / 暗 #1f1f1f 两态均与模态表面一致）——纵向滚动时表头悬浮、行从其下方穿过被遮挡；横向滚动时随内容平移，表头行列始终同滚
+  * 水平 padding 维持原值（表头 4px = 表体 2px + 行 2px，像素级对齐保留）
+- 验证（agent-browser，隔离 worktree dev server 单命令内启动+操作）：
+  * 桌面 1920（暗色态顺带覆盖）：表体 computed overflowX=visible；.grid-scroll 单一横向滚动条 sw 1046/cw 932；滚至最右 scrollLeft 114（旧 86）后删除按钮右缘 1426 == 滚动区右缘 1426 完全可达，末位选项复选框可见；表头与首/末行 15 列 x 坐标 maxDiff=0 像素级对齐（连带修复存量 1fr 错位）；补 10 行强制纵向溢出后 scrollTop=120 时表头 top == 滚动区 top（sticky 生效）；VLM 截图复核：右缘无截断、无重叠、无色带
+  * 移动端 390×844（亮色）：单横滚 sw 1046/cw 319、滚至最右 scrollLeft 727 后删除按钮右缘 355≈滚动区 354 可达、对齐 maxDiff=0、限高符合 calc(44vh+28px)
+  * 索引页签：同样单一滚动容器 + sticky 表头；控制台 0 错误
+  * bun run typecheck 通过；vp check 61 文件格式 + 52 文件 lint 零告警；check-readme.py 通过（30 标题，README「表头与行同滚」描述与修复后实际行为一致，无需改文档）
+- 提交推送到 devel 分支
+
+Stage Summary:
+- 字段/索引表从「外层横滚 + 表体纵滚」双容器结构改为「唯一滚动容器 + 表头 sticky 吸顶」标准表格范式：一条横向滚动条（表头行同滚、右缘完全可达）、一条纵向滚动条（表头悬浮遮挡行内容），双滚动条与右侧裁剪遮挡彻底消除
+- 排障结论沉淀：overflow-y: auto 会按规范把 overflow-x 的 visible 计算为 auto——「只想纵向滚」的容器必然同时成为横向滚动容器，凡表头在外、表体自滚的布局都潜藏此坑（SettingsView 规则表/选项定义表为单容器变体，桌面无溢出暂无症状）
+- 环境注意：agent-browser 会话的 localStorage 跨脚本运行持久（主题状态会带入后续验证脚本，可善用以覆盖暗色态）

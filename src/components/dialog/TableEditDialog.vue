@@ -906,9 +906,15 @@ async function save() {
   align-items: center;
 }
 
-/* 字段/索引表整体横向滚动容器（表头与数据行同滚，列对齐不漂移） */
+/*
+ * 字段/索引表唯一滚动容器（横向 + 纵向都在此滚动）。
+ * 表头 sticky 吸顶（随纵向滚动悬浮、随横向滚动平移），列对齐不漂移；
+ * 列选项等动态列使网格最小宽度超出弹窗时仅此容器出现横向滚动条。
+ * 纵向限高原在 .columns-body（320px），随滚动容器归一上移至此（320px + 26px 表头）。
+ */
 .grid-scroll {
-  overflow-x: auto;
+  overflow: auto;
+  max-height: 348px;
   -webkit-overflow-scrolling: touch;
 }
 
@@ -929,12 +935,19 @@ async function save() {
     min-width: 560px;
   }
 
-  .columns-body {
-    max-height: 44vh;
+  /* 纵向限高上移至 .grid-scroll（44vh 表体 + 28px 表头） */
+  .grid-scroll {
+    max-height: calc(44vh + 28px);
   }
 }
 
 .columns-head {
+  /* sticky 吸顶：纵向滚动时悬浮于滚动区顶端，行从其不透明背景下方穿过被遮挡 */
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  /* 不透明背景与弹窗表面同色（--dbm-bg-raise = antd colorBgElevated，亮暗两态均匹配） */
+  background: var(--dbm-bg-raise);
   padding: 2px 4px 6px;
   font-size: 11px;
   color: var(--dbm-text-3);
@@ -947,8 +960,12 @@ async function save() {
 }
 
 .columns-body {
-  max-height: 320px;
-  overflow-y: auto;
+  /*
+   * 不再自建滚动容器：overflow-y:auto 会把 overflow-x 按规范连带计算为 auto，
+   * 形成表体自己的第二个横向滚动容器（与外层 .grid-scroll 各滚各的）——
+   * 表头表体双滚动条、滚动整体滚动条后表体右侧被表体盒子裁剪遮挡。
+   * 溢出（横向与纵向）统一交给外层 .grid-scroll 唯一滚动容器。
+   */
   padding: 6px 2px;
 
   .column-row {
