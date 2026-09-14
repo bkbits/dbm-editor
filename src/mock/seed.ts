@@ -681,46 +681,101 @@ export const SEED_TEMPLATES: CodeTemplate[] = [
     content: `<%
   context.fileName = context.table.className + ".java";
   context.filePath = (context.basePackage ? context.basePackage.replace(/\\./g, "/") + "/" : "") + "entity/" + context.fileName;
+  const cls = context.table.className || utils.toCamelCase(context.table.tableName);
+  const propOf = (colName, vo) => {
+    const cols = vo ? vo.columns : context.table.columns;
+    const col = cols.find((c) => c.columnName === colName);
+    return (col && col.propertyName) || utils.toCamelCase(colName, true);
+  };
+  const fieldsRef = (colNames, vo) => colNames.map((p) => (vo ? vo.className + ".Fields." : "Fields.") + propOf(p, vo)).join(", ");
+  const fieldsArg = (colNames, vo) => { const s = fieldsRef(colNames, vo); return s.includes(",") ? "{ " + s + " }" : s; };
+  const relEnum = { "11": "OneToOne", "1N": "OneToMany", "N1": "ManyToOne", "NN": "ManyToMany" };
+  const tableDirect = utils.toSnakeCase(cls) === context.table.tableName;
+  const propDirect = (column) => utils.toSnakeCase(column.propertyName || utils.toCamelCase(column.columnName, true)) === column.columnName;
+  const needColumnAnno = context.table.columns.some((c) => c.primaryKey || !propDirect(c));
+  const parentCol = context.table.parentIdColumn ? context.getColumn(context.table.parentIdColumn) : null;
+  const hasNav = context.table.navigates.length > 0 || !!parentCol;
+  const needList = hasNav && (context.table.navigates.some((n) => n.type === "1N" || n.type === "NN") || !!parentCol);
+  const ifaces = [];
+  if (context.hasColumn("create_time") && context.hasColumn("create_by")) ifaces.push("ICreate");
+  if (context.hasColumn("update_time") && context.hasColumn("update_by")) ifaces.push("IUpdate");
+  if (context.hasColumn("id")) ifaces.push("IGenId");
+  if (context.hasColumn("dept_id")) ifaces.push("IDeptId");
+  const dateTypes = [...new Set(context.table.columns.map(c => utils.getJavaType(c)).filter(t => /^Local(Date|Time|DateTime)$/.test(t)))];
+  const needDecimal = context.table.columns.some(c => utils.getJavaType(c) === "BigDecimal");
 %>
 package <%= utils.isEmpty(context.basePackage) ? "" : context.basePackage + "." %>entity;
 
-import com.easy.query.core.annotation.Column;
-import com.easy.query.core.annotation.Table;
 import lombok.Data;
-
+import lombok.experimental.FieldNameConstants;
+<% if (!tableDirect) { %>import com.easy.query.core.annotation.Table;
+<% } %><% if (needColumnAnno) { %>import com.easy.query.core.annotation.Column;
+<% } %><% if (hasNav) { %>import com.easy.query.core.annotation.Navigate;
+import com.easy.query.core.enums.RelationTypeEnum;
+<% } %>
 import java.io.Serializable;
-<% const dateTypes = [...new Set(context.table.columns.map(c => utils.getJavaType(c)).filter(t => /^Local(Date|Time|DateTime)$/.test(t)))]; %>
-<% const needDecimal = context.table.columns.some(c => utils.getJavaType(c) === "BigDecimal"); %>
-<% const needList = context.table.navigates.some(n => n.type === "1N" || n.type === "NN"); %>
 <% for (const dt of dateTypes) { %>import java.time.<%= dt %>;
 <% } %>
 <% if (needDecimal) { %>import java.math.BigDecimal;
 <% } %>
 <% if (needList) { %>import java.util.List;
 <% } %>
-<%# ===== easy-query 实体（列名显式映射，与表结构一一对应） ===== %>
+<%# ===== easy-query 实体：@Table/@Column 命名可直接转换时省略，@Navigate 导航，审计接口按列自动实现 ===== %>
 /**
  * <%= context.table.comment || context.table.tableName %>
  */
 @Data
-@Table("<%= context.table.tableName %>")
-public class <%= context.table.className %> implements Serializable {
+@FieldNameConstants
+<% if (!tableDirect) { %>@Table("<%= context.table.tableName %>")
+<% } %>public class <%= cls %> implements Serializable<% for (const i of ifaces) { %>, <%= i %><% } %> {
   private static final long serialVersionUID = 1L;
-<% for (const column of context.table.columns) { %>
-  <% const doc = column.comment || (column.primaryKey ? "主键" : ""); %>
-  <% const mark = column.primaryKey && doc.indexOf("主键") < 0 ? "（主键）" : ""; %>
+<% for (const column of context.table.columns) {
+  const prop = column.propertyName || utils.toCamelCase(column.columnName, true);
+  const anno = column.primaryKey
+    ? (propDirect(column) ? "@Column(primaryKey = true)" : '@Column(value = "' + column.columnName + '", primaryKey = true)')
+    : (propDirect(column) ? "" : '@Column("' + column.columnName + '")');
+  const doc = column.comment || (column.primaryKey ? "主键" : "");
+  const mark = column.primaryKey && doc.indexOf("主键") < 0 ? "（主键）" : "";
+%>
   <% if (doc) { %>
   /** <%= doc + mark %> */
   <% } %>
-  @Column("<%= column.columnName %>")
-  private <%= utils.getJavaType(column) %> <%= column.propertyName %>;
+  <% if (anno) { %>
+  <%= anno %>
+  <% } %>
+  private <%= utils.getJavaType(column) %> <%= prop %>;
+<% } %>
+<% if (parentCol) {
+  const parentProp = parentCol.propertyName || utils.toCamelCase(parentCol.columnName, true);
+%>
+  /* ---- 树形导航（<%= parentCol.columnName %> 自关联） ---- */
+  @Navigate(value = RelationTypeEnum.ManyToOne, selfProperty = Fields.<%= parentProp %>, targetProperty = Fields.id)
+  private <%= cls %> parent;
+
+  @Navigate(value = RelationTypeEnum.OneToMany, selfProperty = Fields.id, targetProperty = Fields.<%= parentProp %>)
+  private List<<%= cls %>> children;
 <% } %>
 <% if (context.table.navigates.length) { %>
-  /* ---- 导航关系（easy-query @Navigate，按需启用并调整关系配置） ---- */
-  <% for (const nav of context.table.navigates) { %>
+  /* ---- 导航关系（easy-query @Navigate） ---- */
+  <% for (const nav of context.table.navigates) {
+    const target = nav.target.className;
+    const isMany = nav.type === "1N" || nav.type === "NN";
+  %>
   /** 导航(<%= nav.type %>): <%= nav.selfProperty.join(", ") %> -> <%= nav.target.tableName %>.<%= nav.targetProperty.join(", ") %> */
-  // @Navigate(<%= nav.type === "1N" ? "PropType.ONE_TO_MANY" : (nav.type === "NN" ? "PropType.MANY_TO_MANY" : "PropType.ONE_TO_ONE") %>)
-  // private <%= (nav.type === "1N" || nav.type === "NN") ? "List<" + nav.target.className + ">" : nav.target.className %> <%= nav.propertyName %>;
+  <% if (nav.type === "NN") { %>
+  @Navigate(
+      value = RelationTypeEnum.ManyToMany,
+      mappingClass = <%= nav.mappingTable.className %>.class,
+      selfProperty = <%= fieldsArg(nav.selfProperty, null) %>,
+      selfMappingProperty = <%= fieldsArg(nav.selfMappingProperty, nav.mappingTable) %>,
+      targetMappingProperty = <%= fieldsArg(nav.targetMappingProperty, nav.mappingTable) %>,
+      targetProperty = <%= fieldsArg(nav.targetProperty, nav.target) %>
+  )
+  private List<<%= target %>> <%= nav.propertyName %>;
+  <% } else { %>
+  @Navigate(value = RelationTypeEnum.<%= relEnum[nav.type] %>, selfProperty = <%= fieldsArg(nav.selfProperty, null) %>, targetProperty = <%= fieldsArg(nav.targetProperty, nav.target) %>)
+  private <%= isMany ? "List<" + target + ">" : target %> <%= nav.propertyName %>;
+  <% } %>
   <% } %>
 <% } %>
 }`,

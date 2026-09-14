@@ -115,6 +115,10 @@ export interface TemplateContext {
   /** 显式指定 highlight.js 高亮语言（如 java/sql/xml/javascript）；未设置时按文件名后缀自动识别 */
   language?: string
   table: TableVO // 当前表信息
+  /** 是否存在指定列（按数据库列名精确匹配） */
+  hasColumn(columnName: string): boolean
+  /** 获取指定列（按数据库列名精确匹配），不存在时返回 undefined */
+  getColumn(columnName: string): TableColumn | undefined
 }
 
 /** 表更新请求载荷（mock 扩展：rawNavigates 为该表参与的全部原始导航，替换语义） */

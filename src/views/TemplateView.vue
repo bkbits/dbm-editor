@@ -373,6 +373,8 @@ const isEdit = computed(() => Boolean(draft.value.id))
               <code>context.table.navigates</code>
               单向导航（propertyName/type/self/target/cascade/...）
             </p>
+            <p><code>context.hasColumn(name)</code> 按列名判断列是否存在</p>
+            <p><code>context.getColumn(name)</code> 按列名获取列（无则 undefined）</p>
           </div>
           <div class="help-col">
             <p><code>utils.toCamelCase(str, firstLower?)</code> 转驼峰</p>

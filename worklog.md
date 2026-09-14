@@ -641,3 +641,37 @@ Stage Summary:
 - 移动端模板页重叠缺陷根治：根因是网格行轨硬最小值之和超出父级弹性容器实际高度（内容可见溢出）叠加帮助面板单列自然高度过高；行轨最小值归零（minmax(0, fr)）从机制上消除溢出可能，折叠开关把约 400px 的说明面板变为按需展开
 - 桌面零回归（帮助面板始终展开、开关隐藏、双列分屏原样）；移动端代码区从被遮挡恢复为折叠态约 408px 可用高度
 - 经验沉淀：grid 行轨含 px 硬最小值 + 父级 flex 弹性压缩 = 溢出重叠隐患；弹性高度场景行轨一律 minmax(0, fr)
+---
+Task ID: 21
+Agent: main (Super Z)
+Task: 模板上下文新增 hasColumn/getColumn 函数 + entity 模板按 easy-query 规范重写（@Table/@Column 命名直转省略、@FieldNameConstants、@Navigate 导航、ICreate/IUpdate/IGenId/IDeptId 审计接口、树形表 parent/children）；提交推送 devel
+
+Work Log:
+- 前置：加载 easy-query-orm skill（github.com/wzszsw/easy-query-orm），读取 entity-mapping.md / entity-modeling-navigate.md / interceptor.md——确认 @Column(primaryKey = true) 主键标记、@Navigate 参数形态（RelationTypeEnum/selfProperty/targetProperty/mappingClass + Fields 常量）、lombok @FieldNameConstants 生成 Fields 内部类、审计字段惯例（createTime/createBy/updateTime/updateBy）
+- TemplateContext（src/types/model.ts）新增方法签名：hasColumn(columnName): boolean（按数据库列名精确匹配是否存在）、getColumn(columnName): TableColumn | undefined（按列名取列对象）
+- 渲染管线（src/utils/render.ts）：renderTemplate 构建 context 时闭包绑定两函数（基于 table.columns 的 some/find）；spread 返回不丢失函数引用，预览与批量生成两条调用链（renderFor/generateFiles）同时生效
+- entity 模板重写（src/mock/seed.ts tpl-entity）：
+  * @Table 省略：toSnakeCase(类名) === 表名 时省略注解与 import（easy-query 默认驼峰转下划线映射正好命中）；演示库 13 表中 sys_user/cms_* /mall_* 等规范命名表全部省略
+  * @Column 省略：toSnakeCase(属性名) === 列名 时省略 value 参数；主键列输出 @Column(primaryKey = true)（easy-query 主键必须标记，serviceImpl 的 whereId 依赖）；两者并存时 @Column(value = "xxx", primaryKey = true)；完全无参数时整个 @Column 省略
+  * @FieldNameConstants：lombok 注解 + import lombok.experimental.FieldNameConstants，导航注解的属性引用全部使用 Fields.xxx 常量（本表 Fields.x / 目标表 Target.Fields.x / 中间表 Mapping.Fields.x）
+  * @Navigate 真实生成（替换原注释掉的示例）：'11'→OneToOne / '1N'→OneToMany / 'N1'→ManyToOne / 'NN'→ManyToMany（含 mappingClass + selfMappingProperty/targetMappingProperty 四组属性）；selfProperty 等存的是数据库列名，模板内经 propOf() 转属性名再拼 Fields 常量；多列关联自动 { Fields.a, Fields.b } 花括号数组形式
+  * 审计接口：hasColumn('create_time')&&hasColumn('create_by')→ICreate；update_time+update_by→IUpdate；id→IGenId；dept_id→IDeptId（接口为项目框架内部接口，包路径由使用者按框架补充 import）
+  * 树形导航：table.parentIdColumn 存在时生成 parent（ManyToOne, selfProperty=Fields.parentId, targetProperty=Fields.id）与 children（OneToMany 反向）
+  * import 按需精确化：Table/Column/Navigate/RelationTypeEnum/List 均按实际使用输出
+- SEED_TEMPLATES_VERSION 2→3（src/mock/db.ts）：旧库（含 v2 七件套）读取时自动升级 entity 模板并回写版本号；v3 后用户增删改模板不再被种子覆盖
+- 模板页帮助面板（TemplateView.vue）补 context.hasColumn/getColumn 两行说明
+- 验证（agent-browser + 隔离 worktree dev server）：
+  * sys_user：@Table 省略 + id 主键 @Column(primaryKey = true) + 规范列零注解 + IGenId + NN roles（mappingClass=SysUserRole + 四组 Fields 属性）+ 反转视角 1N articles/comments/orders
+  * cms_category：树形导航 parent/children（Fields.parentId ↔ Fields.id）+ 反转 1N articles
+  * cms_article：N1 user/category + 1N comments + NN tags 三类导航混合，Fields 常量全部正确
+  * 边缘注入（localStorage 直改 mock 库）：表名 t_sys_user → @Table("t_sys_user") 保留；列名 nickName（与属性 nickname 不互转）→ @Column("nickName") 保留；补 create_time/create_by/update_time/update_by/dept_id 五列 → implements Serializable, ICreate, IUpdate, IGenId, IDeptId 五接口全触发
+  * 迁移回归：全新加载 7 模板 v3；伪造 v2 旧库（entity 被篡改）重载 → 自动升级 v3 且模板恢复；v3 后删 sql 改 entity 重载 → 定制保留（6 模板、篡改内容不复活）
+  * 全模板×12 表 84 次渲染零错误；输出无 undefined/NaN/连续空行；控制台 0 错误
+  * bun run typecheck 通过；vp check 60 文件格式 + 51 文件 lint 零告警
+- README：TemplateContext 代码块补两函数签名；内置模板表 entity 行更新为 easy-query 规范化描述
+- 提交推送到 devel 分支
+
+Stage Summary:
+- 模板上下文具备列查询能力（hasColumn/getColumn），entity 模板从「显式全量映射」升级为「easy-query 规范化智能省略」：命名可直接转换的 @Table/@Column 自动省略、主键正确标记 primaryKey、导航从注释示例变为可直接编译的 @Navigate（Fields 常量风格）、审计/主键/部门/树形接口按列特征自动实现
+- 种子版本驱动迁移（v2→v3）：旧库确定性升级，用户后续定制不受影响
+- 环境注意：会话沙箱开始清理后台进程（dev server 需在单条命令内启动+验证）；worktree 曾被清理重建（bun install 442ms 恢复）

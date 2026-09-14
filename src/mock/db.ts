@@ -28,12 +28,14 @@ import {
 const STORAGE_KEY = 'gdbme:db:v2'
 const LEGACY_STORAGE_KEYS = ['gdbme:db:v1']
 /**
- * 模板种子版本：种子模板集发生变更时递增（1=通用四件套，2=solon3 七件套）。
+ * 模板种子版本：种子模板集发生变更时递增（1=通用四件套，2=solon3 七件套，
+ * 3=entity 模板 easy-query 规范化：@Table/@Column 命名直转省略、@FieldNameConstants、
+ * @Navigate 导航、审计接口 ICreate/IUpdate/IGenId/IDeptId、树形表 parent/children）。
  * 旧库不含 seedTemplatesVersion 字段（视为 1），读取时低于当前值即整体替换为
  * 最新种子模板集并回写版本号——与「用户是否删过某个种子模板」无关，杜绝形态
  * 嗅探漏判；此后用户对模板的增删改不再被种子覆盖（版本号已是最新）。
  */
-const SEED_TEMPLATES_VERSION = 2
+const SEED_TEMPLATES_VERSION = 3
 
 export interface MockDB {
   version: number

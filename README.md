@@ -199,6 +199,8 @@ interface TemplateContext {
   filePath: string // 文件路径（模板内赋值）
   language?: string // 显式指定预览高亮语言（模板内赋值，如 <% context.language = 'java' %>）
   table: TableVO // 当前表（columns/indexes/navigates）
+  hasColumn(columnName: string): boolean // 按数据库列名判断列是否存在
+  getColumn(columnName: string): TableColumn | undefined // 按数据库列名获取列
 }
 ```
 
@@ -217,15 +219,15 @@ Eta 语法：`<% %>` 逻辑、`<%= %>` 输出、`<%# %>` 自定义注释标签�
 
 内置 7 个模板（solon3 + easy-query + satoken + antdv-next + MySQL 技术栈）：
 
-| 模板          | 产物                                                                               | 技术栈适配          |
-| ------------- | ---------------------------------------------------------------------------------- | ------------------- |
-| `entity`      | `entity/Xxx.java`（`@Table`/`@Column` + Lombok `@Data`）                           | easy-query          |
-| `service`     | `service/XxxService.java`（接口）                                                  | solon3 + easy-query |
-| `serviceImpl` | `service/impl/XxxServiceImpl.java`（`@Component` + `@Inject` `EasyQuery`）         | solon3 + easy-query |
-| `controller`  | `controller/XxxController.java`（`@Controller`/`@Mapping` + `@SaCheckPermission`） | solon3 + satoken    |
-| `vue`         | `views/xxx/Xxx.vue`（`a-table` 列表 + `a-modal` 表单）                             | antdv-next          |
-| `sql`         | `sql/表名.sql`（utf8mb4 建表 DDL，含索引与主键）                                   | MySQL               |
-| `menuSql`     | `sql/表名_menu.sql`（`sys_menu` 菜单 + 5 个按钮权限，权限码与 Controller 一致）    | MySQL               |
+| 模板          | 产物                                                                                                                                                                                                                                  | 技术栈适配          |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
+| `entity`      | `entity/Xxx.java`（`@Table`/`@Column` 命名可直接转换时自动省略、主键 `primaryKey = true`、`@FieldNameConstants`、`@Navigate` 导航（`Fields` 常量）、`ICreate`/`IUpdate`/`IGenId`/`IDeptId` 按列自动实现、树形表 `parent`/`children`） | easy-query          |
+| `service`     | `service/XxxService.java`（接口）                                                                                                                                                                                                     | solon3 + easy-query |
+| `serviceImpl` | `service/impl/XxxServiceImpl.java`（`@Component` + `@Inject` `EasyQuery`）                                                                                                                                                            | solon3 + easy-query |
+| `controller`  | `controller/XxxController.java`（`@Controller`/`@Mapping` + `@SaCheckPermission`）                                                                                                                                                    | solon3 + satoken    |
+| `vue`         | `views/xxx/Xxx.vue`（`a-table` 列表 + `a-modal` 表单）                                                                                                                                                                                | antdv-next          |
+| `sql`         | `sql/表名.sql`（utf8mb4 建表 DDL，含索引与主键）                                                                                                                                                                                      | MySQL               |
+| `menuSql`     | `sql/表名_menu.sql`（`sys_menu` 菜单 + 5 个按钮权限，权限码与 Controller 一致）                                                                                                                                                       | MySQL               |
 
 可在「模板管理」中自由修改与新增；Controller 的权限码（`xxx:info/list/add/edit/del`）与 menuSql 生成的按钮权限一一对应，vue 模板的请求路径与 Controller 的 `@Mapping` 路由一致。
 

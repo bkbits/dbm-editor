@@ -67,6 +67,9 @@ export function renderTemplate(
     filePath: '',
     language: '',
     table,
+    /** 按数据库列名精确查询（模板内 context.hasColumn / context.getColumn 调用） */
+    hasColumn: (columnName: string) => table.columns.some((c) => c.columnName === columnName),
+    getColumn: (columnName: string) => table.columns.find((c) => c.columnName === columnName),
   }
   try {
     const cleaned = stripEtaComments(templateContent)
