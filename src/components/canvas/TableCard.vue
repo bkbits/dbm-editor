@@ -356,8 +356,19 @@ onBeforeUnmount(() => {
   pointer-events: auto;
 }
 
+/* 触屏（无 hover）：连接点 16px 视觉尺寸不变，但命中区向外扩 6px 至 28px 点按目标 */
+@media (pointer: coarse) {
+  .table-card .connector::after {
+    content: '';
+    position: absolute;
+    inset: -6px;
+    border-radius: 50%;
+  }
+}
+
 /* 隐藏按钮：卡片悬停时淡入（与连接点同规则；常驻占位保持表头布局稳定） */
-.table-card:hover .head-hide-btn {
+.table-card:hover .head-hide-btn,
+.table-card.selected .head-hide-btn {
   opacity: 1;
   pointer-events: auto;
 }

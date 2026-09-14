@@ -11,6 +11,7 @@ import {
   Copy,
   Maximize2,
   RotateCcw,
+  BoxSelect,
   WandSparkles,
   AlignStartHorizontal,
   AlignCenterHorizontal,
@@ -250,6 +251,15 @@ const canvasItems = computed<MenuItem[]>(() => [
       const w = menu.value?.world
       if (w) canvas.pasteAt(w)
     }),
+  },
+  {
+    // 全选：触屏下框选不可用（单指已改为平移），多选入口由菜单承担
+    key: 'select-all',
+    label: `全选表（${canvas.visibleTableIds.length} 张）`,
+    icon: BoxSelect,
+    danger: false,
+    disabled: !canvas.visibleTableIds.length,
+    run: withClose(() => canvas.setSelection([...canvas.visibleTableIds])),
   },
   {
     key: 'div',

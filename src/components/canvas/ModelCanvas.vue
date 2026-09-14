@@ -140,6 +140,17 @@ const boundWheel = (e: WheelEvent) => {
 const boundWindowPointerUp = (e: PointerEvent) => canvas.onPointerUp(e)
 const boundWindowPointerCancel = (e: PointerEvent) => canvas.onPointerUp(e)
 
+/* 触屏手势层（双指缩放/长按菜单/双击编辑）：window 捕获相位转发。
+   - 捕获相位先于卡片/线段的冒泡处理，第二指落在卡片上也能进入缩放；
+   - window 级监听保证手指滑出画布（悬停在工具栏上空）仍持续跟踪；
+   - 仅画布区域内的 touch 指针会被登记（store 内 rootEl.contains 过滤） */
+const boundTouchDown = (e: PointerEvent) => canvas.onTouchPointerDown(e)
+const boundTouchMove = (e: PointerEvent) => canvas.onTouchPointerMove(e)
+const boundTouchUp = (e: PointerEvent) => canvas.onTouchPointerEnd(e)
+
+/* iOS Safari 非标准手势事件：画布内禁用原生双指缩放（与 touch-action:none 双保险） */
+const preventSafariGesture = (e: Event) => e.preventDefault()
+
 function onRootPointerDown(e: PointerEvent) {
   // 事件仅在未被卡片/连线拦截（冒泡到根）时触发 —— 即空白区域
   canvas.closeMenu()
@@ -148,6 +159,8 @@ function onRootPointerDown(e: PointerEvent) {
 
 function onRootContextMenu(e: MouseEvent) {
   e.preventDefault()
+  // 触屏长按刚开过菜单：压制 Android 长按后紧接派发的原生 contextmenu（避免重复开菜单）
+  if (canvas.touchMenuGuard()) return
   const target = e.target as HTMLElement
   const card = target.closest('[data-table-id]')
   if (card) return // 卡片自身已处理
@@ -259,6 +272,12 @@ onMounted(() => {
   })
   resizeObserver.observe(rootRef.value)
   rootRef.value.addEventListener('wheel', boundWheel, { passive: false })
+  rootRef.value.addEventListener('gesturestart', preventSafariGesture)
+  rootRef.value.addEventListener('gesturechange', preventSafariGesture)
+  window.addEventListener('pointerdown', boundTouchDown, true)
+  window.addEventListener('pointermove', boundTouchMove, true)
+  window.addEventListener('pointerup', boundTouchUp, true)
+  window.addEventListener('pointercancel', boundTouchUp, true)
   window.addEventListener('pointerup', boundWindowPointerUp)
   window.addEventListener('pointercancel', boundWindowPointerCancel)
   window.addEventListener('keydown', onKeyDown)
@@ -268,6 +287,12 @@ onMounted(() => {
 onBeforeUnmount(() => {
   resizeObserver?.disconnect()
   rootRef.value?.removeEventListener('wheel', boundWheel)
+  rootRef.value?.removeEventListener('gesturestart', preventSafariGesture)
+  rootRef.value?.removeEventListener('gesturechange', preventSafariGesture)
+  window.removeEventListener('pointerdown', boundTouchDown, true)
+  window.removeEventListener('pointermove', boundTouchMove, true)
+  window.removeEventListener('pointerup', boundTouchUp, true)
+  window.removeEventListener('pointercancel', boundTouchUp, true)
   window.removeEventListener('pointerup', boundWindowPointerUp)
   window.removeEventListener('pointercancel', boundWindowPointerCancel)
   window.removeEventListener('keydown', onKeyDown)
@@ -331,7 +356,8 @@ defineExpose({ rootRef })
       <span v-if="canvas.selectedIds.length" class="status-item"
         >已选 {{ canvas.selectedIds.length }} 张</span
       >
-      <span class="status-hint">左键拖框选 · 中键/空格拖拽平移 · 滚轮缩放</span>
+      <span class="status-hint hint-mouse">左键拖框选 · 中键/空格拖拽平移 · 滚轮缩放</span>
+      <span class="status-hint hint-touch">单指平移 · 双指缩放 · 双击编辑 · 长按菜单</span>
     </div>
 
     <div v-if="model.loaded && !model.tables.length" class="empty-state">
@@ -414,6 +440,20 @@ defineExpose({ rootRef })
     color: var(--dbm-text-3);
     border-left: 1px solid var(--dbm-border);
     padding-left: 10px;
+  }
+
+  /* 触屏设备（粗指针）切换操作提示文案 */
+  .hint-touch {
+    display: none;
+  }
+}
+
+@media (pointer: coarse) {
+  .canvas-status .hint-mouse {
+    display: none;
+  }
+  .canvas-status .hint-touch {
+    display: block;
   }
 }
 

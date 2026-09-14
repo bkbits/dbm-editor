@@ -769,3 +769,35 @@ Stage Summary:
 - 字段/索引表网格盒宽语义修正：盒子宽度下限绑定轨道最小宽之和（min-width: min-content），表头下边框/行悬停背景/拖拽指示线全部覆盖到最后一列，横向滚动任意位置表头下边框完整连续；移动端旧硬编码下限（780/560）随之退役，由轨道实际最小宽动态决定
 - 排障结论沉淀：CSS 网格「轨道溢出盒子」陷阱——grid-template-columns 各轨最小宽之和超过容器宽时轨道照常布局但盒子维持容器宽，border/背景/box-shadow 等按盒子的装饰全部只画到容器宽；动态列场景必须 min-width: min-content 让盒子跟随轨道
 - 环境注意：沙箱会周期性清理 .wt worktree 与 node_modules（bun install 442ms 可恢复）；dev server 启动命令为 `bun run dev --port 3000`（vp CLI），`bun x vite` 在新 worktree 不可用
+
+---
+Task ID: 25
+Agent: main (Super Z)
+Task: 画布交互适配移动端触屏——双指缩放/单指平移/长按菜单/双击编辑 + 触屏命中区与显隐补偿；提交推送 devel
+
+Work Log:
+- 触屏手势层（src/stores/canvas.ts）：
+  * 闭包私有状态（非响应式）：touchPts（指针→坐标）/touchStart（起点时刻目标）/pinchBase（缩放基线）/longPressTimer/lastTap/lastMenuAt；常量 LONG_PRESS_MS 480 / SLOP 10 / DOUBLE_TAP_MS 350 / RANGE 48
+  * 双指缩放：onTouchPointerDown 第二指落下 → abortActiveGesture（无副作用丢弃拖卡/框选/连线/平移草稿，已位移拖卡照常落库）+ mode='pinch'；applyPinch 锚定按下时双指中点的世界点跟随当前中点（缩放+双指拖动平移一体，zoomAt 同款数学直赋值版——到达缩放边界时中点拖动仍可平移）；三指抬其一重建基线、剩一指无缝转单指平移（moved:true 防轻点误清选择）
+  * 单指平移：onCanvasPointerDown 对 pointerType==='touch' 的空白按下改走 beginPan（鼠标框选不变）；panDraft 增 sx/sy/moved/touch 字段；onPointerUp 无位移触屏轻点空白 = clearSelection（与鼠标框选轻点语义对齐）
+  * 长按菜单：scheduleLongPress 480ms 无位移触发，按 touchStart.target 的 closest 分流 card/edge/canvas 三类菜单（payload 与右键一致）；位移 >10px / 第二指落下 / 抬指即取消；touchMenuGuard()（400ms 窗口）压制 Android 长按后原生 contextmenu 重复开菜单；navigator.vibrate?.(12) 触觉反馈
+  * 双击编辑：onTouchPointerEnd 干净轻点（<400ms 且位移 <10px 且非双指簇且未长按）记入 lastTap，同卡片 350ms 内 48px 范围第二击 → openTableEdit（连接点上的轻点排除，避免误开）
+  * 防干扰：onTouchPointerDown 排除 .minimap/.ctx-menu 目标；onPointerUp 在 mode==='pinch' 或触屏指针仍在跟踪（touchPts.size>0）时不清理模式（双指抬其一转平移的过渡窗口）
+  * Mode 联合类型增 'pinch'；手势生命周期与既有单指状态机（延迟指针捕获等）正交共存
+- 绑定（src/components/canvas/ModelCanvas.vue）：window 捕获相位（capture:true）转发 pointerdown/move/up/cancel → 手势层——捕获相位先于卡片/连线冒泡处理（第二指落在卡片上也能进入缩放），window 级监听保证手指滑出画布仍跟踪；iOS Safari gesturestart/gesturechange preventDefault（与 touch-action:none 双保险）；onRootContextMenu 增 touchMenuGuard 短路；状态栏操作提示双文案，@media (pointer: coarse) 切换（鼠标:框选/中键平移/滚轮缩放 ↔ 触屏:单指平移/双指缩放/双击编辑/长按菜单）
+- 命中区与显隐补偿：
+  * TableCard：连接点 @media (pointer: coarse) ::after inset -6px（视觉 16px 不变、命中区 28×28）；隐藏按钮与连接点的显隐规则增 .table-card.selected 态（触屏无 hover，轻点选中即显示）
+  * Minimap：touch-action: none（拖拽定位不再被浏览器接管为页面滚动）
+  * CanvasContextMenu：画布菜单新增「全选表（N 张）」（BoxSelect 图标）——触屏框选不可用（单指已改平移），多选入口由菜单承担
+- 验证：
+  * agent-browser 合成触屏 PointerEvent（pointerType:'touch'）全套：单指平移 (120,80) 且 zoom 不变；轻点卡片选中→轻点空白取消；快速轻扫不开对话框；双击开「编辑表 · sys_user」；长按卡片出卡片菜单（编辑表/复制表/隐藏/删除）；长按空白出画布菜单且「全选表」可点；双指捏合 1→2.3（中点世界锚点误差 [0,0]）→捏回 2.3→1.3 →抬一指继续平移 60px 且 zoom 稳定；鼠标回归全绿（滚轮缩放 1.3→1.495、框选矩形出现、拖卡 80px、dblclick 开编辑）；0 控制台错误
+  * Playwright 真触屏环境（hasTouch+isMobile，390×844@3x）：(pointer:coarse)=true 且提示文案正确切换；真 touchscreen.tap 双击开编辑对话框；连接点 ::after content '""' inset -6px（28px 命中区）；CDP Input.dispatchTouchEvent 两指真缩放 1→1.857；0 页面错误
+  * 教训沉淀：合成事件断言必须与派发分离（Vue 异步渲染——同 eval 内同步读 DOM 全是旧值，v1 验证脚本的多处「失败」均为该伪象）
+  * bun run typecheck 通过；vp check 61 文件格式 + 52 文件 lint 零告警；check-readme.py 通过（30 标题）
+- README：移动端表格增「触屏手势」行 + 触屏细节行补选中显隐/全选表说明；非功能说明补完整触屏手势与桌面交互不受影响
+- 提交推送到 devel 分支
+
+Stage Summary:
+- 画布从「pointer 事件兼容触屏」升级为完整触屏手势体系：单指平移、双指缩放（中点锚定、边界内拖动平移、三指容错、抬一指无缝续平移）、长按 480ms 菜单（三类目标分流 + Android contextmenu 压制 + 触觉反馈）、双击卡片编辑；桌面鼠标路径（框选/中键平移/滚轮缩放/右键菜单）零回归
+- 触屏无 hover 的三处补偿：连接点命中区 28px（::after 外扩）、选中态显示连接点与隐藏按钮、长按菜单「全选表」补多选入口
+- 架构要点：手势层经 window 捕获相位接入（先于目标元素处理，跨画布边界持续跟踪）；闭包私有状态与响应式状态机正交；'pinch' 模式与既有延迟指针捕获机制共存

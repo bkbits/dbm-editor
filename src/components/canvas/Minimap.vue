@@ -188,6 +188,8 @@ onBeforeUnmount(() => {
   border: 1px solid var(--dbm-border);
   box-shadow: var(--dbm-card-shadow);
   background: var(--dbm-bg-panel);
+  /* 触屏拖拽定位：阻止浏览器把拖动接管为页面滚动，指针事件才能连续跟踪 */
+  touch-action: none;
 
   canvas {
     display: block;
