@@ -58,12 +58,14 @@ const previewState = reactive<{
   filePath: string
   error: string
   language: string
+  aborted: boolean
 }>({
   output: '',
   fileName: '',
   filePath: '',
   error: '',
   language: '',
+  aborted: false,
 })
 
 let previewTimer: ReturnType<typeof setTimeout> | null = null
@@ -77,12 +79,14 @@ function runPreview() {
     previewState.output = ''
     previewState.error = ''
     previewState.language = ''
+    previewState.aborted = false
     return
   }
   if (!previewTableId.value) {
     previewState.output = '请先在编辑器中创建表，或从数据库导入表结构。'
     previewState.error = ''
     previewState.language = ''
+    previewState.aborted = false
     return
   }
   const out = templateStore.renderFor(draft.value, previewTableId.value)
@@ -90,6 +94,7 @@ function runPreview() {
     previewState.output = ''
     previewState.error = '渲染目标不存在'
     previewState.language = ''
+    previewState.aborted = false
     return
   }
   previewState.output = out.result || ''
@@ -97,10 +102,13 @@ function runPreview() {
   previewState.filePath = out.filePath
   previewState.error = out.error || ''
   previewState.language = out.language || ''
+  previewState.aborted = Boolean(out.aborted)
 }
 
 watch(() => draft.value.content, schedulePreview)
 watch(() => draft.value.name, schedulePreview)
+/* 切换预览目标表也需重渲染（选项驱动分支/aborted 提示按表变化） */
+watch(previewTableId, schedulePreview)
 
 /** 模板异步加载完成后选中首个模板（先于本组件挂载时已加载也需处理） */
 watch(
@@ -332,10 +340,16 @@ const isEdit = computed(() => Boolean(draft.value.id))
             />
           </div>
           <div v-if="previewState.error" class="preview-error mono">⚠ {{ previewState.error }}</div>
+          <div v-else-if="previewState.aborted" class="preview-aborted">
+            ⚠ 模板已标记丢弃（context.aborted = true）：本次生成不会打包该产物
+          </div>
           <div v-else-if="previewState.filePath" class="preview-file mono">
             {{ previewState.filePath }}
           </div>
-          <pre class="code-view"><code class="hljs mono" v-html="highlighted"></code></pre>
+          <pre
+            v-if="!previewState.error && !previewState.aborted"
+            class="code-view"
+          ><code class="hljs mono" v-html="highlighted"></code></pre>
         </div>
       </div>
 
@@ -371,10 +385,15 @@ const isEdit = computed(() => Boolean(draft.value.id))
             <p><code>context.table.indexes</code> 索引数组（indexName/type/columns/comment）</p>
             <p>
               <code>context.table.navigates</code>
-              单向导航（propertyName/type/self/target/cascade/...）
+              单向导航（propertyName/type/comment/self/target/cascade/...）
             </p>
             <p><code>context.hasColumn(name)</code> 按列名判断列是否存在</p>
             <p><code>context.getColumn(name)</code> 按列名获取列（无则 undefined）</p>
+            <p><code>context.settings.author</code> 代码作者（生成 javadoc @author）</p>
+            <p>
+              <code>context.aborted</code> 丢弃本次生成（默认 false；置 true 则该产物不打包进
+              zip），例：<code>&lt;% context.aborted = true; return ""; %&gt;</code>
+            </p>
           </div>
           <div class="help-col">
             <p><code>utils.toCamelCase(str, firstLower?)</code> 转驼峰</p>
@@ -383,9 +402,20 @@ const isEdit = computed(() => Boolean(draft.value.id))
             <p><code>utils.quote(content, cond?)</code> 引号包裹</p>
             <p><code>utils.wrap(content, cond?)</code> 括号包裹</p>
             <p><code>utils.isEmpty(str) / utils.isBlank(str)</code> 判空 / 判空白</p>
+            <p><code>utils.nowDateTime()</code> 当前时间（yyyy-MM-dd HH:mm:ss，javadoc @since）</p>
+            <p>
+              <code>utils.optionEnabled(options, name)</code>
+              读表/列选项是否启用（缺省视为启用），如
+              <code>utils.optionEnabled(context.table.options, "add")</code>
+            </p>
             <p>
               <code>&lt;% ... %&gt;</code> 逻辑 <code>&lt;%= ... %&gt;</code> 输出
               <code>&lt;%# ... %&gt;</code> 注释
+            </p>
+            <p>
+              输出格式保证：最后一条 <code>import</code> 与后续代码之间自动空一行；
+              <code>table.options / column.options</code>
+              为表/列选项值（键为选项名称，见系统设置）
             </p>
           </div>
         </div>
@@ -643,6 +673,15 @@ const isEdit = computed(() => Boolean(draft.value.id))
   color: var(--dbm-danger);
   background: var(--dbm-danger-weak);
   border-bottom: 1px dashed var(--dbm-danger);
+  flex-shrink: 0;
+}
+
+.preview-aborted {
+  padding: 6px 12px;
+  font-size: 11px;
+  color: var(--dbm-warning);
+  background: var(--dbm-warning-weak);
+  border-bottom: 1px dashed var(--dbm-warning);
   flex-shrink: 0;
 }
 

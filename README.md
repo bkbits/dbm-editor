@@ -66,7 +66,7 @@ vp dev
 bun run dev
 ```
 
-启动后访问 <http://localhost:3000>（`server.host: 0.0.0.0`、`server.allowedHosts: true` 允许任意 Host / 内网 IP / 预览域名访问）。首次打开会自动加载内置演示数据（3 个分类 / 13 张表 / 10 条导航 / 5 个字典 / 7 个代码模板）。
+启动后访问 <http://localhost:3000>（`server.host: 0.0.0.0`、`server.allowedHosts: true` 允许任意 Host / 内网 IP / 预览域名访问）。首次打开会自动加载内置演示数据（3 个分类 / 13 张表 / 10 条导航 / 5 个字典 / 8 个代码模板）。
 
 ### 常用命令速查
 
@@ -183,9 +183,9 @@ createApp(() => h(DBManagerView, { api: myApi }))
 ### 模板管理与代码生成
 
 - 模板列表 + 实时编辑预览：左侧模板脚本（Eta 语法高亮编辑器，`<% %> / <%= %> / <%~ %>` 标签与 `<%# %>` 注释区分着色，输入实时同步）、右侧选择目标表实时渲染
-- **代码预览**：选中单表 → 切换模板标签页查看生成代码（highlight.js 高亮、可复制）
-- **代码生成**：选中分类 / 选中表 / 不选中（全部）→ 触发下载 zip（JSZip 按模板内 `filePath` 建目录）
-- **代码替换**：同上范围 → 弹出确认（含文件清单）→ 经 `ManagerApi.replace(zip)` 上传 zip（结果反馈由 api 实现自行处理）
+- **代码预览**：选中单表 → 切换模板标签页查看生成代码（highlight.js 高亮、可复制；模板标记丢弃时显示 aborted 提示）
+- **代码生成**：选中分类 / 选中表 / 不选中（全部）→ 弹出模板选择框（默认全选，可勾选本次参与的模板）→ 触发下载 zip（JSZip 按模板内 `filePath` 建目录；表级「启用模板」与模板 `aborted` 一并生效）
+- **代码替换**：同上范围 → 弹出模板选择框 → 确认（含文件清单）→ 经 `ManagerApi.replace(zip)` 上传 zip（结果反馈由 api 实现自行处理）
 
 模板内置变量与工具：
 
@@ -198,7 +198,9 @@ interface TemplateContext {
   fileName: string // 文件名（模板内赋值）
   filePath: string // 文件路径（模板内赋值）
   language?: string // 显式指定预览高亮语言（模板内赋值，如 <% context.language = 'java' %>）
-  table: TableVO // 当前表（columns/indexes/navigates）
+  table: TableVO // 当前表（columns/indexes/navigates/options/templates）
+  settings: Settings // 应用设置（作者 author 与表/列选项元定义，供 javadoc 与选项分支）
+  aborted: boolean // 丢弃本次生成（默认 false；置 true 则该产物不打包进 zip）
   hasColumn(columnName: string): boolean // 按数据库列名判断列是否存在
   getColumn(columnName: string): TableColumn | undefined // 按数据库列名获取列
 }
@@ -206,30 +208,33 @@ interface TemplateContext {
 
 > 预览/代码生成结果的高亮语言：`context.language` 显式指定优先（如 `java` / `sql` / `xml` / `javascript`），未设置时按产物文件名后缀自动识别，工具栏语言徽标实时显示实际生效语言。
 
-| 工具                                            | 说明                     |
-| ----------------------------------------------- | ------------------------ |
-| `utils.toCamelCase(str, firstLetterLowerCase?)` | 转驼峰                   |
-| `utils.toSnakeCase(str)`                        | 转蛇形                   |
-| `utils.getJavaType(column)`                     | 数据库类型映射 Java 类型 |
-| `utils.quote(content, condition?)`              | 引号包裹                 |
-| `utils.wrap(content, condition?)`               | 括号包裹                 |
-| `utils.isEmpty(str)` / `utils.isBlank(str)`     | 判空 / 判空白            |
+| 工具                                            | 说明                                                                                        |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `utils.toCamelCase(str, firstLetterLowerCase?)` | 转驼峰                                                                                      |
+| `utils.toSnakeCase(str)`                        | 转蛇形                                                                                      |
+| `utils.getJavaType(column)`                     | 数据库类型映射 Java 类型                                                                    |
+| `utils.quote(content, condition?)`              | 引号包裹                                                                                    |
+| `utils.wrap(content, condition?)`               | 括号包裹                                                                                    |
+| `utils.isEmpty(str)` / `utils.isBlank(str)`     | 判空 / 判空白                                                                               |
+| `utils.nowDateTime()`                           | 当前时间（yyyy-MM-dd HH:mm:ss，javadoc @since）                                             |
+| `utils.optionEnabled(options, name)`            | 读表/列选项是否启用（缺省视为启用），如 `utils.optionEnabled(context.table.options, "add")` |
 
 Eta 语法：`<% %>` 逻辑、`<%= %>` 输出、`<%# %>` 自定义注释标签（渲染前剥离）。模板内可直接访问 `context` 与 `utils` 顶层标识（`useWith` 模式）。
 
-内置 7 个模板（solon3 + easy-query + satoken + antdv-next + MySQL 技术栈）：
+内置 8 个模板（solon3 + easy-query + satoken + antdv-next + MySQL 技术栈；java 模板类与方法均带 javadoc `@author`/`@since`，方法与端点按表选项选择性生成，`add`/`update` 等写选项全关时 mapper/service 整模板丢弃）：
 
-| 模板          | 产物                                                                                                                                                                                                                                  | 技术栈适配          |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
-| `entity`      | `entity/Xxx.java`（`@Table`/`@Column` 命名可直接转换时自动省略、主键 `primaryKey = true`、`@FieldNameConstants`、`@Navigate` 导航（`Fields` 常量）、`ICreate`/`IUpdate`/`IGenId`/`IDeptId` 按列自动实现、树形表 `parent`/`children`） | easy-query          |
-| `service`     | `service/XxxService.java`（接口）                                                                                                                                                                                                     | solon3 + easy-query |
-| `serviceImpl` | `service/impl/XxxServiceImpl.java`（`@Component` + `@Inject` `EasyQuery`）                                                                                                                                                            | solon3 + easy-query |
-| `controller`  | `controller/XxxController.java`（`@Controller`/`@Mapping` + `@SaCheckPermission`）                                                                                                                                                    | solon3 + satoken    |
-| `vue`         | `views/xxx/Xxx.vue`（`a-table` 列表 + `a-modal` 表单）                                                                                                                                                                                | antdv-next          |
-| `sql`         | `sql/表名.sql`（utf8mb4 建表 DDL，含索引与主键）                                                                                                                                                                                      | MySQL               |
-| `menuSql`     | `sql/表名_menu.sql`（`sys_menu` 菜单 + 5 个按钮权限，权限码与 Controller 一致）                                                                                                                                                       | MySQL               |
+| 模板          | 产物                                                                                                                                                                                                                                                                                                                                                                                                               | 技术栈适配            |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------- |
+| `entity`      | `entity/Xxx.java`（`@Table` 常驻（命名直转时省略参数）、`@Column` 命名直转时省略、主键 `primaryKey = true`、`@FieldNameConstants`、`@EntityProxy` + `implements ProxyEntityAvailable<Xxx, XxxProxy>`（代理位于 `entity/proxy` 子包）、swagger2 `@ApiModel`/`@ApiModelProperty`（含导航属性）、`@Navigate` 导航（`Fields` 常量）、`ICreate`/`IUpdate`/`IGenId`/`IDeptId` 按列自动实现、树形表 `parent`/`children`） | easy-query + swagger2 |
+| `mapper`      | `mapper/XxxMapper.java`（MapStruct `@Mapper` + 静态单例 `INSTANCE`，`toEntity(XxxAddDTO)` / `toEntity(XxxUpdateDTO)` 按 add/update 选项生成）                                                                                                                                                                                                                                                                      | map-struct            |
+| `service`     | `service/XxxService.java`（接口：`getById`/`add`/`update`/`remove`/`batchRemove` 按表选项生成，`@Nullable`/`@NotNull` 注解）                                                                                                                                                                                                                                                                                       | solon3 + easy-query   |
+| `serviceImpl` | `service/impl/XxxServiceImpl.java`（`@Component` + `@Inject` `EasyQuery`）                                                                                                                                                                                                                                                                                                                                         | solon3 + easy-query   |
+| `controller`  | `controller/XxxController.java`（`@Controller`/`@Mapping` + `@SaCheckPermission`；`info`/`list`/`add`/`edit`/`del`/`batchDel` 按表选项生成，`list` 可选查询条件按列选项（`query`）生成——字符串列 `like`、其余 `eq` 门控谓词）                                                                                                                                                                                      | solon3 + satoken      |
+| `vue`         | `views/xxx/Xxx.vue`（`a-table` 列表 + `a-modal` 表单；列表列按列选项 `show`、表单字段按 `add`/`update`、按钮按表选项生成）                                                                                                                                                                                                                                                                                         | antdv-next            |
+| `sql`         | `sql/表名.sql`（utf8mb4 建表 DDL，含索引与主键）                                                                                                                                                                                                                                                                                                                                                                   | MySQL                 |
+| `menuSql`     | `sql/表名_menu.sql`（`sys_menu` 菜单 + 按钮权限按表选项生成，权限码与 Controller 一致）                                                                                                                                                                                                                                                                                                                            | MySQL                 |
 
-可在「模板管理」中自由修改与新增；Controller 的权限码（`xxx:info/list/add/edit/del`）与 menuSql 生成的按钮权限一一对应，vue 模板的请求路径与 Controller 的 `@Mapping` 路由一致。
+可在「模板管理」中自由修改与新增；Controller 的权限码（`xxx:info/list/add/edit/del`）与 menuSql 生成的按钮权限一一对应，vue 模板的请求路径与 Controller 的 `@Mapping` 路由一致。生成产物格式保证：最后一条 `import` 与后续代码之间自动空一行。
 
 ### 系统设置
 
@@ -237,6 +242,7 @@ Eta 语法：`<% %>` 逻辑、`<%= %>` 输出、`<%# %>` 自定义注释标签�
 - 可选 Java 类型：`Character` / `String` / `Long` / `Integer` / `Float` / `Double` / `BigDecimal` / `LocalDateTime` / `LocalDate` / `LocalTime` / `Timestamp`
 - 规则顺序即优先级，拖拽手柄调整（保存时按序重编号 `sort`）；非法正则即时标红并禁用保存；内置「规则测试」输入任意数据库类型实时预览命中结果（含未保存修改，区分「生效/命中被抢先」）
 - **索引类型**：索引类型列表管理（增删，自动转大写、去重校验）。「编辑表」对话框的索引类型下拉选项与数据库导入的索引类型归一化均使用该列表；至少保留一个类型
+- **代码生成**：作者（生成 javadoc 的 `@author`，留空则省略该标签）与表/列选项元定义（名称/类型/标签/说明/字典）。默认表选项为 `query`/`add`/`update`/`remove`（驱动 mapper/service/controller 分支），默认列选项为 `show`/`query`/`add`/`update`/`remove`（驱动 controller 查询条件与 vue 列表/表单）；选项类型支持 `boolean`/`string`/`int`/`long`/`double` 及自定义，名称需为合法标识符且列表内唯一
 - 设置保存后持久化（DemoManagerApi + localStorage），整页统一保存 / 放弃修改
 
 ### 主题
@@ -294,7 +300,7 @@ const myApi: ManagerApi = {
 
 | 方法                                                                  | 说明                                                                                                                                                     |
 | --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `getSettings() / saveSettings(settings)`                              | 应用设置读写（索引类型列表 + 列类型映射规则）                                                                                                            |
+| `getSettings() / saveSettings(settings)`                              | 应用设置读写（索引类型列表 + 列类型映射规则 + 代码生成配置：作者 / 表选项 / 列选项元定义）                                                               |
 | `importFromDB()`                                                      | 从真实数据库读取表结构（含字段与索引，用于导入建模）                                                                                                     |
 | `load()`                                                              | 加载完整模型（分类/表/导航），初次进入与点击「刷新」按钮时使用                                                                                           |
 | `save()`                                                              | 全量保存模型，点击「保存所有」按钮或按 `Ctrl+S` 时调用                                                                                                   |
@@ -339,19 +345,19 @@ Logger.setLevel('INFO') // 或 Logger.level = 'INFO' / Logger.getLevel()
 
 核心类型定义于 `src/types/model.ts`（与《图形数据库模型编辑工具需求规格说明书》保持一致），各实体职责速览：
 
-| 实体                                      | 职责与关键约束                                                                                                                              |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `TableCategory`                           | 表分类：`name` 唯一；携带 `basePackage`（代码生成基础包名）与 `src`（源码替换路径）                                                         |
-| `Table`                                   | 表元信息：`tableName` 唯一、所属分类、实体类名、树形表父列 `parentIdColumn`、隐藏态 `hidden`、画布坐标 `x/y`                                |
-| `TableColumn`                             | 字段：表内 `columnName` 唯一、`sort` 排序、数据库类型与 Java 类型映射、主键/非空、`dict` 关联字典键                                         |
-| `TableIndex`                              | 索引：`indexName` 唯一、`type` 取值来自「系统设置 → 索引类型」列表、`columns` 字段名列表                                                    |
-| `TableNavigate`                           | 原始导航（双向语义）：`self` / `target` 两端表与关联/映射属性、NN 经 `mappingTable` 中间表、双向独立级联；两端可反转（type 需同步调换）     |
-| `Navigate`                                | 单向导航视图：由 `TableNavigate` 派生，供模板上下文 `table.navigates` 使用                                                                  |
-| `Dict` / `DictValue`                      | 字典与字典值：`dictKey` / `valueKey` 唯一，值标签类型 `I/S/W/D`，支持自定义颜色                                                             |
-| `Template`                                | 代码模板：`templateName` 唯一 + Eta 脚本内容                                                                                                |
-| `Settings` / `TypeMapping`                | 应用设置：索引类型列表 + 列类型正则映射规则（`sort` 升序依次匹配，取首条命中）                                                              |
-| `DBTable` / `DBColumn` / `DBIndex`        | 数据库导入契约形态（`importFromDB()` 返回）                                                                                                 |
-| `ManagerTable` / `LoadResultVO` / Payload | ManagerApi 读写载荷：`ManagerTable`（表 + 字段 + 索引）、`LoadResultVO`（全量模型）、`TableAdd/UpdatePayload`（含 `rawNavigates` 替换语义） |
+| 实体                                         | 职责与关键约束                                                                                                                                                                |
+| -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TableCategory`                              | 表分类：`name` 唯一；携带 `basePackage`（代码生成基础包名）与 `src`（源码替换路径）                                                                                           |
+| `Table`                                      | 表元信息：`tableName` 唯一、所属分类、实体类名、树形表父列 `parentIdColumn`、隐藏态 `hidden`、画布坐标 `x/y`、`templates` 启用模板（逗号分割，缺省=全部）、`options` 表选项值 |
+| `TableColumn`                                | 字段：表内 `columnName` 唯一、`sort` 排序、数据库类型与 Java 类型映射、主键/非空、`dict` 关联字典键、`options` 列选项值                                                       |
+| `TableIndex`                                 | 索引：`indexName` 唯一、`type` 取值来自「系统设置 → 索引类型」列表、`columns` 字段名列表                                                                                      |
+| `TableNavigate`                              | 原始导航（双向语义）：`self` / `target` 两端表与关联/映射属性、NN 经 `mappingTable` 中间表、双向独立级联；两端可反转（type 需同步调换）                                       |
+| `Navigate`                                   | 单向导航视图：由 `TableNavigate` 派生，供模板上下文 `table.navigates` 使用                                                                                                    |
+| `Dict` / `DictValue`                         | 字典与字典值：`dictKey` / `valueKey` 唯一，值标签类型 `I/S/W/D`，支持自定义颜色                                                                                               |
+| `Template`                                   | 代码模板：`templateName` 唯一 + Eta 脚本内容                                                                                                                                  |
+| `Settings` / `TypeMapping` / `OptionSetting` | 应用设置：索引类型列表 + 列类型正则映射规则（`sort` 升序依次匹配，取首条命中）+ 代码生成配置（作者 `author`、表选项 `tableOptions`、列选项 `columnOptions` 元定义）           |
+| `DBTable` / `DBColumn` / `DBIndex`           | 数据库导入契约形态（`importFromDB()` 返回）                                                                                                                                   |
+| `ManagerTable` / `LoadResultVO` / Payload    | ManagerApi 读写载荷：`ManagerTable`（表 + 字段 + 索引）、`LoadResultVO`（全量模型）、`TableAdd/UpdatePayload`（含 `rawNavigates` 替换语义）                                   |
 
 实体关系：分类 1—N 表，表 1—N 字段/索引；导航两端经表名互相引用（NN 再经中间表名）；字段的 `dict` 键关联字典。唯一性校验（表名/字段名/索引名/字典键/值键/模板名）由 ManagerApi 实现层负责，DemoManagerApi 违例时抛出含中文提示的 `Error`。
 

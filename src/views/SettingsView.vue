@@ -1,8 +1,18 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { message } from 'antdv-next'
-import { Plus, Trash2, GripVertical, Settings, FlaskConical, Layers, X } from '@lucide/vue'
-import type { TypeMapping } from '@/types/model'
+import {
+  Plus,
+  Trash2,
+  GripVertical,
+  Settings,
+  FlaskConical,
+  Layers,
+  X,
+  Code2,
+  SlidersHorizontal,
+} from '@lucide/vue'
+import type { OptionSetting, TypeMapping } from '@/types/model'
 import { useSettingsStore, SETTINGS_JAVA_TYPES } from '@/stores/settings'
 import { errorMessageOf } from '@/api/manager-api'
 import { useDragSort } from '@/composables/useDragSort'
@@ -129,6 +139,112 @@ function removeIndexType(idx: number) {
 
 const indexTypeInvalid = computed(() => indexTypes.value.length === 0)
 
+/* ==================== 代码生成（作者 + 表/列选项定义） ==================== */
+
+const author = ref('')
+
+watch(
+  () => settingsStore.author,
+  (v) => {
+    author.value = String(v ?? '')
+  },
+  { immediate: true },
+)
+
+interface OptionDefDraft extends OptionSetting {
+  key: string // 客户端稳定 key（保存时剥离）
+}
+
+function toDefDrafts(raw: OptionSetting[]): OptionDefDraft[] {
+  return (raw || []).map((o) => ({
+    name: o.name,
+    type: o.type,
+    label: o.label,
+    remark: o.remark || '',
+    dict: o.dict || '',
+    key: uid('opt-'),
+  }))
+}
+
+const tableOptions = ref<OptionDefDraft[]>([])
+const columnOptions = ref<OptionDefDraft[]>([])
+
+watch(
+  () => settingsStore.tableOptions,
+  (v) => {
+    tableOptions.value = toDefDrafts(v)
+  },
+  { immediate: true },
+)
+watch(
+  () => settingsStore.columnOptions,
+  (v) => {
+    columnOptions.value = toDefDrafts(v)
+  },
+  { immediate: true },
+)
+
+/** 选项类型预设（OptionType 允许任意自定义字符串，auto-complete 可自由输入） */
+const optionTypeOptions = ['boolean', 'string', 'int', 'long', 'double'].map((t) => ({
+  value: t,
+  label: t,
+}))
+
+function addTableOption() {
+  tableOptions.value.push({
+    key: uid('opt-'),
+    name: '',
+    type: 'boolean',
+    label: '',
+    remark: '',
+    dict: '',
+  })
+}
+
+function removeTableOption(idx: number) {
+  tableOptions.value.splice(idx, 1)
+}
+
+function addColumnOption() {
+  columnOptions.value.push({
+    key: uid('opt-'),
+    name: '',
+    type: 'boolean',
+    label: '',
+    remark: '',
+    dict: '',
+  })
+}
+
+function removeColumnOption(idx: number) {
+  columnOptions.value.splice(idx, 1)
+}
+
+/** 选项定义校验：名称非空、合法标识符、列表内唯一 */
+function optionDefError(def: OptionSetting): string | null {
+  const name = String(def.name ?? '').trim()
+  if (!name) return '名称不能为空'
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) return '名称需为合法标识符（字母/数字/下划线）'
+  return null
+}
+
+function optionDefsInvalid(defs: OptionDefDraft[]): string | null {
+  const names = new Set<string>()
+  for (const d of defs) {
+    const err = optionDefError(d)
+    if (err) return `「${d.name || '未命名'}」${err}`
+    const name = d.name.trim()
+    if (names.has(name)) return `名称重复：${name}`
+    names.add(name)
+  }
+  return null
+}
+
+const tableOptionsInvalid = computed(() => optionDefsInvalid(tableOptions.value))
+const columnOptionsInvalid = computed(() => optionDefsInvalid(columnOptions.value))
+
+const optionsInvalid = computed(() => tableOptionsInvalid.value || columnOptionsInvalid.value)
+
 /* ==================== 保存 / 放弃（设置整体） ==================== */
 
 const saving = reactive({ loading: false })
@@ -137,12 +253,20 @@ const dirty = computed(
   () =>
     JSON.stringify(rules.value.map(({ key: _key, ...m }) => m)) !==
       JSON.stringify(settingsStore.typeMappings) ||
-    JSON.stringify(indexTypes.value) !== JSON.stringify(settingsStore.indexTypes),
+    JSON.stringify(indexTypes.value) !== JSON.stringify(settingsStore.indexTypes) ||
+    author.value.trim() !== String(settingsStore.author ?? '').trim() ||
+    JSON.stringify(tableOptions.value.map(({ key: _k, ...o }) => o)) !==
+      JSON.stringify(settingsStore.tableOptions) ||
+    JSON.stringify(columnOptions.value.map(({ key: _k, ...o }) => o)) !==
+      JSON.stringify(settingsStore.columnOptions),
 )
 
 function resetDraft() {
   rules.value = settingsStore.typeMappings.map((m) => ({ ...m, key: uid('mapping-') }))
   indexTypes.value = settingsStore.indexTypes.map(String)
+  author.value = String(settingsStore.author ?? '')
+  tableOptions.value = toDefDrafts(settingsStore.tableOptions)
+  columnOptions.value = toDefDrafts(settingsStore.columnOptions)
 }
 
 async function save() {
@@ -154,11 +278,32 @@ async function save() {
     message.warning('索引类型列表不能为空，至少保留一个类型')
     return
   }
+  if (optionsInvalid.value) {
+    message.warning(`选项定义无效：${optionsInvalid.value}`)
+    return
+  }
   saving.loading = true
   try {
     await settingsStore.save({
       indexTypes: indexTypes.value.map(String),
       typeMappings: rules.value.map(({ key: _key, ...m }) => ({ ...m, pattern: m.pattern.trim() })),
+      author: author.value.trim(),
+      tableOptions: tableOptions.value.map(({ key: _k, ...o }) => ({
+        ...o,
+        name: o.name.trim(),
+        type: o.type.trim() || 'boolean',
+        label: o.label.trim() || o.name.trim(),
+        remark: o.remark?.trim(),
+        dict: o.dict?.trim(),
+      })),
+      columnOptions: columnOptions.value.map(({ key: _k, ...o }) => ({
+        ...o,
+        name: o.name.trim(),
+        type: o.type.trim() || 'boolean',
+        label: o.label.trim() || o.name.trim(),
+        remark: o.remark?.trim(),
+        dict: o.dict?.trim(),
+      })),
     })
     message.success('设置已保存')
   } catch (e: unknown) {
@@ -343,6 +488,115 @@ async function save() {
         </div>
       </section>
 
+      <section class="settings-card">
+        <div class="card-head">
+          <span class="card-title"><Code2 :size="13" /> 代码生成</span>
+          <span class="card-sub">javadoc 作者与表/列选项元定义</span>
+        </div>
+
+        <div class="card-intro">
+          生成 java 代码时，类与方法 javadoc 会携带
+          <code class="mono">@author 作者</code> 与生成时刻的
+          <code class="mono">@since yyyy-MM-dd HH:mm:ss</code>；表选项与列选项定义控制
+          「编辑表」对话框中的选项编辑项，模板按选项值选择性生成代码（选项值缺省视为启用）。
+        </div>
+
+        <div class="author-row">
+          <label>作者（@author）</label>
+          <a-input
+            v-model:value="author"
+            class="author-input"
+            placeholder="如 zhangsan（留空则生成代码省略 @author）"
+            spellcheck="false"
+          />
+        </div>
+
+        <div class="opt-defs">
+          <div class="defs-title">
+            <SlidersHorizontal :size="12" />
+            表选项（默认：查询 / 添加 / 更新 / 删除，驱动 mapper / service / controller 分支）
+          </div>
+          <div class="defs-head defs-grid">
+            <span>名称</span>
+            <span>类型</span>
+            <span>标签</span>
+            <span>说明</span>
+            <span>字典</span>
+            <span></span>
+          </div>
+          <div class="defs-body">
+            <div v-for="(o, i) in tableOptions" :key="o.key" class="defs-row defs-grid">
+              <a-input v-model:value="o.name" size="small" class="mono" placeholder="如 query" />
+              <a-auto-complete
+                v-model:value="o.type"
+                :options="optionTypeOptions"
+                size="small"
+                class="mono"
+                placeholder="boolean"
+                :filter-option="
+                  (input: string, option: any) =>
+                    String(option.value).toLowerCase().includes(input.toLowerCase())
+                "
+              />
+              <a-input v-model:value="o.label" size="small" placeholder="如 查询" />
+              <a-input v-model:value="o.remark" size="small" placeholder="是否启用查询" />
+              <a-input v-model:value="o.dict" size="small" class="mono" placeholder="选填" />
+              <button class="row-del" type="button" title="删除选项" @click="removeTableOption(i)">
+                <Trash2 :size="12" />
+              </button>
+            </div>
+            <div v-if="!tableOptions.length" class="r-empty">暂无表选项定义</div>
+          </div>
+          <a-button size="small" type="dashed" block class="add-btn" @click="addTableOption">
+            <template #icon><Plus :size="12" /></template>
+            添加表选项
+          </a-button>
+        </div>
+
+        <div class="opt-defs">
+          <div class="defs-title">
+            <SlidersHorizontal :size="12" />
+            列选项（默认：显示 / 查询 / 添加 / 更新 / 删除，驱动 controller 查询条件与 vue
+            列表/表单）
+          </div>
+          <div class="defs-head defs-grid">
+            <span>名称</span>
+            <span>类型</span>
+            <span>标签</span>
+            <span>说明</span>
+            <span>字典</span>
+            <span></span>
+          </div>
+          <div class="defs-body">
+            <div v-for="(o, i) in columnOptions" :key="o.key" class="defs-row defs-grid">
+              <a-input v-model:value="o.name" size="small" class="mono" placeholder="如 show" />
+              <a-auto-complete
+                v-model:value="o.type"
+                :options="optionTypeOptions"
+                size="small"
+                class="mono"
+                placeholder="boolean"
+                :filter-option="
+                  (input: string, option: any) =>
+                    String(option.value).toLowerCase().includes(input.toLowerCase())
+                "
+              />
+              <a-input v-model:value="o.label" size="small" placeholder="如 显示" />
+              <a-input v-model:value="o.remark" size="small" placeholder="是否启用列表中显示" />
+              <a-input v-model:value="o.dict" size="small" class="mono" placeholder="选填" />
+              <button class="row-del" type="button" title="删除选项" @click="removeColumnOption(i)">
+                <Trash2 :size="12" />
+              </button>
+            </div>
+            <div v-if="!columnOptions.length" class="r-empty">暂无列选项定义</div>
+          </div>
+          <a-button size="small" type="dashed" block class="add-btn" @click="addColumnOption">
+            <template #icon><Plus :size="12" /></template>
+            添加列选项
+          </a-button>
+        </div>
+      </section>
+
       <div class="settings-foot">
         <span class="dirty-tip" :class="{ dirty }">
           {{
@@ -350,9 +604,11 @@ async function save() {
               ? `存在 ${invalidCount} 条无效规则，保存已禁用`
               : indexTypeInvalid
                 ? '索引类型列表为空，保存已禁用'
-                : dirty
-                  ? '有未保存的修改'
-                  : '全部更改已保存'
+                : optionsInvalid
+                  ? `选项定义无效：${optionsInvalid}`
+                  : dirty
+                    ? '有未保存的修改'
+                    : '全部更改已保存'
           }}
         </span>
         <div class="foot-actions">
@@ -361,7 +617,9 @@ async function save() {
             size="small"
             type="primary"
             :loading="saving.loading"
-            :disabled="!dirty || Boolean(invalidCount) || indexTypeInvalid"
+            :disabled="
+              !dirty || Boolean(invalidCount) || indexTypeInvalid || Boolean(optionsInvalid)
+            "
             @click="save"
           >
             保存设置
@@ -761,6 +1019,71 @@ async function save() {
 
   .index-input {
     width: 260px;
+  }
+}
+
+/* ==================== 代码生成卡片（作者 + 选项定义） ==================== */
+
+.author-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+
+  label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--dbm-text-2);
+    flex-shrink: 0;
+  }
+
+  .author-input {
+    width: 300px;
+  }
+}
+
+.opt-defs {
+  margin-bottom: 14px;
+
+  .defs-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--dbm-text-2);
+    margin-bottom: 6px;
+  }
+
+  .defs-grid {
+    display: grid;
+    grid-template-columns:
+      minmax(110px, 1fr) 110px minmax(100px, 1fr) minmax(140px, 1.4fr) minmax(90px, 1fr)
+      26px;
+    gap: 4px 6px;
+    align-items: center;
+  }
+
+  .defs-head {
+    padding: 2px 4px 6px;
+    font-size: 11px;
+    color: var(--dbm-text-3);
+    border-bottom: 1px solid var(--dbm-border);
+  }
+
+  .defs-body {
+    max-height: 220px;
+    overflow-y: auto;
+    padding: 6px 2px;
+
+    .defs-row {
+      padding: 2px 2px;
+      border-radius: var(--dbm-radius-s);
+
+      &:hover {
+        background: var(--dbm-bg-hover);
+      }
+    }
   }
 }
 

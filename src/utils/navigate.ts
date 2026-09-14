@@ -84,6 +84,7 @@ export function buildNavigateView(
   return {
     propertyName: reversed ? nav.targetPropertyName : nav.selfPropertyName,
     type: reversed ? flipNavigateType(nav.type) : nav.type,
+    comment: nav.comment || '',
     self: buildShallowVO(selfId),
     selfProperty: reversed ? [...nav.targetProperty] : [...nav.selfProperty],
     selfMappingProperty: reversed ? [...nav.targetMappingProperty] : [...nav.selfMappingProperty],

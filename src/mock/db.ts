@@ -7,6 +7,7 @@
 import type {
   CodeTemplate,
   Dict,
+  OptionSetting,
   Settings,
   Table,
   TableColumn,
@@ -17,11 +18,13 @@ import type {
 } from '@/types/model'
 import {
   SEED_CATEGORIES,
+  SEED_COLUMN_OPTIONS,
   SEED_DICTS,
   SEED_HIDDEN_TABLE_NAMES,
   SEED_NAVIGATES,
   SEED_SETTINGS,
   SEED_TABLES,
+  SEED_TABLE_OPTIONS,
   SEED_TEMPLATES,
 } from './seed'
 
@@ -29,13 +32,14 @@ const STORAGE_KEY = 'gdbme:db:v2'
 const LEGACY_STORAGE_KEYS = ['gdbme:db:v1']
 /**
  * 模板种子版本：种子模板集发生变更时递增（1=通用四件套，2=solon3 七件套，
- * 3=entity 模板 easy-query 规范化：@Table/@Column 命名直转省略、@FieldNameConstants、
- * @Navigate 导航、审计接口 ICreate/IUpdate/IGenId/IDeptId、树形表 parent/children）。
+ * 3=entity 模板 easy-query 规范化，4=八件套：新增 mapper（MapStruct），
+ * java 模板全面升级——javadoc/@author/@since、@EntityProxy + ProxyEntityAvailable、
+ * swagger2 注解、表/列选项驱动条件生成、import 块与代码间空行）。
  * 旧库不含 seedTemplatesVersion 字段（视为 1），读取时低于当前值即整体替换为
  * 最新种子模板集并回写版本号——与「用户是否删过某个种子模板」无关，杜绝形态
  * 嗅探漏判；此后用户对模板的增删改不再被种子覆盖（版本号已是最新）。
  */
-const SEED_TEMPLATES_VERSION = 3
+const SEED_TEMPLATES_VERSION = 4
 
 export interface MockDB {
   version: number
@@ -78,12 +82,31 @@ function createSeedDB(): MockDB {
   }
 }
 
-/** 旧版设置（columnTypeRules 形态）读取时迁移为 Settings 新形态 */
-function migrateSettings(raw: unknown): Settings {
+/** 选项定义归一：保留合法定义，缺字段时兕底（boolean 类型/标签回退名称） */
+function normalizeOptionSettings(raw: unknown, fallback: OptionSetting[]): OptionSetting[] {
+  if (!Array.isArray(raw)) return clone(fallback)
+  const list = raw
+    .map((o: Partial<OptionSetting>) => ({
+      name: String(o?.name ?? '').trim(),
+      type: String(o?.type ?? 'boolean').trim() || 'boolean',
+      label: String(o?.label ?? '').trim(),
+      remark: String(o?.remark ?? '').trim() || undefined,
+      dict: String(o?.dict ?? '').trim() || undefined,
+    }))
+    .filter((o) => o.name)
+    .map((o) => ({ ...o, label: o.label || o.name }))
+  return list.length ? list : clone(fallback)
+}
+
+/** 旧版设置读取时归一为完整 Settings 形态（保留已有 indexTypes/typeMappings/author，补齐选项定义） */
+function normalizeSettings(raw: unknown): Settings {
   const s = (raw || {}) as {
     indexTypes?: unknown
     typeMappings?: unknown
     columnTypeRules?: unknown
+    author?: unknown
+    tableOptions?: unknown
+    columnOptions?: unknown
   }
   const typeMappings: TypeMapping[] = Array.isArray(s.typeMappings)
     ? s.typeMappings.map((m: Partial<TypeMapping>, i: number) => ({
@@ -102,7 +125,10 @@ function migrateSettings(raw: unknown): Settings {
     Array.isArray(s.indexTypes) && s.indexTypes.length
       ? s.indexTypes.map((t: unknown) => String(t).trim().toUpperCase()).filter(Boolean)
       : clone(SEED_SETTINGS.indexTypes)
-  return { indexTypes, typeMappings }
+  const author = String(s.author ?? '').trim() || undefined
+  const tableOptions = normalizeOptionSettings(s.tableOptions, SEED_TABLE_OPTIONS)
+  const columnOptions = normalizeOptionSettings(s.columnOptions, SEED_COLUMN_OPTIONS)
+  return { indexTypes, typeMappings, author, tableOptions, columnOptions }
 }
 
 function loadDB(): MockDB {
@@ -112,9 +138,19 @@ function loadDB(): MockDB {
       const parsed = JSON.parse(raw) as MockDB
       if (parsed && parsed.version === 2 && Array.isArray(parsed.tables)) {
         let migrated = false
-        // 兼容旧数据（设置字段形态升级 / 缺失）：读取时迁移并立即归一落盘
-        if (!parsed.settings || !Array.isArray(parsed.settings.typeMappings)) {
-          parsed.settings = migrateSettings(parsed.settings)
+        // 兼容旧数据（设置字段形态升级 / 缺失）：读取时迁移并立即归一落盘。
+        // v4 起设置新增 author / tableOptions / columnOptions，任一缺失即归一补齐
+        const s = parsed.settings as
+          | { author?: unknown; tableOptions?: unknown; columnOptions?: unknown }
+          | undefined
+        if (
+          !parsed.settings ||
+          !Array.isArray(parsed.settings.typeMappings) ||
+          s?.tableOptions === undefined ||
+          s?.columnOptions === undefined ||
+          s?.author === undefined
+        ) {
+          parsed.settings = normalizeSettings(parsed.settings)
           migrated = true
         }
         // 旧版 hidden 存于独立 localStorage 键（gdbme:hidden），模型未带 hidden 字段：

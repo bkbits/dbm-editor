@@ -675,3 +675,44 @@ Stage Summary:
 - 模板上下文具备列查询能力（hasColumn/getColumn），entity 模板从「显式全量映射」升级为「easy-query 规范化智能省略」：命名可直接转换的 @Table/@Column 自动省略、主键正确标记 primaryKey、导航从注释示例变为可直接编译的 @Navigate（Fields 常量风格）、审计/主键/部门/树形接口按列特征自动实现
 - 种子版本驱动迁移（v2→v3）：旧库确定性升级，用户后续定制不受影响
 - 环境注意：会话沙箱开始清理后台进程（dev server 需在单条命令内启动+验证）；worktree 曾被清理重建（bun install 442ms 恢复）
+
+---
+Task ID: 22
+Agent: main (Super Z)
+Task: 选项体系 + 代码生成配置落地——Settings 扩展（author/表选项/列选项元定义）、Table/TableColumn 挂选项值与启用模板、TemplateContext.settings/aborted、java 模板全面升级（javadoc/@author/@since、@EntityProxy+ProxyEntityAvailable、swagger2、MapStruct mapper 新模板、选项驱动条件生成）、import 后空行格式保证、生成/替换模板选择弹窗；提交推送 devel
+
+Work Log:
+- 类型层（src/types/model.ts）：新增 OptionType（内置 5 类型 + 自定义字符串，`(string & {})` 保住字面量提示）/OptionSetting/TableOption/ColumnOption；Settings 增 author?/tableOptions/columnOptions；Table 增 templates?（逗号分割启用模板，缺省=全部）与 options?（TableVO 经继承获得，持久化经 ManagerTable 自然透传）；TableColumn 增 options?；TemplateContext 增 settings + aborted（默认 false，true=丢弃不打包）；Navigate 增 comment 透传（@ApiModelProperty 导航说明用）
+- 渲染管线（src/utils/render.ts + string.ts）：renderTemplate 第 5 参 settings（缺省空设置兜底）；context.aborted 初始 false；新增 utils.nowDateTime()（yyyy-MM-dd HH:mm:ss）与 utils.optionEnabled(options, name)（**值缺省视为启用**——单一规则，向后兼容旧数据全量生成行为）；postProcess 保持折叠，追加 ensureBlankLineAfterImports 行级状态机（java `;` / js-ts `from '...'` / 裸模块说明符三种结束形态，多行 import 兼容）——**所有模板**最后一条 import 与后续代码之间恰好空一行（引擎级保证，不依赖模板作者）
+- 仓库层：settings store 增 author/tableOptions/columnOptions + snapshot()（渲染管线注入源）；context.ts 给 template store 接 getSettings；template store generateFiles(tableIds, templateNames?) 增三层过滤——会话选择 ∩ 表级 Table.templates ∩ 模板 aborted 跳过，返回值增 aborted 清单；generateAndDownload/replaceWithGenerated 透传选择参数（生成成功提示附丢弃计数）；model store createTable/saveTable 透传 templates/options（新表 options.tableId 落库时归一）
+- 种子模板（src/mock/seed.ts，经 scripts/templates/*.eta + scripts/splice-seed.py 拼接注入）：
+  * entity：@Table 常驻（命名直转时无参）、@EntityProxy、implements Serializable, ProxyEntityAvailable<Xxx, XxxProxy>（代理 import 自 `<pkg>.entity.proxy`）、swagger2 @ApiModel("表说明") + 全属性（含导航/树形 parent/children）@ApiModelProperty("属性说明")、类 javadoc 带 @author settings.author（空则省略）+ @since 当前时刻
+  * mapper（新增，八件套）：MapStruct @Mapper + `INSTANCE = Mappers.getMapper(XxxMapper.class)` 静态单例；toEntity(XxxAddDTO)/toEntity(XxxUpdateDTO) 按 add/update 选项生成；**两者全关 → context.aborted = true 整模板丢弃**（Eta 标签内 `return ""` 提前退出）
+  * service/serviceImpl：仅五方法 getById(@Nullable)/add/update/remove/batchRemove(@NotNull)，按表选项选择性生成；**add/update/remove 全关 → 丢弃**（字面规格：query 开也不能免）；实现 @Component + @Inject EasyQuery（whereId/insertable/updatable/deletable/whereByIds）
+  * controller：info/list/add/edit/del/batchDel 按表选项生成；list 注入 EasyEntityQuery + 门控谓词（字符串列 like / 其余 eq，`o.x().like(x != null && !x.isEmpty(), x)`）；**列选项 query 启用的非主键列 → list 可选 @Param(value=..., required=false) 查询参数**；service 被丢弃时（写选项全关）info 直查 easyEntityQuery 避免悬空引用、不注入不 import service；四选项全关 → 丢弃
+  * vue：列表列按列选项 show、表单字段按 add||update、新增/编辑/删除按钮按表选项生成；menuSql：按钮权限行按表选项生成（与 controller @SaCheckPermission 对齐）；sql 不变（无 import）
+  * SEED_SETTINGS：author 'dbm-editor' + SEED_TABLE_OPTIONS（query/add/update/remove）+ SEED_COLUMN_OPTIONS（show/query/add/update/remove）
+- 迁移（src/mock/db.ts）：SEED_TEMPLATES_VERSION 3→4（八件套整体替换）；migrateSettings → normalizeSettings——旧库 author/tableOptions/columnOptions 任一缺失即归一补齐（保留已有 indexTypes/typeMappings/author），v3 伪造库实测：模板升级 8 个、设置补齐、表级用户数据（sys_user 的 templates/options）原样保留
+- 契约（src/api/demo-manager-api.ts）：getSettings 返回完整形态；saveSettings 增选项定义校验（名称非空唯一、类型/标签兜底）并持久化新字段
+- UI：
+  * TableEditDialog：基本信息区新增「启用模板」复选组（未配置/未手动改动时展示全部=语义全选；全选保存为 undefined；手动取消至空被校验拦截——空串语义即全部，无法表达"一个不选"）与「表选项」勾选/输入混排行；字段表格追加列选项动态列（boolean=勾选列 42px / 其余=输入列 96px，grid-template-columns 行内绑定，表头带 label+remark 提示）；选项定义异步加载后 watch 补齐缺省值；扁平值⇄options 记录转换（**boolean 仅存 false**，true=缺省即启用，存储紧凑）
+  * SettingsView：新增「代码生成」卡片——author 输入 + 表选项/列选项定义编辑表（名称/类型/标签/说明/字典，类型 auto-complete 预置 5 类可自定义）；名称合法标识符 + 列表内唯一校验，dirty/保存/放弃全链路接入
+  * TemplateSelectModal（新组件）：生成/替换前弹模板勾选框（默认全选、全选开关带 indeterminate、空选禁用确认）；CanvasToolbar 生成/替换改经该弹窗（模式区分按钮文案与后续流程）
+  * TemplateView：帮助面板补 settings/aborted/optionEnabled/nowDateTime/格式保证说明；实时预览增 aborted 黄色警示条（渲染提示丢弃）；**顺手修复存量缺陷：切换预览目标表不触发重渲染**（无 previewTableId watcher，本次补上——aborted 提示依赖按表渲染才可验证）
+- 验证（agent-browser + 隔离 worktree dev server，会话沙箱清理后台进程改为单命令内启动+操作）：
+  * 首载：v4 种子 8 模板 + author/选项定义落 localStorage，0 控制台错误
+  * 表编辑对话框：启用模板 8 项全选、表选项 4 勾选、字段表格 5 选项列齐备；交互后持久化正确（templates='entity,...,menuSql' 去掉 vue；options 仅存 {remove:false}；password 列 options.show=false；notNull 误触已复位）
+  * 代码预览：serviceImpl（remove 关）无 remove/batchRemove 且 List import 消失；entity 含 @Table/@EntityProxy/ProxyEntityAvailable/proxy import/@ApiModel("用户表")/13 个 @ApiModelProperty（含导航）/@author/@since/最后一条 import 后空行；mapper 含 INSTANCE 单例与双 toEntity
+  * 替换流程：模板选择弹窗默认全选 → 确认后文件清单 103 个 = 12 表×8 + sys_user×7（表级 templates 去掉 vue，交集语义正确）
+  * 迁移：伪造 v3 旧库（无 mapper/无 author/无选项定义）重载 → v4 + 设置补齐 + sys_user 表级配置保留
+  * aborted：cms_comment 关 add/update → mapper 预览显示「模板已标记丢弃」黄色警示、不显示文件路径
+  * 移动端 390px：表编辑对话框复选组换行、字段表格选项列横向滚动（scrollWidth 1018 / 可视 319）、模板选择弹窗与设置代码生成卡片正常
+  * 渲染冒烟（scripts/render-smoke.ts，worktree 内不入库）：8 模板 × 13 表 = 104 次渲染零错误，选项驱动 8 场景断言全过（mapper/服务/控制器丢弃、仅 add、仅 query、列 query 开关、author 空、表名非直转、menuSql 按钮裁剪）
+  * bun run typecheck 通过；vp check 61 文件格式 + 52 文件 lint 零告警；check-readme.py 通过（30 标题）
+- README：演示数据 7→8 模板；代码生成/替换流程补模板选择弹窗说明；TemplateContext 代码块补 settings/aborted；工具表补 nowDateTime/optionEnabled；八件套模板表（mapper 行 + 各模板选项驱动说明）+ import 空行格式保证；系统设置补「代码生成」条目；ManagerApi 表 getSettings 描述与类型速览表（Table/TableColumn/Settings）同步
+
+Stage Summary:
+- 代码生成从「固定全量七件套」升级为「选项驱动的条件生成体系」：设置定义选项元数据 → 表/列挂选项值 → 模板经 utils.optionEnabled 分支 → abort 机制丢弃无意义产物 → 生成/替换前用户再按需勾选模板；四个层次正交组合（会话选择 ∩ 表级启用 ∩ 选项分支 ∩ aborted）
+- 关键决策：① boolean 选项值缺省视为启用（单一规则向后兼容）；② service 丢弃采用字面规格（add/update/remove 全关即丢，query 不豁免），controller 在 service 缺席时 info 直查 easyEntityQuery 消除悬空引用；③ boolean 仅存 false 值（true=缺省），存储紧凑且语义不变；④ @Table 按新规格常驻（直转时省略参数）；⑤ import 空行为引擎级后处理保证（行级状态机兼容 java/js-ts 多行 import），不依赖模板作者
+- 顺手修复存量缺陷：模板页切换预览目标表不重渲染（补 previewTableId watcher）
+- 交付物：八件套模板（新增 mapper）、选项体系全链路（类型/存储/UI/渲染）、模板选择弹窗、README 30 节

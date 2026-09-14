@@ -1,13 +1,14 @@
 <script setup lang="ts">
-import { computed, reactive, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { message } from 'antdv-next'
 import { Plus, Trash2, GripVertical } from '@lucide/vue'
-import type { TableColumn, TableIndex } from '@/types/model'
+import type { OptionSetting, TableColumn, TableIndex } from '@/types/model'
 import { useUiStore } from '@/stores/ui'
 import { useModelStore } from '@/stores/model'
 import { useDictStore } from '@/stores/dict'
 import { useCanvasStore } from '@/stores/canvas'
 import { useSettingsStore } from '@/stores/settings'
+import { useTemplateStore } from '@/stores/template'
 import { toCamelCase } from '@/utils/string'
 import { getJavaTypeByType, COMMON_DB_TYPES, COMMON_JAVA_TYPES } from '@/utils/javaType'
 import { uid } from '@/utils/id'
@@ -19,9 +20,58 @@ const model = useModelStore()
 const dictStore = useDictStore()
 const canvas = useCanvasStore()
 const settingsStore = useSettingsStore()
+const templateStore = useTemplateStore()
 
-type DraftColumn = TableColumn & { _propTouched?: boolean; _javaTouched?: boolean }
+type DraftColumn = TableColumn & {
+  _propTouched?: boolean
+  _javaTouched?: boolean
+  /** 列选项扁平值（UI 编辑态；保存时转换为 TableColumn.options） */
+  _optVals: Record<string, boolean | string>
+}
 type DraftIndex = TableIndex
+
+/* ==================== 选项工具（表/列选项扁平值 ⇄ options 记录） ==================== */
+
+/** 已存 options 记录 → 扁平值（不含定义色限，按存值展开） */
+function flattenRawOptions(
+  options?: Record<string, { value?: boolean | string | number }>,
+): Record<string, any> {
+  const out: Record<string, any> = {}
+  for (const [name, entry] of Object.entries(options || {})) {
+    out[name] =
+      entry?.value === undefined || entry?.value === null ? true : (entry.value as boolean)
+  }
+  return out
+}
+
+/** 补齐缺失定义的默认值（不动已有值；boolean 默认 true，其余空串） */
+function fillOptionDefaults(vals: Record<string, boolean | string>, defs: OptionSetting[]): void {
+  for (const def of defs) {
+    if (vals[def.name] === undefined) vals[def.name] = def.type === 'boolean' ? true : ''
+  }
+}
+
+/** 扁平值 → options 记录：boolean 仅存 false（true=默认缺省即启用），非 boolean 存非空值 */
+function buildOptionRecord<T extends { name: string; value?: boolean | string | number }>(
+  vals: Record<string, boolean | string>,
+  defs: OptionSetting[],
+  makeEntry: (name: string, value: boolean | string | number) => T,
+): Record<string, T> | undefined {
+  const out: Record<string, T> = {}
+  for (const def of defs) {
+    const v = vals[def.name]
+    if (def.type === 'boolean') {
+      if (v === false) out[def.name] = makeEntry(def.name, false)
+    } else {
+      const s = String(v ?? '').trim()
+      if (s) {
+        const numeric = def.type === 'int' || def.type === 'long' || def.type === 'double'
+        out[def.name] = makeEntry(def.name, numeric ? Number(s) : s)
+      }
+    }
+  }
+  return Object.keys(out).length ? out : undefined
+}
 
 const isEdit = computed(() => Boolean(ui.tableEdit.tableId))
 
@@ -37,6 +87,42 @@ const draft = reactive({
   columns: [] as DraftColumn[],
   indexes: [] as DraftIndex[],
   activeTab: 'columns',
+  /** 启用的模板（显式选择；空 = 启用全部，配合 templatesExplicit/templatesTouched 语义） */
+  templates: [] as string[],
+  /** 表选项扁平值（UI 编辑态；boolean 定义存 boolean，其余存 string） */
+  optionVals: {} as Record<string, any>,
+})
+
+/** 表模板选择：未显式配置且未手动改动时展示全部（响应式跟随模板加载） */
+const templatesExplicit = ref(false)
+const templatesTouched = ref(false)
+const templatesSelected = computed<string[]>({
+  get: () =>
+    templatesExplicit.value || templatesTouched.value
+      ? draft.templates
+      : [...templateStore.templateNames],
+  set: (vals) => {
+    templatesTouched.value = true
+    draft.templates = vals
+  },
+})
+const templateCheckOptions = computed(() =>
+  templateStore.templates.map((t) => ({ value: t.name, label: t.name })),
+)
+
+/** 表选项定义（来自应用设置） */
+const tableOptionDefs = computed(() => settingsStore.tableOptions)
+/** 列选项定义（来自应用设置，驱动字段表格动态选项列） */
+const columnOptionDefs = computed(() => settingsStore.columnOptions)
+
+/** 字段表格网格模板：基础列 + 列选项动态列（boolean=勾选列，其余=输入列） */
+const colsGridStyle = computed(() => {
+  const defs = settingsStore.columnOptions
+  if (!defs.length) return undefined
+  const extra = defs.map((d) => (d.type === 'boolean' ? '42px' : '96px')).join(' ')
+  return {
+    gridTemplateColumns: `28px minmax(96px, 1fr) minmax(84px, 1fr) 132px 118px 44px 44px 108px minmax(72px, 1fr) ${extra} 26px`,
+  }
 })
 
 /** 树形表开关：开启时父ID字段默认 parent_id，关闭时清空 */
@@ -54,6 +140,9 @@ watch(dialogOpen, (open) => {
   dictStore.init()
   // 索引类型选项来自应用设置（首次打开时预载）
   settingsStore.init()
+  // 模板列表用于「启用模板」多选
+  templateStore.init()
+  templatesTouched.value = false
   const state = ui.tableEdit
   if (state.tableId) {
     const t = model.tableById(state.tableId)
@@ -66,8 +155,23 @@ watch(dialogOpen, (open) => {
     draft.parentIdColumn = t.parentIdColumn || ''
     draft.x = t.x ?? 0
     draft.y = t.y ?? 0
-    draft.columns = model.columnsOf(t.id).map((c) => ({ ...c }))
+    const rawTpl = (t.templates ?? '').trim()
+    templatesExplicit.value = Boolean(rawTpl)
+    draft.templates = rawTpl
+      ? rawTpl
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : []
+    draft.optionVals = flattenRawOptions(t.options)
+    draft.columns = model.columnsOf(t.id).map((c) => ({
+      ...c,
+      _optVals: flattenRawOptions(c.options),
+    }))
     draft.indexes = model.indexesOf(t.id).map((i) => ({ ...i, columns: [...i.columns] }))
+    fillOptionDefaults(draft.optionVals, settingsStore.tableOptions)
+    for (const col of draft.columns)
+      fillOptionDefaults((col._optVals ||= {}), settingsStore.columnOptions)
   } else {
     const world =
       state.position ?? canvas.screenToWorld({ x: canvas.viewportW / 2, y: canvas.viewportH / 2 })
@@ -79,6 +183,9 @@ watch(dialogOpen, (open) => {
     draft.parentIdColumn = ''
     draft.x = world.x - 130
     draft.y = world.y - 60
+    templatesExplicit.value = false
+    draft.templates = []
+    draft.optionVals = {}
     draft.columns = [
       {
         id: uid('c-'),
@@ -92,12 +199,25 @@ watch(dialogOpen, (open) => {
         notNull: true,
         primaryKey: true,
         dict: '',
+        _optVals: {},
       },
     ]
     draft.indexes = []
   }
   draft.activeTab = 'columns'
 })
+
+/** 选项定义异步加载后补齐缺失默认值（不动已加载的显式值） */
+watch(
+  () => settingsStore.tableOptions,
+  (defs) => fillOptionDefaults(draft.optionVals, defs),
+)
+watch(
+  () => settingsStore.columnOptions,
+  (defs) => {
+    for (const col of draft.columns) fillOptionDefaults((col._optVals ||= {}), defs)
+  },
+)
 
 /* ==================== 字段编辑 ==================== */
 
@@ -125,6 +245,7 @@ function addColumn() {
     notNull: false,
     primaryKey: false,
     dict: '',
+    _optVals: {},
   })
 }
 function removeColumn(idx: number) {
@@ -237,6 +358,10 @@ function validate(): string | null {
     if (!parentCol) return '树形表需填写父ID字段'
     if (!names.has(parentCol)) return `树形父ID字段「${parentCol}」不存在，请先在字段列表中添加`
   }
+  // 启用模板：空字符串语义为「启用全部」，无法表达「一个都不启用」——手动取消全部时拦截
+  if (templateStore.templates.length && templatesSelected.value.length === 0) {
+    return '启用模板不能为空（全选即启用全部模板）'
+  }
   return null
 }
 
@@ -248,6 +373,17 @@ async function save() {
   }
   saving.loading = true
   try {
+    // 全选（或模板列表为空）→ 存 undefined（启用全部）；否则存逗号分割的显式列表
+    const templatesStr =
+      templateStore.templates.length &&
+      templatesSelected.value.length !== templateStore.templateNames.length
+        ? templatesSelected.value.join(',')
+        : undefined
+    const tableOptions = buildOptionRecord(
+      draft.optionVals,
+      settingsStore.tableOptions,
+      (name, value) => ({ tableId: draft.id, name, value }),
+    )
     const columns = draft.columns.map((c) => ({
       id: c.id,
       tableId: draft.id,
@@ -260,6 +396,11 @@ async function save() {
       notNull: c.notNull,
       primaryKey: c.primaryKey,
       dict: c.dict || '',
+      options: buildOptionRecord(c._optVals || {}, settingsStore.columnOptions, (name, value) => ({
+        columnId: c.id,
+        name,
+        value,
+      })),
     }))
     const indexes = draft.indexes.map((i) => ({
       id: i.id,
@@ -279,6 +420,8 @@ async function save() {
         parentIdColumn: treeEnabled.value ? draft.parentIdColumn.trim() : undefined,
         x: draft.x,
         y: draft.y,
+        templates: templatesStr,
+        options: tableOptions,
         columns,
         indexes,
       })
@@ -292,6 +435,8 @@ async function save() {
         parentIdColumn: treeEnabled.value ? draft.parentIdColumn.trim() : undefined,
         x: draft.x,
         y: draft.y,
+        templates: templatesStr,
+        options: tableOptions,
         columns,
         indexes,
       })
@@ -367,13 +512,49 @@ async function save() {
           />
         </div>
       </div>
+
+      <div class="form-item full-item">
+        <label>启用模板</label>
+        <div class="tpl-check-row">
+          <a-checkbox-group
+            v-model:value="templatesSelected"
+            :options="templateCheckOptions"
+            class="tpl-check-group"
+          />
+          <span class="field-tip">全选或不配置 = 启用全部模板，代码生成仅包含所选模板</span>
+        </div>
+      </div>
+
+      <div v-if="tableOptionDefs.length" class="form-item full-item">
+        <label>表选项</label>
+        <div class="opt-row">
+          <template v-for="def in tableOptionDefs" :key="def.name">
+            <a-checkbox
+              v-if="def.type === 'boolean'"
+              v-model:checked="draft.optionVals[def.name]"
+              :title="def.remark || def.label"
+            >
+              {{ def.label }}
+            </a-checkbox>
+            <span v-else class="opt-input-wrap" :title="def.remark || def.label">
+              <span class="opt-label">{{ def.label }}</span>
+              <a-input
+                v-model:value="draft.optionVals[def.name]"
+                size="small"
+                class="mono opt-input"
+                :placeholder="def.name"
+              />
+            </span>
+          </template>
+        </div>
+      </div>
     </div>
 
     <a-tabs v-model:active-key="draft.activeTab" size="small" class="edit-tabs">
       <!-- ========== 字段（窄屏整体横向滚动：表头与行同滚） ========== -->
       <a-tab-pane key="columns" :tab="`字段（${draft.columns.length}）`">
         <div class="grid-scroll">
-          <div class="columns-head cols-grid">
+          <div class="columns-head cols-grid" :style="colsGridStyle">
             <span class="h-sort">排序</span>
             <span>字段名</span>
             <span>Java属性名</span>
@@ -383,6 +564,14 @@ async function save() {
             <span class="h-center">主键</span>
             <span>字典</span>
             <span>注释</span>
+            <span
+              v-for="def in columnOptionDefs"
+              :key="def.name"
+              class="h-center opt-head"
+              :title="`${def.label}：${def.remark || def.name}`"
+            >
+              {{ def.label }}
+            </span>
             <span></span>
           </div>
           <div class="columns-body">
@@ -391,6 +580,7 @@ async function save() {
               :key="col.id"
               class="column-row cols-grid"
               :data-idx="idx"
+              :style="colsGridStyle"
               :class="columnDrag.rowClass(idx)"
               :draggable="columnDrag.state.from === idx"
               @dragstart="columnDrag.onDragStart(idx, $event)"
@@ -455,6 +645,23 @@ async function save() {
                 option-filter-prop="label"
               />
               <a-input v-model:value="col.comment" size="small" placeholder="选填" />
+              <template v-for="def in columnOptionDefs" :key="def.name">
+                <div
+                  v-if="def.type === 'boolean'"
+                  class="center-cell"
+                  :title="def.remark || def.label"
+                >
+                  <a-checkbox v-model:checked="col._optVals[def.name]" />
+                </div>
+                <a-input
+                  v-else
+                  v-model:value="col._optVals[def.name]"
+                  size="small"
+                  class="mono opt-col-input"
+                  :placeholder="def.name"
+                  :title="def.remark || def.label"
+                />
+              </template>
               <button class="row-del" type="button" title="删除字段" @click="removeColumn(idx)">
                 <Trash2 :size="12" />
               </button>
@@ -589,6 +796,11 @@ async function save() {
       grid-column: span 2;
     }
 
+    /* 整行表单项（启用模板 / 表选项） */
+    &.full-item {
+      grid-column: 1 / -1;
+    }
+
     label {
       font-size: 11.5px;
       color: var(--dbm-text-2);
@@ -599,6 +811,64 @@ async function save() {
       }
     }
   }
+}
+
+/* 启用模板：复选组 + 提示 */
+.tpl-check-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  min-height: 24px;
+
+  .tpl-check-group {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 2px 10px;
+  }
+
+  .field-tip {
+    font-size: 11px;
+    color: var(--dbm-text-3);
+  }
+}
+
+/* 表选项：勾选/输入混排 */
+.opt-row {
+  display: flex;
+  align-items: center;
+  gap: 6px 14px;
+  flex-wrap: wrap;
+  min-height: 24px;
+
+  .opt-input-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+
+    .opt-label {
+      font-size: 12px;
+      color: var(--dbm-text-2);
+      white-space: nowrap;
+    }
+
+    .opt-input {
+      width: 110px;
+    }
+  }
+}
+
+/* 字段表格选项列（表头与单元格） */
+.opt-head {
+  font-size: 10.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.opt-col-input {
+  width: 100%;
+  min-width: 0;
 }
 
 .tree-row {

@@ -24,6 +24,7 @@ import type {
   LoadResultVO,
   ManagerApi,
   ManagerTable,
+  OptionSetting,
   Settings,
   Table,
   TableCategory,
@@ -55,6 +56,34 @@ function assertRegex(pattern: string): void {
   } catch {
     throw new Error(`无效的正则表达式：${pattern}`)
   }
+}
+
+/** 选项定义归一：名称非空、列表内唯一、类型/标签兜底（label 缺省回退 name） */
+function normalizeOptionSettings(raw: unknown, listLabel?: string): OptionSetting[] {
+  if (!Array.isArray(raw)) return []
+  const seen = new Set<string>()
+  const out: OptionSetting[] = []
+  for (const item of raw) {
+    const o = item as Partial<OptionSetting>
+    const name = String(o?.name ?? '').trim()
+    if (!name) {
+      if (listLabel) throw new Error(`${listLabel}存在空名称`)
+      continue
+    }
+    if (seen.has(name)) {
+      if (listLabel) throw new Error(`${listLabel}名称重复：${name}`)
+      continue
+    }
+    seen.add(name)
+    out.push({
+      name,
+      type: String(o?.type ?? 'boolean').trim() || 'boolean',
+      label: String(o?.label ?? '').trim() || name,
+      remark: String(o?.remark ?? '').trim() || undefined,
+      dict: String(o?.dict ?? '').trim() || undefined,
+    })
+  }
+  return out
 }
 
 const NAVIGATE_TYPES = ['11', '1N', 'N1', 'NN']
@@ -131,7 +160,9 @@ export class DemoManagerApi implements ManagerApi {
 
   async getSettings(): Promise<Settings> {
     const db = getDB()
-    const s = db.settings || ({ indexTypes: [], typeMappings: [] } as Settings)
+    const s =
+      db.settings ||
+      ({ indexTypes: [], typeMappings: [], tableOptions: [], columnOptions: [] } as Settings)
     const typeMappings = (Array.isArray(s.typeMappings) ? s.typeMappings : [])
       .slice()
       .sort((a, b) => a.sort - b.sort)
@@ -143,11 +174,17 @@ export class DemoManagerApi implements ManagerApi {
     const indexTypes = (Array.isArray(s.indexTypes) ? s.indexTypes : [])
       .map((t) => String(t).trim().toUpperCase())
       .filter(Boolean)
-    return { indexTypes, typeMappings }
+    return {
+      indexTypes,
+      typeMappings,
+      author: String(s.author ?? '').trim() || undefined,
+      tableOptions: normalizeOptionSettings(s.tableOptions),
+      columnOptions: normalizeOptionSettings(s.columnOptions),
+    }
   }
 
   async saveSettings(settings: Settings): Promise<void> {
-    // 规则校验：非空 pattern + 合法正则；索引类型去重归一
+    // 规则校验：非空 pattern + 合法正则；索引类型去重归一；选项名称非空唯一
     const typeMappings: TypeMapping[] = (settings.typeMappings || []).map((m, i) => {
       const pattern = String(m.pattern ?? '').trim()
       if (!pattern) throw new Error('存在空的列类型正则表达式')
@@ -166,7 +203,15 @@ export class DemoManagerApi implements ManagerApi {
       indexTypes.push(t)
     }
     if (!indexTypes.length) throw new Error('至少保留一个索引类型')
-    getDB().settings = { indexTypes, typeMappings }
+    const tableOptions = normalizeOptionSettings(settings.tableOptions, '表选项')
+    const columnOptions = normalizeOptionSettings(settings.columnOptions, '列选项')
+    getDB().settings = {
+      indexTypes,
+      typeMappings,
+      author: String(settings.author ?? '').trim() || undefined,
+      tableOptions,
+      columnOptions,
+    }
     persistDB()
   }
 

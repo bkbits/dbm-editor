@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { message } from 'antdv-next'
 import {
   ZoomIn,
@@ -20,12 +20,17 @@ import { useHistoryStore } from '@/stores/history'
 import { useUiStore } from '@/stores/ui'
 import { useTemplateStore } from '@/stores/template'
 import type { GeneratedFile } from '@/types/model'
+import TemplateSelectModal from '@/components/dialog/TemplateSelectModal.vue'
 
 const canvas = useCanvasStore()
 const model = useModelStore()
 const history = useHistoryStore()
 const ui = useUiStore()
 const templateStore = useTemplateStore()
+
+/** 模板选择对话框（生成/替换前勾选本次参与的模板，默认全选） */
+const selectOpen = ref(false)
+const selectMode = ref<'generate' | 'replace'>('generate')
 
 /** 代码生成范围：选中分类 > 选中表 > 全部 */
 const scopeTableIds = computed<string[]>(() => {
@@ -62,21 +67,30 @@ function generate() {
     message.warning('当前没有可生成的表')
     return
   }
-  templateStore.generateAndDownload(scopeTableIds.value)
+  // 先弹模板选择框（默认全选），确认后下载 zip
+  selectMode.value = 'generate'
+  selectOpen.value = true
 }
 
-/** 代码替换：先生成文件，经确认后调用 /api/codegen/replace */
-async function replace() {
+/** 模板选择确认：生成并下载 zip */
+async function onGenerateConfirm(templateNames: string[]) {
+  await templateStore.generateAndDownload(scopeTableIds.value, templateNames)
+}
+
+/** 代码替换：先弹模板选择框，确认后生成文件并进入替换确认 */
+function replace() {
   if (!model.tables.length) {
     message.warning('当前没有可生成的表')
     return
   }
+  selectMode.value = 'replace'
+  selectOpen.value = true
+}
+
+/** 模板选择确认：生成文件，经确认后调用 /api/codegen/replace */
+async function onReplaceConfirm(templateNames: string[]) {
   await templateStore.init()
-  if (!templateStore.templates.length) {
-    message.warning('请先在「模板管理」中创建代码模板')
-    return
-  }
-  const { files } = templateStore.generateFiles(scopeTableIds.value)
+  const { files } = templateStore.generateFiles(scopeTableIds.value, templateNames)
   if (!files.length) {
     message.warning('未生成任何文件')
     return
@@ -172,6 +186,12 @@ async function replace() {
         代码替换
       </a-button>
     </div>
+
+    <TemplateSelectModal
+      v-model:open="selectOpen"
+      :mode="selectMode"
+      @confirm="selectMode === 'generate' ? onGenerateConfirm($event) : onReplaceConfirm($event)"
+    />
   </div>
 </template>
 

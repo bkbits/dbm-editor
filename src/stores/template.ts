@@ -12,6 +12,7 @@ import { errorMessageOf } from '@/api/manager-api'
 import { renderTemplate } from '@/utils/render'
 import { uid } from '@/utils/id'
 import type { ModelStore } from './model'
+import type { SettingsStore } from './settings'
 
 function clone<T>(v: T): T {
   return JSON.parse(JSON.stringify(v)) as T
@@ -21,6 +22,7 @@ function clone<T>(v: T): T {
 export interface TemplateDeps {
   getApi: () => ManagerApi
   getModel: () => ModelStore
+  getSettings: () => SettingsStore
 }
 
 export function createTemplateStore(deps: TemplateDeps) {
@@ -98,24 +100,61 @@ export function createTemplateStore(deps: TemplateDeps) {
       const vo = model.getVO(tableId)
       if (!vo) return null
       const category = model.categoryById(vo.categoryId)
-      return renderTemplate(template.name, template.content, vo, category?.basePackage || '')
+      return renderTemplate(
+        template.name,
+        template.content,
+        vo,
+        category?.basePackage || '',
+        deps.getSettings().snapshot(),
+      )
+    },
+
+    /** 解析表级启用模板（Table.templates 逗号分割；空 = 启用全部） */
+    enabledTemplatesOf(table: Pick<TableVO, 'templates'>): Set<string> | null {
+      const raw = String(table.templates ?? '').trim()
+      if (!raw) return null
+      const names = raw
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+      return names.length ? new Set(names) : null
     },
 
     /**
      * 批量生成代码文件
      * @param tableIds 目标表
+     * @param templateNames 本次选中的模板名称（缺省 = 全部模板）；
+     *   与表级「启用模板」（Table.templates）取交集，模板内置
+     *   context.aborted = true 的产物不进入结果
      */
-    generateFiles(tableIds: string[]): { files: GeneratedFile[]; errors: string[] } {
+    generateFiles(
+      tableIds: string[],
+      templateNames?: string[],
+    ): {
+      files: GeneratedFile[]
+      errors: string[]
+      aborted: string[]
+    } {
       const model = deps.getModel()
+      const settings = deps.getSettings().snapshot()
+      const selected = templateNames?.length ? new Set(templateNames) : null
       const files: GeneratedFile[] = []
       const errors: string[] = []
+      const aborted: string[] = []
       for (const tableId of tableIds) {
         const vo: TableVO | null = model.getVO(tableId)
         if (!vo) continue
         const category = model.categoryById(vo.categoryId)
         const basePackage = category?.basePackage || ''
+        const enabled = this.enabledTemplatesOf(vo)
         for (const tpl of this.templates) {
-          const out = renderTemplate(tpl.name, tpl.content, vo, basePackage)
+          if (selected && !selected.has(tpl.name)) continue
+          if (enabled && !enabled.has(tpl.name)) continue
+          const out = renderTemplate(tpl.name, tpl.content, vo, basePackage, settings)
+          if (out.aborted) {
+            aborted.push(`[${vo.tableName}/${tpl.name}]`)
+            continue
+          }
           if (out.error) {
             errors.push(`[${vo.tableName}/${tpl.name}] ${out.error}`)
           }
@@ -130,7 +169,7 @@ export function createTemplateStore(deps: TemplateDeps) {
           })
         }
       }
-      return { files, errors }
+      return { files, errors, aborted }
     },
 
     /** 将生成文件打包为 zip Blob */
@@ -154,15 +193,19 @@ export function createTemplateStore(deps: TemplateDeps) {
       setTimeout(() => URL.revokeObjectURL(url), 3000)
     },
 
-    /** 代码生成：直接触发下载 zip */
-    async generateAndDownload(tableIds: string[]) {
+    /** 代码生成：直接触发下载 zip（templateNames 为本次选中的模板，缺省全部） */
+    async generateAndDownload(tableIds: string[], templateNames?: string[]) {
       if (!this.templates.length) {
         message.warning('请先在「模板管理」中创建代码模板')
         return
       }
-      const { files, errors } = this.generateFiles(tableIds)
+      const { files, errors, aborted } = this.generateFiles(tableIds, templateNames)
       if (!files.length) {
-        message.warning('未生成任何文件，请检查选择范围与模板')
+        message.warning(
+          aborted.length
+            ? '未生成任何文件：产物均被丢弃（aborted）或未选中，请检查表选项与启用模板'
+            : '未生成任何文件，请检查选择范围与模板',
+        )
         return
       }
       const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '')
@@ -171,18 +214,19 @@ export function createTemplateStore(deps: TemplateDeps) {
       if (errors.length) {
         message.warning(`已生成 ${files.length} 个文件，其中 ${errors.length} 个模板渲染失败`)
       } else {
-        message.success(`已生成并下载 ${files.length} 个代码文件`)
+        const dropTip = aborted.length ? `，丢弃 ${aborted.length} 个模板产物` : ''
+        message.success(`已生成并下载 ${files.length} 个代码文件${dropTip}`)
       }
     },
 
     /** 代码替换：构建 zip 并经 ManagerApi.replace 上传（调用前必须经用户确认）
      *  （成功反馈由 api 实现自行处理，失败 reject 向上传播） */
-    async replaceWithGenerated(tableIds: string[]) {
+    async replaceWithGenerated(tableIds: string[], templateNames?: string[]) {
       if (!this.templates.length) {
         message.warning('请先在「模板管理」中创建代码模板')
         return null
       }
-      const { files } = this.generateFiles(tableIds)
+      const { files } = this.generateFiles(tableIds, templateNames)
       if (!files.length) {
         message.warning('未生成任何文件，请检查选择范围与模板')
         return null

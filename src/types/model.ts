@@ -27,6 +27,10 @@ export interface Table {
   hidden?: boolean // 是否隐藏
   x?: number // x坐标
   y?: number // y坐标
+  /** 启用的模板名称列表，使用 ',' 分割；不存在（空）表示启用当前所有模板 */
+  templates?: string
+  /** 表选项值列表（键为选项名称，见 Settings.tableOptions 定义）；TableVO 经继承获得该属性 */
+  options?: Record<string, TableOption>
 }
 
 /** 表VO：完整表信息（含字段/索引/导航） */
@@ -55,6 +59,8 @@ export interface TableColumn {
   notNull: boolean // 是否非空
   primaryKey: boolean // 是否主键
   dict: string // 关联字典键
+  /** 列选项值列表（键为选项名称，见 Settings.columnOptions 定义） */
+  options?: Record<string, ColumnOption>
 }
 
 /** 索引信息 */
@@ -94,6 +100,7 @@ export interface TableNavigate {
 export interface Navigate {
   propertyName: string // Java属性名(唯一)
   type: NavigateType // 导航关系
+  comment?: string // 导航注释（由原始 TableNavigate.comment 带入）
   self: TableVO // 本表
   selfProperty: string[] // 本表关联属性
   selfMappingProperty: string[]
@@ -102,6 +109,34 @@ export interface Navigate {
   targetProperty: string[] // 目标表关联属性
   targetMappingProperty: string[] // 目标表映射属性
   cascade: NavigateCascade // 级联操作
+}
+
+/* ==================== 选项设置 ==================== */
+
+/** 选项类型（常用类型为内置枚举，亦可为任意自定义类型字符串） */
+export type OptionType = 'boolean' | 'string' | 'int' | 'long' | 'double' | (string & {})
+
+/** 选项设置（表选项/列选项的元定义，由应用设置统一管理） */
+export interface OptionSetting {
+  name: string // 选项名称
+  type: OptionType // 选项类型，支持 boolean/string/int/long/double 及自定义
+  label: string // 选项标签
+  remark?: string // 选项说明
+  dict?: string // 字典
+}
+
+/** 表选项参数（挂在表上的选项值，键为选项名称） */
+export interface TableOption {
+  tableId: string // 所属表id
+  name: string // 选项名称
+  value?: boolean | string | number // 选项值
+}
+
+/** 列选项参数（挂在列上的选项值，键为选项名称） */
+export interface ColumnOption {
+  columnId: string // 所属列id
+  name: string // 选项名称
+  value?: boolean | string | number // 选项值
 }
 
 /** 模板渲染上下文 */
@@ -115,6 +150,10 @@ export interface TemplateContext {
   /** 显式指定 highlight.js 高亮语言（如 java/sql/xml/javascript）；未设置时按文件名后缀自动识别 */
   language?: string
   table: TableVO // 当前表信息
+  /** 应用设置（含作者 author 与表/列选项元定义，供模板生成 javadoc 与选项分支） */
+  settings: Settings
+  /** 是否丢弃本次生成：默认 false；模板内置为 true 时，该产物不打包进 zip */
+  aborted: boolean
   /** 是否存在指定列（按数据库列名精确匹配） */
   hasColumn(columnName: string): boolean
   /** 获取指定列（按数据库列名精确匹配），不存在时返回 undefined */
@@ -216,6 +255,12 @@ export interface TypeMapping {
 export interface Settings {
   indexTypes: string[] // 索引类型列表
   typeMappings: TypeMapping[] // 列类型映射规则列表
+  /** 代码作者（生成 javadoc 的 @author；空则省略该标签） */
+  author?: string
+  /** 表选项设置列表（表编辑对话框按此渲染表选项编辑项） */
+  tableOptions: OptionSetting[]
+  /** 列选项设置列表（表编辑对话框按此渲染列选项编辑项） */
+  columnOptions: OptionSetting[]
 }
 
 /* ==================== 数据库导入（ManagerApi 契约形态） ==================== */

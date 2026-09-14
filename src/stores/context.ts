@@ -51,7 +51,11 @@ export function createDBManagerState(getApi: () => ManagerApi): DBManagerState {
   const dict = createDictStore({ getApi })
   // template / history / model 相互引用，先声明后回填（工厂内以惰性取值函数解耦）
   let model!: ModelStore
-  const template = createTemplateStore({ getApi, getModel: () => model })
+  const template = createTemplateStore({
+    getApi,
+    getModel: () => model,
+    getSettings: () => settings,
+  })
   const history = createHistoryStore({ getModel: () => model })
   model = createModelStore({
     getApi,

@@ -353,6 +353,13 @@ export function createModelStore(deps: ModelDeps) {
         hidden: false,
         x: Number(draft.x ?? 0) || 0,
         y: Number(draft.y ?? 0) || 0,
+        templates: String(draft.templates ?? '').trim() || undefined,
+        // 新表在对话框中尚无真实 id：选项条目的 tableId 归一为落库后的表 id
+        options: draft.options
+          ? Object.fromEntries(
+              Object.entries(clone(draft.options)).map(([k, v]) => [k, { ...v, tableId }]),
+            )
+          : undefined,
       }
       this.tables.push(table)
       this.setColumnsOf(tableId, (draft.columns || []).map(clone))
@@ -387,6 +394,9 @@ export function createModelStore(deps: ModelDeps) {
         parentIdColumn: String(draft.parentIdColumn ?? '').trim() || undefined,
         x: Number(draft.x ?? target.x ?? 0) || 0,
         y: Number(draft.y ?? target.y ?? 0) || 0,
+        // templates/options 采用替换语义（undefined 即清除：启用全部模板/选项全默认）
+        templates: String(draft.templates ?? '').trim() || undefined,
+        options: draft.options ? clone(draft.options) : undefined,
       })
       this.setColumnsOf(tableId, (draft.columns || []).map(clone))
       this.setIndexesOf(tableId, (draft.indexes || []).map(clone))

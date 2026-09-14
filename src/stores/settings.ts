@@ -1,5 +1,5 @@
 /**
- * 设置仓库：索引类型列表 + 列类型映射规则（从数据库导入时的 Java 类型默认映射）
+ * 设置仓库：索引类型列表 + 列类型映射规则 + 代码生成配置（作者 / 表选项 / 列选项元定义）
  * （reactive 对象工厂形态，由 DBManagerView 经上下文注入，不依赖 Pinia；
  *   ManagerApi 经工厂入参 getApi 惰性读取，prop 切换后自动走新实例）
  *
@@ -10,7 +10,7 @@
 import { reactive } from 'vue'
 import { message } from 'antdv-next'
 import { useDBManagerContext } from './context'
-import type { ManagerApi, Settings, TypeMapping } from '@/types/model'
+import type { ManagerApi, OptionSetting, Settings, TypeMapping } from '@/types/model'
 import { errorMessageOf } from '@/api/manager-api'
 import { uid } from '@/utils/id'
 
@@ -38,6 +38,21 @@ export interface SettingsDeps {
   getApi: () => ManagerApi
 }
 
+/** 选项定义归一（api 返回/保存前）：去空白、名称/类型/标签兜底 */
+function normalizeOptionSettings(raw: unknown): OptionSetting[] {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .map((o: Partial<OptionSetting>) => ({
+      name: String(o?.name ?? '').trim(),
+      type: String(o?.type ?? 'boolean').trim() || 'boolean',
+      label: String(o?.label ?? '').trim(),
+      remark: String(o?.remark ?? '').trim() || undefined,
+      dict: String(o?.dict ?? '').trim() || undefined,
+    }))
+    .filter((o) => o.name)
+    .map((o) => ({ ...o, label: o.label || o.name }))
+}
+
 export function createSettingsStore(deps: SettingsDeps) {
   /** 在途加载 Promise：并发调用方共享同一次加载并等待其完成；结束后清空（失败可重试） */
   let initInFlight: Promise<void> | null = null
@@ -46,6 +61,12 @@ export function createSettingsStore(deps: SettingsDeps) {
     loading: false,
     indexTypes: [] as string[],
     typeMappings: [] as TypeMapping[],
+    /** 代码作者（生成 javadoc 的 @author；空则省略） */
+    author: '',
+    /** 表选项元定义（表编辑对话框据此渲染表选项编辑项） */
+    tableOptions: [] as OptionSetting[],
+    /** 列选项元定义（表编辑对话框据此渲染列选项编辑项） */
+    columnOptions: [] as OptionSetting[],
 
     /** 索引类型选项（空时兜底三常规类型，避免设置未加载时无可选项） */
     get indexTypeOptions(): string[] {
@@ -83,6 +104,9 @@ export function createSettingsStore(deps: SettingsDeps) {
             const settings = await deps.getApi().getSettings()
             this.indexTypes = (settings.indexTypes || []).map(String)
             this.typeMappings = (settings.typeMappings || []).map(clone)
+            this.author = String(settings.author ?? '')
+            this.tableOptions = normalizeOptionSettings(settings.tableOptions)
+            this.columnOptions = normalizeOptionSettings(settings.columnOptions)
             this.loaded = true
           } catch (e) {
             message.error(errorMessageOf(e, '设置加载失败'))
@@ -101,8 +125,22 @@ export function createSettingsStore(deps: SettingsDeps) {
       await deps.getApi().saveSettings(saved)
       this.indexTypes = (saved.indexTypes || []).map(String)
       this.typeMappings = (saved.typeMappings || []).map(clone)
+      this.author = String(saved.author ?? '')
+      this.tableOptions = normalizeOptionSettings(saved.tableOptions)
+      this.columnOptions = normalizeOptionSettings(saved.columnOptions)
       this.loaded = true
       return saved
+    },
+
+    /** 当前设置快照（供渲染管线作为 TemplateContext.settings 注入模板） */
+    snapshot(): Settings {
+      return {
+        indexTypes: [...this.indexTypes],
+        typeMappings: clone(this.typeMappings),
+        author: this.author,
+        tableOptions: clone(this.tableOptions),
+        columnOptions: clone(this.columnOptions),
+      }
     },
 
     /**
