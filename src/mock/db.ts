@@ -163,6 +163,25 @@ function loadDB(): MockDB {
           parsed.settings = normalizeSettings(parsed.settings)
           migrated = true
         }
+        // v5.1：审计字段默认名由驼峰改为蛇形（create_by 等）。旧库存的恰好是
+        // 旧默认驼峰名时（用户未自定义的特征签名）升级为新默认蛇形名
+        const audit = (
+          parsed.settings as
+            | { fieldConventions?: { auditFields?: Record<string, { name?: string }> } }
+            | undefined
+        )?.fieldConventions?.auditFields
+        if (
+          audit &&
+          (['createBy', 'createTime', 'updateBy', 'updateTime'] as const).every(
+            (role) => audit[role]?.name === role,
+          )
+        ) {
+          audit.createBy!.name = 'create_by'
+          audit.createTime!.name = 'create_time'
+          audit.updateBy!.name = 'update_by'
+          audit.updateTime!.name = 'update_time'
+          migrated = true
+        }
         // 旧版 hidden 存于独立 localStorage 键（gdbme:hidden），模型未带 hidden 字段：
         // 读取时按旧键合并（存在即读），否则按种子隐藏表名补齐，随即归一落盘
         if (parsed.tables.some((t) => typeof t.hidden !== 'boolean')) {

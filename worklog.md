@@ -863,3 +863,22 @@ Stage Summary:
 - 表编辑不变量：首字段恒为约定主键（不可修改/不可排序/不可删除，打开旧表自动归一）；审计字段按约定一键增删
 - 关键决策：① 非空约束为角色固定语义（创建人/创建时间非空，更新人/更新时间可空）不做成可配置；② 单主键语义——其余列主键标记清除并锁定复选框（与模板 columns.find(c=>c.primaryKey) 假定一致）；③ useDragSort 以 lockCount 选项扩展而非复制实现，既有调用零改动
 - 交付文件：src/utils/fieldConvention.ts（新）+ types/model.ts + stores/settings.ts + mock/{seed,db}.ts + api/demo-manager-api.ts + composables/useDragSort.ts + views/SettingsView.vue + components/dialog/TableEditDialog.vue + README.md
+
+
+---
+Task ID: 29
+Agent: main (Super Z)
+Task: 修正审计字段默认命名为数据库蛇形（create_by/create_time/update_by/update_time，Java 属性名自动转小驼峰）
+
+Work Log:
+- 默认值改为蛇形：utils/fieldConvention.ts DEFAULT_FIELD_CONVENTIONS 与 mock/seed.ts SEED_SETTINGS.fieldConventions 的审计字段名由 createBy/createTime/updateBy/updateTime 改为 create_by/create_time/update_by/update_time（主键 id 不变）；types/model.ts 注释同步「默认为角色名蛇形」
+- 旧库迁移（mock/db.ts）：v5.1——读取时检测约定中四个审计名恰好等于旧驼峰默认名（用户未自定义的特征签名）即升级为新蛇形默认并落盘；用户自定义名称不受影响
+- Java 属性名自动转换保持：makeAuditColumn 的 propertyName = toCamelCase(conv.name, true)，create_by → createBy（toCamelCase 支持下划线分隔，无需改动）
+- 设置页文案（SettingsView）：约定名输入占位符改用 DEFAULT_FIELD_CONVENTIONS 蛇形默认；卡片说明与底部提示补「字段名采用数据库蛇形命名，Java 属性名自动转小驼峰」
+- README：编辑对话框与系统设置两处 createBy 等驼峰表述改为蛇形并注明 Java 属性名自动小驼峰
+- 验证（scripts/verify-field-conventions.sh 30/30 全绿）：新增旧驼峰默认名库迁移断言（手工写入 v5.0 旧默认后 reload → 自动升级蛇形）；约定默认名称/恢复默认断言改蛇形；一键添加审计字段断言增 Java 属性名（create_time 行 DATETIME/createTime/1011111、update_by 行 BIGINT/updateBy/0011111——列名蛇形、属性小驼峰、非空约束、选项默认勾选四合一）；落库断言蛇形；拖拽钳制/归一化/新建表等既有断言不变全过
+- bun run typecheck 通过；vp check 64 文件格式 + 54 文件 lint 零告警；check-readme.py 通过（31 标题）
+
+Stage Summary:
+- 审计字段默认命名对齐数据库列名规范（蛇形）；Java 侧属性名经既有小驼峰转换链路自动得到 createBy 等，模板生成无需感知
+- 旧库兼容：恰好存旧驼峰默认名的设置读取时自动升级；用户显式自定义的名称保持不动

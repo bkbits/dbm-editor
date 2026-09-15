@@ -1651,14 +1651,14 @@ export const SEED_SETTINGS: Settings = {
   author: 'dbm-editor',
   tableOptions: SEED_TABLE_OPTIONS.map((o) => ({ ...o })),
   columnOptions: SEED_COLUMN_OPTIONS.map((o) => ({ ...o })),
-  /** 主键与审计字段约定（默认值，与 utils/fieldConvention.ts 的 DEFAULT_FIELD_CONVENTIONS 一致） */
+  /** 主键与审计字段约定（默认值，与 utils/fieldConvention.ts 的 DEFAULT_FIELD_CONVENTIONS 一致；审计字段蛇形命名，Java 属性名自动转小驼峰） */
   fieldConventions: {
     primaryKey: { name: 'id', type: 'BIGINT' },
     auditFields: {
-      createBy: { name: 'createBy', type: 'BIGINT' },
-      createTime: { name: 'createTime', type: 'DATETIME' },
-      updateBy: { name: 'updateBy', type: 'BIGINT' },
-      updateTime: { name: 'updateTime', type: 'DATETIME' },
+      createBy: { name: 'create_by', type: 'BIGINT' },
+      createTime: { name: 'create_time', type: 'DATETIME' },
+      updateBy: { name: 'update_by', type: 'BIGINT' },
+      updateTime: { name: 'update_time', type: 'DATETIME' },
     },
   },
 }

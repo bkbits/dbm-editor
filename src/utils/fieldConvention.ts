@@ -34,14 +34,14 @@ export const AUDIT_FIELD_NOT_NULL: Record<AuditFieldRole, boolean> = {
   updateTime: false,
 }
 
-/** 默认约定（需求规格：主键 id/BIGINT；审计 createBy/createTime/updateBy/updateTime） */
+/** 默认约定（需求规格：主键 id/BIGINT；审计字段蛇形命名 create_by 等，Java 属性名由小驼峰转换自动得到 createBy） */
 export const DEFAULT_FIELD_CONVENTIONS: FieldConventions = {
   primaryKey: { name: 'id', type: 'BIGINT' },
   auditFields: {
-    createBy: { name: 'createBy', type: 'BIGINT' },
-    createTime: { name: 'createTime', type: 'DATETIME' },
-    updateBy: { name: 'updateBy', type: 'BIGINT' },
-    updateTime: { name: 'updateTime', type: 'DATETIME' },
+    createBy: { name: 'create_by', type: 'BIGINT' },
+    createTime: { name: 'create_time', type: 'DATETIME' },
+    updateBy: { name: 'update_by', type: 'BIGINT' },
+    updateTime: { name: 'update_time', type: 'DATETIME' },
   },
 }
 

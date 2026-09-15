@@ -550,7 +550,8 @@ async function save() {
         </div>
 
         <div class="card-intro">
-          「编辑表」对话框中，每张表的<b>第一个字段固定为主键</b>（按下方约定生成，不可修改、不可排序，每表强制拥有）；「添加审计字段」按下方约定一键补齐四个审计字段（创建人/创建时间强制非空，更新人/更新时间可空），可整组移除。名称与类型保存后对新加入的约定字段生效。
+          「编辑表」对话框中，每张表的<b>第一个字段固定为主键</b>（按下方约定生成，不可修改、不可排序，每表强制拥有）；「添加审计字段」按下方约定一键补齐四个审计字段（创建人/创建时间强制非空，更新人/更新时间可空），可整组移除。名称与类型保存后对新加入的约定字段生效；字段名采用数据库蛇形命名，Java
+          属性名自动转小驼峰。
         </div>
 
         <div class="conv-table">
@@ -597,7 +598,7 @@ async function save() {
               v-model:value="fieldConventions.auditFields[role].name"
               size="small"
               class="mono"
-              :placeholder="role"
+              :placeholder="DEFAULT_FIELD_CONVENTIONS.auditFields[role].name"
               spellcheck="false"
             />
             <a-auto-complete
@@ -633,8 +634,8 @@ async function save() {
             {{ fieldConventionsInvalid }}
           </span>
           <span v-else class="conv-tip">
-            默认：id / createBy / createTime / updateBy /
-            updateTime（非空约束为固定语义，随字段角色而定）
+            默认：id / create_by / create_time / update_by / update_time（Java
+            属性名自动转小驼峰；非空约束为固定语义，随字段角色而定）
           </span>
         </div>
       </section>
