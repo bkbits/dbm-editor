@@ -1013,3 +1013,26 @@ Stage Summary:
 - AI 能力全链路落地：设置（供应商 / 模型 / 规则）→ 契约（三方法，流式标准）→ AGENT 工具页（34+1 工具调用循环、思考流式交互、调用记录面板）；真实浏览器 E2E 17/17 断言通过，并捕获修复「原始对象变更不触发更新」响应式 bug
 - 关键决策：① chatComplete 回调式流式（onDelta 逐片 + Promise 聚合结果）——保持全 Promise 契约、HTTP/IPC 可移植；② AI 设置独立契约（不并入 Settings），设置卡片独立保存；③ replace 不直接注册（Blob 参数不可 JSON 化）而以 replaceCode 合成工具承担；④ 思考强度以 reasoning_effort 随请求下发（模型级配置，supportsThinking 时携带）；⑤ 全局规则仅附加在 AI 工具系统提示（chatComplete 保持通用标准接口）；⑥ 工具执行后按域刷新仓库，画布与各页数据保持一致
 - 沙箱工作流沉淀：dbm-work 隔离克隆（免疫主仓周期性 checkout 重置）+ 单调用原子 E2E 驱动脚本 + agent-browser eval 输出为 JSON 转义文本（断言需 tr -d '"' 或避免 JSON.stringify）+ 截图按守护进程 cwd 解析相对路径（落点在主仓 docs，需移动）
+
+---
+Task ID: 35
+Agent: main (Super Z)
+Task: 设置页与 AI 工具 11 项修复优化（固定保存条 / 分区导航 / AI 统一保存 / 面板防挤压与跟随 / 文本去空白 / markstream 流式渲染 / 发送停止图标 / 生成 zip 下载 / 替换确认 / 默认规则）
+
+Work Log:
+- 11 项需求：① 设置保存按钮固定页面底部不随滚动 ② 设置页分区导航平滑滚动 + scrollspy 高亮 ③ AI 设置随「保存设置」统一保存 ④ 右侧调用记录过多时防挤压 ⑤ 记录面板贴底时新记录跟随滚动 ⑥ 展示文本去头尾空白 ⑦ markstream-vue 流式 markdown 渲染 ⑧ 发送/终止图标显示异常 ⑨ 代码生成打包 zip 缓存 Blob + 下载按钮 ⑩ 代码替换先列文件清单再确认 ⑪ AI 默认规则（读最新值防脏数据 + 五步任务流程）
+- 探测实证：VLM 分析上轮截图确认发送按钮内图标完全不可见——根因 `.send-btn` 用 `--dbm-primary-text`（#0b7a70）与背景 `--dbm-primary`（#0d9488）近乎同色；npm 无 markstream 包，文档站确认 Vue 包名为 markstream-vue（MarkdownRender + mode="chat" + :final + :is-dark，useStickToBottom 工具）
+- 令牌层：variables.scss 新增 `--dbm-on-primary` / `--dbm-on-danger`（亮色白字 / 暗色深字，主色变亮后白字对比不足），发送与停止按钮改用；停止图标 Square 补 fill="currentColor" 实心化
+- 设置页重构：settings-view 改纵筒 flex（settings-body 上 + settings-foot 底部固定不滚动）；新增左侧分区导航（5 项，scrollIntoView 平滑滚动 + scroll 监听 80px 缓冲带高亮，scroll-margin-top 锚点呼吸空间）；AiSettingsSection 去独立保存（defineExpose dirty/invalid/save/resetDraft），SettingsView 统一驱动（dirty 并集 / 校验链尾插 AI / 保存时先 settings 后 AI 两契约先后落盘）；移动端导航转横向滑动胶囊
+- 历史 bug 捕获修复：设置页一加载即「有未保存的修改」——normalizeOptionSettings 把空 remark/dict 转 undefined，与草稿的 '' 键集不一致致 JSON 比较恒不等；改空串保留两侧规范一致
+- AI 工具页：msg/tool-record flex-shrink:0 防挤压；记录面板 scroll 监听 + 贴底时新记录跟随滚底；assistant 正文接 markstream-vue（mode=chat，is-dark 随主题，复合选择器 .md-render.markstream-vue 对接 --ms-text-body/--code-* 令牌，标题段落尺寸收敛适配聊天气泡）；用户消息保持纯文本；完成时 content/reasoning/argsText/resultText/error 统一 trim
+- 代码生成 zip：AgentHooks.registerZip（callId → Blob URL 缓存，重复生成先 revoke）；记录行收起态迷你下载图标 + 展开态完整按钮（文件名/大小/文件数）；clearSession/resetForApiSwitch 释放全部 URL；downloadZip 每次重建 <a> 可重复下载
+- 代码替换确认：requestReplaceConfirm Promise 挂起 + pendingReplace 状态 → a-modal 文件清单（序号/文件名/路径/表/模板/大小，danger 确认按钮）→ resolveReplace 驱动；取消/停止时向模型返回「用户已取消」错误文本；stop() 一并取消待确认替换
+- 默认规则：系统提示改「任务执行流程」五步（读取最新设置与数据、含修改前必读当前值防脏数据；需求不明列选项让用户确认；复杂任务先计划；执行；校验结果）+ 其他约定段
+- E2E（scripts/e2e-task35.sh 32 断言全绿）：三轮 AGENT mock（generateCode → replaceCode 确认弹窗 → 首尾带空白的最终 Markdown）；踩坑修复——① bun add markstream-vue 损坏 antdv-next dist/upload 目录（从主仓补齐 26 文件 + 清 .vite 缓存）② agent-browser placeholder 定位默认精确匹配（改 CSS 选择器 find first/nth）③ MarkdownRender 根元素同时携带 markstream-vue 与 md-render 类（复合类选择器而非后代）④ 单列表格与前表间需插文字断块（check-readme 并块坑）
+- bun run typecheck 通过；vp check 68 文件格式与 lint 全绿；bun run build 库构建通过（markstream-vue 及其样式内联进 DBManager.js）；check-readme 32 标题通过；截图 task35-settings-nav / ai-chat / ai-chat-dark / replace-confirm
+
+Stage Summary:
+- 11 项需求全链路落地并以 32 项浏览器断言 + VLM 视觉复核闭环；顺带修复「设置页加载即 dirty」历史 bug 与发送/停止图标同色隐形问题
+- 关键决策：① 图标前景专用令牌 --dbm-on-*（主色上文字/图标配色与 primary-text 语义分离）② AI 设置保持独立契约但保存动作统一驱动（defineExpose 暴露草稿态）③ zip 缓存按 callId 索引挂在记录上（会话清理统一 revoke）④ 替换确认经 Promise 挂起融入 AGENT 循环（用户取消作为工具错误回填模型，模型可感知并调整）⑤ markstream 根类与业务类同元素，变量覆盖需复合选择器
+- 沙箱对策沿用 dbm-work 隔离克隆（主仓工作区仍被周期性重置）；bun 安装后需校验 node_modules 完整性（antdv-next 目录缺失致 vite 依赖优化崩溃）

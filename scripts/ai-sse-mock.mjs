@@ -1,10 +1,11 @@
 /**
  * AI E2E 模拟服务器：openai compatible /v1/chat/completions 流式接口（SSE）
  *
- * 脚本化两轮 AGENT 对话：
- * - 第一轮（请求无 tool 消息）：reasoning 流 → 正文短句 → tool_calls(getTables) → [DONE]
- * - 第二轮（请求含 tool 消息）：reasoning 流 → Markdown 正文（含代码围栏）→ [DONE]
- * 带 CORS 头（演示应用从 localhost:dev 跨端口访问），chunk 间隔 ~60ms 便于观察流式。
+ * 脚本化三轮 AGENT 对话（按请求中 tool 消息数量区分轮次）：
+ * - 第一轮（0 条 tool 消息）：reasoning 流 → 短正文 → tool_calls(generateCode) → [DONE]
+ * - 第二轮（1 条 tool 消息）：reasoning 流 → tool_calls(replaceCode) → [DONE]
+ * - 第三轮（2 条 tool 消息）：reasoning 流 → Markdown 总结（首尾带空白字符 + 代码围栏）→ [DONE]
+ * 带 CORS 头（演示应用从 localhost:dev 跨端口访问），chunk 间隔 ~400ms 便于观察流式。
  *
  * 用法：node scripts/ai-sse-mock.mjs [port=4833]
  */
@@ -59,23 +60,27 @@ const server = http.createServer((req, res) => {
     } catch {
       /* ignore */
     }
-    const hasToolResult = (parsed.messages || []).some((m) => m.role === 'tool')
+    const toolCount = (parsed.messages || []).filter((m) => m.role === 'tool').length
     console.log(
-      `[mock] model=${parsed.model} messages=${(parsed.messages || []).length} tools=${(parsed.tools || []).length} round=${hasToolResult ? 2 : 1} reasoning_effort=${parsed.reasoning_effort ?? '-'}`,
+      `[mock] model=${parsed.model} messages=${(parsed.messages || []).length} tools=${(parsed.tools || []).length} toolResults=${toolCount} reasoning_effort=${parsed.reasoning_effort ?? '-'}`,
     )
-    if (!hasToolResult) {
-      // 第一轮：思考 + 短正文 + 工具调用
+    if (toolCount === 0) {
+      // 第一轮：思考 + 短正文 + 代码生成工具调用
       sse(
         res,
         [
           { choices: [{ delta: { role: 'assistant' } }] },
-          { choices: [{ delta: { reasoning_content: '用户想了解当前模型概况，' } }] },
+          { choices: [{ delta: { reasoning_content: '用户要生成代码，' } }] },
           {
             choices: [
-              { delta: { reasoning_content: '我先调用 getTables 查询全部表，再汇总回答。' } },
+              {
+                delta: {
+                  reasoning_content: '我先调用 generateCode 生成全部产物，zip 会自动提供下载。',
+                },
+              },
             ],
           },
-          { choices: [{ delta: { content: '我先查询一下当前模型的表结构。' } }] },
+          { choices: [{ delta: { content: '我来生成代码，产物会打包为 zip 供下载。' } }] },
           {
             choices: [
               {
@@ -83,8 +88,8 @@ const server = http.createServer((req, res) => {
                   tool_calls: [
                     {
                       index: 0,
-                      id: 'call_e2e_1',
-                      function: { name: 'getTables', arguments: '{}' },
+                      id: 'call_e2e_gen',
+                      function: { name: 'generateCode', arguments: '{}' },
                     },
                   ],
                 },
@@ -96,26 +101,58 @@ const server = http.createServer((req, res) => {
         ],
         () => console.log('[mock] round 1 done'),
       )
-    } else {
-      // 第二轮：思考 + Markdown 总结（含代码围栏）
+    } else if (toolCount === 1) {
+      // 第二轮：思考 + 代码替换工具调用（前端应弹出文件清单确认框）
       sse(
         res,
         [
           { choices: [{ delta: { role: 'assistant' } }] },
-          { choices: [{ delta: { reasoning_content: '工具返回了表列表，整理为简明摘要。' } }] },
+          {
+            choices: [
+              { delta: { reasoning_content: '生成完成，接着执行代码替换，需要用户确认。' } },
+            ],
+          },
+          { choices: [{ delta: { content: '接下来执行代码替换。' } }] },
+          {
+            choices: [
+              {
+                delta: {
+                  tool_calls: [
+                    {
+                      index: 0,
+                      id: 'call_e2e_replace',
+                      function: { name: 'replaceCode', arguments: '{}' },
+                    },
+                  ],
+                },
+                finish_reason: null,
+              },
+            ],
+          },
+          { choices: [{ delta: {}, finish_reason: 'tool_calls' }] },
+        ],
+        () => console.log('[mock] round 2 done'),
+      )
+    } else {
+      // 第三轮：思考 + Markdown 总结（首尾空白字符用于验证去空白收口）
+      sse(
+        res,
+        [
+          { choices: [{ delta: { role: 'assistant' } }] },
+          { choices: [{ delta: { reasoning_content: '工具全部执行完成，整理总结。' } }] },
           {
             choices: [
               {
                 delta: {
                   content:
-                    '## 查询结果\n\n当前模型共有 **2** 张表：\n\n- `user` 用户表\n- `role` 角色表\n\n示例实体：\n\n```java\npublic class User {\n    private Long id;\n}\n```\n任务完成。',
+                    '\n\n## 任务完成\n\n共生成 **多份** 代码产物：\n\n- `SysUser` 实体与服务\n- controller 与 vue 页面\n\n示例：\n\n```java\npublic class SysUser {\n    private Long id;\n}\n```\n已全部完成。\n\n  ',
                 },
               },
             ],
           },
           { choices: [{ delta: {}, finish_reason: 'stop' }] },
         ],
-        () => console.log('[mock] round 2 done'),
+        () => console.log('[mock] round 3 done'),
       )
     }
   })

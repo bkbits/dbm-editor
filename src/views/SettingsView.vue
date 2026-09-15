@@ -2,6 +2,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { message } from 'antdv-next'
 import {
+  Bot,
   Plus,
   Trash2,
   GripVertical,
@@ -294,9 +295,14 @@ const fieldConventionsInvalid = computed(() => {
   return null
 })
 
-/* ==================== 保存 / 放弃（设置整体） ==================== */
+/* ==================== 保存 / 放弃（设置整体，含 AI 区块） ==================== */
 
 const saving = reactive({ loading: false })
+
+/* AI 区块（独立契约组件，经 defineExpose 暴露 dirty / invalid / save / resetDraft） */
+const aiSection = ref<InstanceType<typeof AiSettingsSection> | null>(null)
+const aiDirty = computed(() => Boolean(aiSection.value?.dirty))
+const aiInvalid = computed(() => aiSection.value?.invalid ?? null)
 
 const dirty = computed(
   () =>
@@ -308,7 +314,8 @@ const dirty = computed(
       JSON.stringify(settingsStore.tableOptions) ||
     JSON.stringify(columnOptions.value.map(({ key: _k, ...o }) => o)) !==
       JSON.stringify(settingsStore.columnOptions) ||
-    JSON.stringify(fieldConventions.value) !== JSON.stringify(settingsStore.fieldConventions),
+    JSON.stringify(fieldConventions.value) !== JSON.stringify(settingsStore.fieldConventions) ||
+    aiDirty.value,
 )
 
 function resetDraft() {
@@ -318,6 +325,7 @@ function resetDraft() {
   tableOptions.value = toDefDrafts(settingsStore.tableOptions)
   columnOptions.value = toDefDrafts(settingsStore.columnOptions)
   fieldConventions.value = normalizeFieldConventions(settingsStore.fieldConventions)
+  aiSection.value?.resetDraft()
 }
 
 async function save() {
@@ -335,6 +343,10 @@ async function save() {
   }
   if (fieldConventionsInvalid.value) {
     message.warning(`主键与审计字段约定无效：${fieldConventionsInvalid.value}`)
+    return
+  }
+  if (aiInvalid.value) {
+    message.warning(`AI 设置无效：${aiInvalid.value}`)
     return
   }
   saving.loading = true
@@ -361,6 +373,7 @@ async function save() {
         dict: o.dict?.trim(),
       })),
     })
+    if (aiSection.value?.dirty) await aiSection.value.save()
     message.success('设置已保存')
   } catch (e: unknown) {
     message.error(errorMessageOf(e, '保存失败'))
@@ -368,401 +381,478 @@ async function save() {
     saving.loading = false
   }
 }
+
+/* ==================== 分区导航（点击平滑滚动 + 滚动高亮） ==================== */
+
+const sections = [
+  { id: 'sec-type-mapping', label: '列默认类型', icon: SlidersHorizontal },
+  { id: 'sec-index-types', label: '索引类型', icon: Layers },
+  { id: 'sec-field-conventions', label: '主键与审计字段', icon: KeyRound },
+  { id: 'sec-codegen', label: '代码生成', icon: Code2 },
+  { id: 'sec-ai', label: 'AI', icon: Bot },
+]
+
+const scrollEl = ref<HTMLElement>()
+const activeSection = ref(sections[0]!.id)
+
+function scrollToSection(id: string) {
+  activeSection.value = id
+  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+/** 滚动监听：当前命中分区高亮（顶部 80px 缓冲带内首个分区） */
+function onSettingsScroll() {
+  const el = scrollEl.value
+  if (!el) return
+  let current = sections[0]!.id
+  for (const s of sections) {
+    const sec = document.getElementById(s.id)
+    if (sec && sec.offsetTop <= el.scrollTop + 80) current = s.id
+  }
+  activeSection.value = current
+}
 </script>
 
 <template>
   <div class="settings-view">
-    <div class="settings-inner">
-      <header class="page-head">
-        <span class="head-icon"><Settings :size="17" :stroke-width="2" /></span>
-        <div class="head-text">
-          <h1>系统设置</h1>
-          <p>应用偏好配置，保存后立即生效并持久化</p>
-        </div>
-      </header>
+    <div class="settings-body">
+      <!-- 分区导航：点击平滑滚动到对应设置项，滚动时自动高亮当前分区 -->
+      <nav class="settings-nav">
+        <span class="nav-title">设置项</span>
+        <button
+          v-for="s in sections"
+          :key="s.id"
+          class="nav-item"
+          :class="{ active: activeSection === s.id }"
+          type="button"
+          @click="scrollToSection(s.id)"
+        >
+          <component :is="s.icon" :size="13" />
+          <span>{{ s.label }}</span>
+        </button>
+      </nav>
 
-      <section class="settings-card">
-        <div class="card-head">
-          <span class="card-title">列默认类型</span>
-          <span class="card-sub">从数据库导入时 Java 类型的默认映射</span>
-        </div>
+      <div ref="scrollEl" class="settings-scroll" @scroll="onSettingsScroll">
+        <div class="settings-inner">
+          <header class="page-head">
+            <span class="head-icon"><Settings :size="17" :stroke-width="2" /></span>
+            <div class="head-text">
+              <h1>系统设置</h1>
+              <p>应用偏好配置，保存后立即生效并持久化</p>
+            </div>
+          </header>
 
-        <div class="card-intro">
-          从数据库导入表时，对每个字段的数据库类型（如
-          <code class="mono">VARCHAR(255)</code>、<code class="mono">Decimal(6, 4)</code
-          >）按下列规则
-          <b>自上而下依次</b>进行正则表达式匹配（忽略大小写），取<b>第一条命中</b>规则的 Java
-          类型作为该字段的默认 Java 类型；全部未命中时回退内置类型映射表（仍无映射则为
-          String）。规则顺序（sort）即优先级，可拖拽调整。
-        </div>
+          <section id="sec-type-mapping" class="settings-card">
+            <div class="card-head">
+              <span class="card-title">列默认类型</span>
+              <span class="card-sub">从数据库导入时 Java 类型的默认映射</span>
+            </div>
 
-        <div class="rules-table">
-          <div class="r-head r-grid">
-            <span class="h-sort">排序</span>
-            <span class="h-center">#</span>
-            <span>列类型正则表达式（忽略大小写）</span>
-            <span>Java 类型</span>
-            <span class="h-center">测试</span>
-            <span></span>
-          </div>
-          <div class="r-body">
-            <div
-              v-for="(rule, idx) in rules"
-              :key="rule.key"
-              class="r-row r-grid"
-              :data-idx="idx"
-              :class="drag.rowClass(idx)"
-              :draggable="drag.state.from === idx"
-              @dragstart="drag.onDragStart(idx, $event)"
-              @dragend="drag.onDragEnd()"
-              @dragover.prevent="drag.onDragOver(idx, $event)"
-              @drop.prevent="drag.onDrop()"
-            >
-              <span
-                class="drag-handle"
-                title="拖拽调整规则优先级"
-                @pointerdown="drag.handleDown(idx)"
-              >
-                <GripVertical :size="13" />
+            <div class="card-intro">
+              从数据库导入表时，对每个字段的数据库类型（如
+              <code class="mono">VARCHAR(255)</code>、<code class="mono">Decimal(6, 4)</code
+              >）按下列规则
+              <b>自上而下依次</b>进行正则表达式匹配（忽略大小写），取<b>第一条命中</b>规则的 Java
+              类型作为该字段的默认 Java 类型；全部未命中时回退内置类型映射表（仍无映射则为
+              String）。规则顺序（sort）即优先级，可拖拽调整。
+            </div>
+
+            <div class="rules-table">
+              <div class="r-head r-grid">
+                <span class="h-sort">排序</span>
+                <span class="h-center">#</span>
+                <span>列类型正则表达式（忽略大小写）</span>
+                <span>Java 类型</span>
+                <span class="h-center">测试</span>
+                <span></span>
+              </div>
+              <div class="r-body">
+                <div
+                  v-for="(rule, idx) in rules"
+                  :key="rule.key"
+                  class="r-row r-grid"
+                  :data-idx="idx"
+                  :class="drag.rowClass(idx)"
+                  :draggable="drag.state.from === idx"
+                  @dragstart="drag.onDragStart(idx, $event)"
+                  @dragend="drag.onDragEnd()"
+                  @dragover.prevent="drag.onDragOver(idx, $event)"
+                  @drop.prevent="drag.onDrop()"
+                >
+                  <span
+                    class="drag-handle"
+                    title="拖拽调整规则优先级"
+                    @pointerdown="drag.handleDown(idx)"
+                  >
+                    <GripVertical :size="13" />
+                  </span>
+                  <span class="rule-index mono">{{ idx + 1 }}</span>
+                  <div class="pattern-cell" :class="{ invalid: Boolean(regexError(rule)) }">
+                    <a-input
+                      v-model:value="rule.pattern"
+                      size="small"
+                      class="mono"
+                      placeholder="如 ^\s*varchar"
+                      spellcheck="false"
+                    />
+                    <span v-if="regexError(rule)" class="pattern-err">{{ regexError(rule) }}</span>
+                  </div>
+                  <a-select
+                    v-model:value="rule.javaType"
+                    :options="javaTypeOptions"
+                    size="small"
+                    class="java-select"
+                  />
+                  <span
+                    class="rule-test"
+                    :class="{ first: firstHit && firstHit.index === idx, hit: rowMatch(idx) }"
+                    :title="
+                      firstHit && firstHit.index === idx
+                        ? '当前测试输入命中的第一条规则（生效）'
+                        : rowMatch(idx)
+                          ? '该规则也匹配，但被上方更靠前的规则抢先命中'
+                          : '未命中当前测试输入'
+                    "
+                  >
+                    {{ firstHit && firstHit.index === idx ? '生效' : rowMatch(idx) ? '命中' : '—' }}
+                  </span>
+                  <button class="row-del" type="button" title="删除规则" @click="removeRule(idx)">
+                    <Trash2 :size="12" />
+                  </button>
+                </div>
+                <div v-if="!rules.length" class="r-empty">
+                  暂无规则；未命中任何规则时，导入将回退内置类型映射
+                </div>
+              </div>
+            </div>
+
+            <a-button size="small" type="dashed" block class="add-btn" @click="addRule">
+              <template #icon><Plus :size="12" /></template>
+              添加规则
+            </a-button>
+
+            <div class="test-panel">
+              <span class="test-label"><FlaskConical :size="13" /> 规则测试</span>
+              <a-auto-complete
+                v-model:value="testType"
+                :options="testTypeOptions"
+                size="small"
+                class="mono test-input"
+                placeholder="输入数据库类型实时预览，如 VARCHAR(255) / Decimal(6, 4)"
+                :filter-option="
+                  (input: string, option: any) =>
+                    String(option.value).toUpperCase().includes(input.toUpperCase())
+                "
+              />
+              <div class="test-result">
+                <template v-if="firstHit">
+                  <span class="type-badge hit">{{ firstHit.javaType }}</span>
+                  <span class="hit-desc">
+                    命中规则 <b>#{{ firstHit.index + 1 }}</b
+                    >：
+                    <code class="mono">{{ rules[firstHit.index]?.pattern }}</code>
+                  </span>
+                </template>
+                <template v-else-if="testRaw">
+                  <span class="type-badge fallback">{{ fallbackType }}</span>
+                  <span class="hit-desc">未命中任何规则，导入时回退内置类型映射</span>
+                </template>
+                <span v-else class="test-placeholder"
+                  >输入数据库类型后实时预览匹配结果（含未保存修改）</span
+                >
+              </div>
+            </div>
+          </section>
+
+          <section id="sec-index-types" class="settings-card">
+            <div class="card-head">
+              <span class="card-title"><Layers :size="13" /> 索引类型</span>
+              <span class="card-sub">表编辑与数据库导入中索引类型的可选列表</span>
+            </div>
+
+            <div class="card-intro">
+              管理索引类型选项（如 <code class="mono">UNIQUE</code> /
+              <code class="mono">NORMAL</code> /
+              <code class="mono">FULLTEXT</code
+              >）。保存后「编辑表」对话框的索引类型下拉选项将使用该列表；
+              从数据库导入表时，不在列表中的索引类型将归一为列表第一项。至少保留一个类型。
+            </div>
+
+            <div class="index-types">
+              <span v-for="(t, i) in indexTypes" :key="t" class="index-chip mono">
+                {{ t }}
+                <button
+                  class="chip-close"
+                  type="button"
+                  title="移除类型"
+                  @click="removeIndexType(i)"
+                >
+                  <X :size="10" />
+                </button>
               </span>
-              <span class="rule-index mono">{{ idx + 1 }}</span>
-              <div class="pattern-cell" :class="{ invalid: Boolean(regexError(rule)) }">
+              <span v-if="!indexTypes.length" class="index-empty"
+                >索引类型列表为空，保存前请至少添加一个类型</span
+              >
+            </div>
+
+            <div class="index-add">
+              <a-input
+                v-model:value="newIndexType"
+                size="small"
+                class="mono index-input"
+                placeholder="如 SPATIAL（回车添加，自动转大写）"
+                spellcheck="false"
+                @keydown.enter="addIndexType"
+              />
+              <a-button size="small" @click="addIndexType">
+                <template #icon><Plus :size="12" /></template>
+                添加
+              </a-button>
+            </div>
+          </section>
+
+          <section id="sec-field-conventions" class="settings-card">
+            <div class="card-head">
+              <span class="card-title"><KeyRound :size="13" /> 主键与审计字段</span>
+              <span class="card-sub">表结构字段约定：主键固定首字段，审计字段一键增删</span>
+            </div>
+
+            <div class="card-intro">
+              「编辑表」对话框中，每张表的<b>第一个字段固定为主键</b>（按下方约定生成，不可修改、不可排序，每表强制拥有，Java
+              类型按「列默认类型」规则自动推导）；「添加审计字段」按下方约定一键补齐四个审计字段（创建人/创建时间强制非空，更新人/更新时间可空），可整组移除。名称、类型与审计字段
+              Java 类型保存后对新加入的约定字段生效；审计字段 Java
+              类型留空时按「列默认类型」规则自动推导、随类型联动，设定后固定使用该值；字段名采用数据库蛇形命名，Java
+              属性名自动转小驼峰。
+            </div>
+
+            <div class="conv-table">
+              <div class="conv-grid conv-head">
+                <span>字段</span>
+                <span>名称</span>
+                <span>数据库类型</span>
+                <span class="h-center">Java 类型</span>
+                <span class="h-center">非空</span>
+                <span class="h-center">主键</span>
+              </div>
+              <div class="conv-row conv-grid conv-pk">
+                <span class="conv-label">主键ID</span>
                 <a-input
-                  v-model:value="rule.pattern"
+                  v-model:value="fieldConventions.primaryKey.name"
                   size="small"
                   class="mono"
-                  placeholder="如 ^\s*varchar"
+                  placeholder="id"
                   spellcheck="false"
                 />
-                <span v-if="regexError(rule)" class="pattern-err">{{ regexError(rule) }}</span>
+                <a-auto-complete
+                  v-model:value="fieldConventions.primaryKey.type"
+                  :options="convTypeOptions"
+                  size="small"
+                  class="mono"
+                  placeholder="BIGINT"
+                  :filter-option="
+                    (input: string, option: any) =>
+                      String(option.value).toUpperCase().includes(input.toUpperCase())
+                  "
+                />
+                <span
+                  class="conv-java mono"
+                  :title="`Java 类型（按「列默认类型」规则自动推导）：${javaOf(fieldConventions.primaryKey.type)}`"
+                >
+                  {{ javaOf(fieldConventions.primaryKey.type) }}
+                </span>
+                <span class="conv-tag required">非空</span>
+                <span class="conv-tag pk">主键</span>
               </div>
-              <a-select
-                v-model:value="rule.javaType"
-                :options="javaTypeOptions"
-                size="small"
-                class="java-select"
-              />
-              <span
-                class="rule-test"
-                :class="{ first: firstHit && firstHit.index === idx, hit: rowMatch(idx) }"
-                :title="
-                  firstHit && firstHit.index === idx
-                    ? '当前测试输入命中的第一条规则（生效）'
-                    : rowMatch(idx)
-                      ? '该规则也匹配，但被上方更靠前的规则抢先命中'
-                      : '未命中当前测试输入'
-                "
-              >
-                {{ firstHit && firstHit.index === idx ? '生效' : rowMatch(idx) ? '命中' : '—' }}
+              <div v-for="role in AUDIT_FIELD_ROLES" :key="role" class="conv-row conv-grid">
+                <span class="conv-label">{{ AUDIT_FIELD_LABELS[role] }}</span>
+                <a-input
+                  v-model:value="fieldConventions.auditFields[role].name"
+                  size="small"
+                  class="mono"
+                  :placeholder="DEFAULT_FIELD_CONVENTIONS.auditFields[role].name"
+                  spellcheck="false"
+                />
+                <a-auto-complete
+                  v-model:value="fieldConventions.auditFields[role].type"
+                  :options="convTypeOptions"
+                  size="small"
+                  class="mono"
+                  :placeholder="fieldConventions.auditFields[role].type"
+                  :filter-option="
+                    (input: string, option: any) =>
+                      String(option.value).toUpperCase().includes(input.toUpperCase())
+                  "
+                />
+                <a-auto-complete
+                  v-model:value="fieldConventions.auditFields[role].javaType"
+                  :options="javaTypeOptions"
+                  size="small"
+                  class="mono conv-java-input"
+                  allow-clear
+                  :placeholder="javaOf(fieldConventions.auditFields[role].type)"
+                  :filter-option="
+                    (input: string, option: any) =>
+                      String(option.value).toLowerCase().includes(input.toLowerCase())
+                  "
+                />
+                <span
+                  class="conv-tag"
+                  :class="AUDIT_FIELD_NOT_NULL[role] ? 'required' : 'optional'"
+                >
+                  {{ AUDIT_FIELD_NOT_NULL[role] ? '非空' : '可空' }}
+                </span>
+                <span class="conv-dash">—</span>
+              </div>
+            </div>
+
+            <div class="conv-foot">
+              <a-button size="small" @click="resetFieldConventions">
+                <template #icon><RotateCcw :size="12" /></template>
+                恢复默认
+              </a-button>
+              <span v-if="fieldConventionsInvalid" class="conv-invalid">
+                {{ fieldConventionsInvalid }}
               </span>
-              <button class="row-del" type="button" title="删除规则" @click="removeRule(idx)">
-                <Trash2 :size="12" />
-              </button>
-            </div>
-            <div v-if="!rules.length" class="r-empty">
-              暂无规则；未命中任何规则时，导入将回退内置类型映射
-            </div>
-          </div>
-        </div>
-
-        <a-button size="small" type="dashed" block class="add-btn" @click="addRule">
-          <template #icon><Plus :size="12" /></template>
-          添加规则
-        </a-button>
-
-        <div class="test-panel">
-          <span class="test-label"><FlaskConical :size="13" /> 规则测试</span>
-          <a-auto-complete
-            v-model:value="testType"
-            :options="testTypeOptions"
-            size="small"
-            class="mono test-input"
-            placeholder="输入数据库类型实时预览，如 VARCHAR(255) / Decimal(6, 4)"
-            :filter-option="
-              (input: string, option: any) =>
-                String(option.value).toUpperCase().includes(input.toUpperCase())
-            "
-          />
-          <div class="test-result">
-            <template v-if="firstHit">
-              <span class="type-badge hit">{{ firstHit.javaType }}</span>
-              <span class="hit-desc">
-                命中规则 <b>#{{ firstHit.index + 1 }}</b
-                >：
-                <code class="mono">{{ rules[firstHit.index]?.pattern }}</code>
+              <span v-else class="conv-tip">
+                默认：id / create_by / create_time / update_by / update_time（Java
+                属性名自动转小驼峰；非空约束为固定语义，随字段角色而定；审计字段 Java 类型留空 =
+                按类型映射自动推导）
               </span>
-            </template>
-            <template v-else-if="testRaw">
-              <span class="type-badge fallback">{{ fallbackType }}</span>
-              <span class="hit-desc">未命中任何规则，导入时回退内置类型映射</span>
-            </template>
-            <span v-else class="test-placeholder"
-              >输入数据库类型后实时预览匹配结果（含未保存修改）</span
-            >
-          </div>
-        </div>
-      </section>
-
-      <section class="settings-card">
-        <div class="card-head">
-          <span class="card-title"><Layers :size="13" /> 索引类型</span>
-          <span class="card-sub">表编辑与数据库导入中索引类型的可选列表</span>
-        </div>
-
-        <div class="card-intro">
-          管理索引类型选项（如 <code class="mono">UNIQUE</code> / <code class="mono">NORMAL</code> /
-          <code class="mono">FULLTEXT</code
-          >）。保存后「编辑表」对话框的索引类型下拉选项将使用该列表；
-          从数据库导入表时，不在列表中的索引类型将归一为列表第一项。至少保留一个类型。
-        </div>
-
-        <div class="index-types">
-          <span v-for="(t, i) in indexTypes" :key="t" class="index-chip mono">
-            {{ t }}
-            <button class="chip-close" type="button" title="移除类型" @click="removeIndexType(i)">
-              <X :size="10" />
-            </button>
-          </span>
-          <span v-if="!indexTypes.length" class="index-empty"
-            >索引类型列表为空，保存前请至少添加一个类型</span
-          >
-        </div>
-
-        <div class="index-add">
-          <a-input
-            v-model:value="newIndexType"
-            size="small"
-            class="mono index-input"
-            placeholder="如 SPATIAL（回车添加，自动转大写）"
-            spellcheck="false"
-            @keydown.enter="addIndexType"
-          />
-          <a-button size="small" @click="addIndexType">
-            <template #icon><Plus :size="12" /></template>
-            添加
-          </a-button>
-        </div>
-      </section>
-
-      <section class="settings-card">
-        <div class="card-head">
-          <span class="card-title"><KeyRound :size="13" /> 主键与审计字段</span>
-          <span class="card-sub">表结构字段约定：主键固定首字段，审计字段一键增删</span>
-        </div>
-
-        <div class="card-intro">
-          「编辑表」对话框中，每张表的<b>第一个字段固定为主键</b>（按下方约定生成，不可修改、不可排序，每表强制拥有，Java
-          类型按「列默认类型」规则自动推导）；「添加审计字段」按下方约定一键补齐四个审计字段（创建人/创建时间强制非空，更新人/更新时间可空），可整组移除。名称、类型与审计字段
-          Java 类型保存后对新加入的约定字段生效；审计字段 Java
-          类型留空时按「列默认类型」规则自动推导、随类型联动，设定后固定使用该值；字段名采用数据库蛇形命名，Java
-          属性名自动转小驼峰。
-        </div>
-
-        <div class="conv-table">
-          <div class="conv-grid conv-head">
-            <span>字段</span>
-            <span>名称</span>
-            <span>数据库类型</span>
-            <span class="h-center">Java 类型</span>
-            <span class="h-center">非空</span>
-            <span class="h-center">主键</span>
-          </div>
-          <div class="conv-row conv-grid conv-pk">
-            <span class="conv-label">主键ID</span>
-            <a-input
-              v-model:value="fieldConventions.primaryKey.name"
-              size="small"
-              class="mono"
-              placeholder="id"
-              spellcheck="false"
-            />
-            <a-auto-complete
-              v-model:value="fieldConventions.primaryKey.type"
-              :options="convTypeOptions"
-              size="small"
-              class="mono"
-              placeholder="BIGINT"
-              :filter-option="
-                (input: string, option: any) =>
-                  String(option.value).toUpperCase().includes(input.toUpperCase())
-              "
-            />
-            <span
-              class="conv-java mono"
-              :title="`Java 类型（按「列默认类型」规则自动推导）：${javaOf(fieldConventions.primaryKey.type)}`"
-            >
-              {{ javaOf(fieldConventions.primaryKey.type) }}
-            </span>
-            <span class="conv-tag required">非空</span>
-            <span class="conv-tag pk">主键</span>
-          </div>
-          <div v-for="role in AUDIT_FIELD_ROLES" :key="role" class="conv-row conv-grid">
-            <span class="conv-label">{{ AUDIT_FIELD_LABELS[role] }}</span>
-            <a-input
-              v-model:value="fieldConventions.auditFields[role].name"
-              size="small"
-              class="mono"
-              :placeholder="DEFAULT_FIELD_CONVENTIONS.auditFields[role].name"
-              spellcheck="false"
-            />
-            <a-auto-complete
-              v-model:value="fieldConventions.auditFields[role].type"
-              :options="convTypeOptions"
-              size="small"
-              class="mono"
-              :placeholder="fieldConventions.auditFields[role].type"
-              :filter-option="
-                (input: string, option: any) =>
-                  String(option.value).toUpperCase().includes(input.toUpperCase())
-              "
-            />
-            <a-auto-complete
-              v-model:value="fieldConventions.auditFields[role].javaType"
-              :options="javaTypeOptions"
-              size="small"
-              class="mono conv-java-input"
-              allow-clear
-              :placeholder="javaOf(fieldConventions.auditFields[role].type)"
-              :filter-option="
-                (input: string, option: any) =>
-                  String(option.value).toLowerCase().includes(input.toLowerCase())
-              "
-            />
-            <span class="conv-tag" :class="AUDIT_FIELD_NOT_NULL[role] ? 'required' : 'optional'">
-              {{ AUDIT_FIELD_NOT_NULL[role] ? '非空' : '可空' }}
-            </span>
-            <span class="conv-dash">—</span>
-          </div>
-        </div>
-
-        <div class="conv-foot">
-          <a-button size="small" @click="resetFieldConventions">
-            <template #icon><RotateCcw :size="12" /></template>
-            恢复默认
-          </a-button>
-          <span v-if="fieldConventionsInvalid" class="conv-invalid">
-            {{ fieldConventionsInvalid }}
-          </span>
-          <span v-else class="conv-tip">
-            默认：id / create_by / create_time / update_by / update_time（Java
-            属性名自动转小驼峰；非空约束为固定语义，随字段角色而定；审计字段 Java 类型留空 =
-            按类型映射自动推导）
-          </span>
-        </div>
-      </section>
-
-      <section class="settings-card">
-        <div class="card-head">
-          <span class="card-title"><Code2 :size="13" /> 代码生成</span>
-          <span class="card-sub">javadoc 作者与表/列选项元定义</span>
-        </div>
-
-        <div class="card-intro">
-          生成 java 代码时，类与方法 javadoc 会携带
-          <code class="mono">@author 作者</code> 与生成时刻的
-          <code class="mono">@since yyyy-MM-dd HH:mm:ss</code>；表选项与列选项定义控制
-          「编辑表」对话框中的选项编辑项，模板按选项值选择性生成代码（选项值缺省视为启用）。
-        </div>
-
-        <div class="author-row">
-          <label>作者（@author）</label>
-          <a-input
-            v-model:value="author"
-            class="author-input"
-            placeholder="如 zhangsan（留空则生成代码省略 @author）"
-            spellcheck="false"
-          />
-        </div>
-
-        <div class="opt-defs">
-          <div class="defs-title">
-            <SlidersHorizontal :size="12" />
-            表选项（默认：查询 / 添加 / 更新 / 删除，驱动 mapper / service / controller 分支）
-          </div>
-          <div class="defs-head defs-grid">
-            <span>名称</span>
-            <span>类型</span>
-            <span>标签</span>
-            <span>说明</span>
-            <span>字典</span>
-            <span></span>
-          </div>
-          <div class="defs-body">
-            <div v-for="(o, i) in tableOptions" :key="o.key" class="defs-row defs-grid">
-              <a-input v-model:value="o.name" size="small" class="mono" placeholder="如 query" />
-              <a-auto-complete
-                v-model:value="o.type"
-                :options="optionTypeOptions"
-                size="small"
-                class="mono"
-                placeholder="boolean"
-                :filter-option="
-                  (input: string, option: any) =>
-                    String(option.value).toLowerCase().includes(input.toLowerCase())
-                "
-              />
-              <a-input v-model:value="o.label" size="small" placeholder="如 查询" />
-              <a-input v-model:value="o.remark" size="small" placeholder="是否启用查询" />
-              <a-input v-model:value="o.dict" size="small" class="mono" placeholder="选填" />
-              <button class="row-del" type="button" title="删除选项" @click="removeTableOption(i)">
-                <Trash2 :size="12" />
-              </button>
             </div>
-            <div v-if="!tableOptions.length" class="r-empty">暂无表选项定义</div>
-          </div>
-          <a-button size="small" type="dashed" block class="add-btn" @click="addTableOption">
-            <template #icon><Plus :size="12" /></template>
-            添加表选项
-          </a-button>
-        </div>
+          </section>
 
-        <div class="opt-defs">
-          <div class="defs-title">
-            <SlidersHorizontal :size="12" />
-            列选项（默认：显示 / 查询 / 添加 / 更新 / 删除，驱动 controller 查询条件与 vue
-            列表/表单）
-          </div>
-          <div class="defs-head defs-grid">
-            <span>名称</span>
-            <span>类型</span>
-            <span>标签</span>
-            <span>说明</span>
-            <span>字典</span>
-            <span></span>
-          </div>
-          <div class="defs-body">
-            <div v-for="(o, i) in columnOptions" :key="o.key" class="defs-row defs-grid">
-              <a-input v-model:value="o.name" size="small" class="mono" placeholder="如 show" />
-              <a-auto-complete
-                v-model:value="o.type"
-                :options="optionTypeOptions"
-                size="small"
-                class="mono"
-                placeholder="boolean"
-                :filter-option="
-                  (input: string, option: any) =>
-                    String(option.value).toLowerCase().includes(input.toLowerCase())
-                "
-              />
-              <a-input v-model:value="o.label" size="small" placeholder="如 显示" />
-              <a-input v-model:value="o.remark" size="small" placeholder="是否启用列表中显示" />
-              <a-input v-model:value="o.dict" size="small" class="mono" placeholder="选填" />
-              <button class="row-del" type="button" title="删除选项" @click="removeColumnOption(i)">
-                <Trash2 :size="12" />
-              </button>
+          <section id="sec-codegen" class="settings-card">
+            <div class="card-head">
+              <span class="card-title"><Code2 :size="13" /> 代码生成</span>
+              <span class="card-sub">javadoc 作者与表/列选项元定义</span>
             </div>
-            <div v-if="!columnOptions.length" class="r-empty">暂无列选项定义</div>
-          </div>
-          <a-button size="small" type="dashed" block class="add-btn" @click="addColumnOption">
-            <template #icon><Plus :size="12" /></template>
-            添加列选项
-          </a-button>
+
+            <div class="card-intro">
+              生成 java 代码时，类与方法 javadoc 会携带
+              <code class="mono">@author 作者</code> 与生成时刻的
+              <code class="mono">@since yyyy-MM-dd HH:mm:ss</code>；表选项与列选项定义控制
+              「编辑表」对话框中的选项编辑项，模板按选项值选择性生成代码（选项值缺省视为启用）。
+            </div>
+
+            <div class="author-row">
+              <label>作者（@author）</label>
+              <a-input
+                v-model:value="author"
+                class="author-input"
+                placeholder="如 zhangsan（留空则生成代码省略 @author）"
+                spellcheck="false"
+              />
+            </div>
+
+            <div class="opt-defs">
+              <div class="defs-title">
+                <SlidersHorizontal :size="12" />
+                表选项（默认：查询 / 添加 / 更新 / 删除，驱动 mapper / service / controller 分支）
+              </div>
+              <div class="defs-head defs-grid">
+                <span>名称</span>
+                <span>类型</span>
+                <span>标签</span>
+                <span>说明</span>
+                <span>字典</span>
+                <span></span>
+              </div>
+              <div class="defs-body">
+                <div v-for="(o, i) in tableOptions" :key="o.key" class="defs-row defs-grid">
+                  <a-input
+                    v-model:value="o.name"
+                    size="small"
+                    class="mono"
+                    placeholder="如 query"
+                  />
+                  <a-auto-complete
+                    v-model:value="o.type"
+                    :options="optionTypeOptions"
+                    size="small"
+                    class="mono"
+                    placeholder="boolean"
+                    :filter-option="
+                      (input: string, option: any) =>
+                        String(option.value).toLowerCase().includes(input.toLowerCase())
+                    "
+                  />
+                  <a-input v-model:value="o.label" size="small" placeholder="如 查询" />
+                  <a-input v-model:value="o.remark" size="small" placeholder="是否启用查询" />
+                  <a-input v-model:value="o.dict" size="small" class="mono" placeholder="选填" />
+                  <button
+                    class="row-del"
+                    type="button"
+                    title="删除选项"
+                    @click="removeTableOption(i)"
+                  >
+                    <Trash2 :size="12" />
+                  </button>
+                </div>
+                <div v-if="!tableOptions.length" class="r-empty">暂无表选项定义</div>
+              </div>
+              <a-button size="small" type="dashed" block class="add-btn" @click="addTableOption">
+                <template #icon><Plus :size="12" /></template>
+                添加表选项
+              </a-button>
+            </div>
+
+            <div class="opt-defs">
+              <div class="defs-title">
+                <SlidersHorizontal :size="12" />
+                列选项（默认：显示 / 查询 / 添加 / 更新 / 删除，驱动 controller 查询条件与 vue
+                列表/表单）
+              </div>
+              <div class="defs-head defs-grid">
+                <span>名称</span>
+                <span>类型</span>
+                <span>标签</span>
+                <span>说明</span>
+                <span>字典</span>
+                <span></span>
+              </div>
+              <div class="defs-body">
+                <div v-for="(o, i) in columnOptions" :key="o.key" class="defs-row defs-grid">
+                  <a-input v-model:value="o.name" size="small" class="mono" placeholder="如 show" />
+                  <a-auto-complete
+                    v-model:value="o.type"
+                    :options="optionTypeOptions"
+                    size="small"
+                    class="mono"
+                    placeholder="boolean"
+                    :filter-option="
+                      (input: string, option: any) =>
+                        String(option.value).toLowerCase().includes(input.toLowerCase())
+                    "
+                  />
+                  <a-input v-model:value="o.label" size="small" placeholder="如 显示" />
+                  <a-input v-model:value="o.remark" size="small" placeholder="是否启用列表中显示" />
+                  <a-input v-model:value="o.dict" size="small" class="mono" placeholder="选填" />
+                  <button
+                    class="row-del"
+                    type="button"
+                    title="删除选项"
+                    @click="removeColumnOption(i)"
+                  >
+                    <Trash2 :size="12" />
+                  </button>
+                </div>
+                <div v-if="!columnOptions.length" class="r-empty">暂无列选项定义</div>
+              </div>
+              <a-button size="small" type="dashed" block class="add-btn" @click="addColumnOption">
+                <template #icon><Plus :size="12" /></template>
+                添加列选项
+              </a-button>
+            </div>
+          </section>
+
+          <AiSettingsSection id="sec-ai" ref="aiSection" />
         </div>
-      </section>
+      </div>
+    </div>
 
-      <AiSettingsSection />
-
-      <div class="settings-foot">
+    <!-- 统一保存条：固定页面底部，不随内容滚动 -->
+    <div class="settings-foot">
+      <div class="foot-inner">
         <span class="dirty-tip" :class="{ dirty }">
           {{
             invalidCount
@@ -773,9 +863,11 @@ async function save() {
                   ? `选项定义无效：${optionsInvalid}`
                   : fieldConventionsInvalid
                     ? `字段约定无效：${fieldConventionsInvalid}`
-                    : dirty
-                      ? '有未保存的修改'
-                      : '全部更改已保存'
+                    : aiInvalid
+                      ? `AI 设置无效：${aiInvalid}`
+                      : dirty
+                        ? '有未保存的修改'
+                        : '全部更改已保存'
           }}
         </span>
         <div class="foot-actions">
@@ -789,7 +881,8 @@ async function save() {
               Boolean(invalidCount) ||
               indexTypeInvalid ||
               Boolean(optionsInvalid) ||
-              Boolean(fieldConventionsInvalid)
+              Boolean(fieldConventionsInvalid) ||
+              Boolean(aiInvalid)
             "
             @click="save"
           >
@@ -802,15 +895,86 @@ async function save() {
 </template>
 
 <style lang="scss" scoped>
+/* 页面级布局：导航列 + 滚动内容区（上）与固定保存条（下）纵筒式排列，
+   保存条不随内容滚动，始终可见 */
 .settings-view {
   height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.settings-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 18px;
+  width: 100%;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 18px 20px 0;
+  box-sizing: border-box;
+}
+
+/* ---------- 分区导航（左列，不随内容滚动） ---------- */
+.settings-nav {
+  width: 152px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-self: flex-start;
+  position: sticky;
+  top: 0;
+  padding-bottom: 18px;
+
+  .nav-title {
+    font-size: 11px;
+    color: var(--dbm-text-3);
+    padding: 0 10px 6px;
+  }
+
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    border: none;
+    background: transparent;
+    border-radius: var(--dbm-radius-m);
+    padding: 7px 10px;
+    font-size: 12.5px;
+    color: var(--dbm-text-2);
+    cursor: pointer;
+    text-align: left;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: all 0.15s ease;
+
+    &:hover {
+      color: var(--dbm-text-1);
+      background: var(--dbm-bg-hover);
+    }
+
+    &.active {
+      color: var(--dbm-primary-text);
+      background: var(--dbm-primary-weak);
+      font-weight: 600;
+    }
+  }
+}
+
+/* ---------- 滚动内容区 ---------- */
+.settings-scroll {
+  flex: 1;
+  min-width: 0;
   overflow-y: auto;
+  position: relative;
 }
 
 .settings-inner {
   max-width: 920px;
-  margin: 0 auto;
-  padding: 18px 20px 30px;
+  padding: 0 0 30px;
 }
 
 .page-head {
@@ -847,12 +1011,14 @@ async function save() {
   }
 }
 
+/* 分区锚点：scrollIntoView 对齐时留出呼吸空间 */
 .settings-card {
   background: var(--dbm-bg-panel);
   border: 1px solid var(--dbm-border);
   border-radius: var(--dbm-radius-l);
   padding: 14px 16px;
   margin-bottom: 14px;
+  scroll-margin-top: 10px;
 }
 
 .card-head {
@@ -1366,15 +1532,23 @@ async function save() {
   }
 }
 
-/* ==================== 统一保存条 ==================== */
+/* ==================== 统一保存条（固定页面底部） ==================== */
 
 .settings-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 2px;
-  padding: 10px 4px 0;
+  flex-shrink: 0;
   border-top: 1px solid var(--dbm-border);
+  background: var(--dbm-bg-panel);
+
+  .foot-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 10px 20px;
+    box-sizing: border-box;
+  }
 
   .dirty-tip {
     font-size: 11.5px;
@@ -1389,13 +1563,41 @@ async function save() {
   .foot-actions {
     display: flex;
     gap: 8px;
+    flex-shrink: 0;
   }
 }
 
-/* ===== 移动端适配：紧凑内边距 + 规则网格压缩（隐藏序号列，正则/类型列收缩） ===== */
+/* ===== 移动端适配：导航改横向滑动条 + 紧凑内边距 + 规则网格压缩 ===== */
 @media (max-width: 768px) {
+  .settings-body {
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px 12px 0;
+  }
+
+  .settings-nav {
+    width: auto;
+    flex-direction: row;
+    overflow-x: auto;
+    position: static;
+    padding-bottom: 0;
+    gap: 6px;
+
+    .nav-title {
+      display: none;
+    }
+
+    .nav-item {
+      flex-shrink: 0;
+      padding: 5px 10px;
+      border: 1px solid var(--dbm-border);
+      border-radius: 999px;
+      background: var(--dbm-bg-panel);
+    }
+  }
+
   .settings-inner {
-    padding: 12px 12px 24px;
+    padding: 0 0 20px;
   }
 
   .settings-card {
@@ -1413,8 +1615,11 @@ async function save() {
   }
 
   .settings-foot {
-    flex-wrap: wrap;
-    gap: 6px;
+    .foot-inner {
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 8px 12px;
+    }
 
     .foot-actions {
       margin-left: auto;

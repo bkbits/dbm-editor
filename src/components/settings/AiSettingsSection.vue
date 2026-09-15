@@ -4,16 +4,14 @@
  * + 模型列表（id / 展示名称 / 是否支持思考 / 思考强度 / 输入输出上下文长度）
  * + 全局规则（多行文本，附加在 AI 工具调用中）。
  *
- * 独立契约（getAiSettings / saveAiSettings），因此本卡片自带「保存 / 放弃」
- * 操作，不并入设置页其余部分的整体保存。
+ * 草稿与校验在本组件内维护；保存 / 放弃由设置页底部操作栏统一驱动
+ * （经 defineExpose 暴露 dirty / invalid / save / resetDraft）。
  */
-import { computed, reactive, ref, watch } from 'vue'
-import { message } from 'antdv-next'
+import { computed, reactive, watch } from 'vue'
 import { Bot, Plus, Trash2 } from '@lucide/vue'
 import type { AiModelConfig, ThinkingIntensity } from '@/types/model'
 import { useAiStore } from '@/stores/ai'
 import { useUiStore } from '@/stores/ui'
-import { errorMessageOf } from '@/api/manager-api'
 import { uid } from '@/utils/id'
 
 const ai = useAiStore()
@@ -118,9 +116,7 @@ const modelsError = computed(() => {
 
 const invalid = computed(() => baseUrlError.value || modelsError.value)
 
-/* ==================== 脏检查 / 保存 ==================== */
-
-const saving = ref(false)
+/* ==================== 脏检查 / 保存（供设置页统一驱动） ==================== */
 
 /** 草稿归一为契约形态（与已保存态比较用） */
 function draftModelsNormalized(): AiModelConfig[] {
@@ -161,38 +157,30 @@ const dirty = computed(
       ),
 )
 
+/** 保存 AI 设置（校验失败时抛错，由设置页统一提示） */
 async function save() {
-  if (invalid.value) {
-    message.warning(`AI 设置无效：${invalid.value}`)
-    return
-  }
-  saving.value = true
-  try {
-    await ai.saveSettings({
-      baseUrl: draft.baseUrl.trim(),
-      apiKey: draft.apiKey,
-      models: draftModelsNormalized(),
-      globalRules: draft.globalRules,
-    })
-    message.success('AI 设置已保存')
-  } catch (e: unknown) {
-    message.error(errorMessageOf(e, 'AI 设置保存失败'))
-  } finally {
-    saving.value = false
-  }
+  if (invalid.value) throw new Error(invalid.value)
+  await ai.saveSettings({
+    baseUrl: draft.baseUrl.trim(),
+    apiKey: draft.apiKey,
+    models: draftModelsNormalized(),
+    globalRules: draft.globalRules,
+  })
 }
 
 /** 未配置时一键跳转 AI 工具页 */
 function gotoAiTool() {
   ui.setPage('ai')
 }
+
+defineExpose({ dirty, invalid, save, resetDraft })
 </script>
 
 <template>
   <section class="settings-card ai-card">
     <div class="card-head">
       <span class="card-title"><Bot :size="13" /> AI（openai compatible）</span>
-      <span class="card-sub">供应商、模型列表与全局规则，供「AI 工具」页对话调用</span>
+      <span class="card-sub">供应商、模型列表与全局规则，随底部「保存设置」统一保存</span>
     </div>
 
     <div class="field-grid">
@@ -282,26 +270,8 @@ function gotoAiTool() {
         <a-textarea
           v-model:value="draft.globalRules"
           :rows="5"
-          placeholder="多行文本：将作为规则文本附加在 AI 工具每次调用的系统提示中（可约定行为规范、输出风格、操作边界等）；留空则不附加"
+          placeholder="多行文本：将作为规则文本附加在 AI 工具每次调用的系统提示中（可约定行为规范、输出风格、操作边界等）；留空则仅使用内置默认规则"
         />
-      </div>
-    </div>
-
-    <div class="ai-foot">
-      <span class="dirty-tip" :class="{ dirty }">
-        {{ invalid ? `配置无效：${invalid}` : dirty ? '有未保存的修改' : 'AI 设置已保存' }}
-      </span>
-      <div class="foot-actions">
-        <a-button size="small" :disabled="!dirty" @click="resetDraft">放弃修改</a-button>
-        <a-button
-          size="small"
-          type="primary"
-          :loading="saving"
-          :disabled="!dirty || Boolean(invalid)"
-          @click="save"
-        >
-          保存 AI 设置
-        </a-button>
       </div>
     </div>
   </section>
@@ -441,28 +411,5 @@ function gotoAiTool() {
 
 .rules-block {
   margin-bottom: 4px;
-}
-
-.ai-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 14px;
-  padding-top: 10px;
-  border-top: 1px solid var(--dbm-border);
-
-  .dirty-tip {
-    font-size: 11px;
-    color: var(--dbm-text-3);
-
-    &.dirty {
-      color: var(--dbm-warning);
-    }
-  }
-
-  .foot-actions {
-    display: flex;
-    gap: 8px;
-  }
 }
 </style>

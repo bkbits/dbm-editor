@@ -70,19 +70,20 @@ bun run dev
 
 ### 常用命令速查
 
-| 命令                              | 说明                                                                                                                            |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `bun run dev`（= `vp dev`）       | 启动开发服务器（localhost:3000，热更新）                                                                                        |
-| `bun run build`（= `vp build`）   | 库构建：产出 `dist/DBManager.js` + `dist/DBManager.d.ts` 两个文件（CSS 已内联进 JS，详见[库构建与宿主接入](#库构建与宿主接入)） |
-| `bun run build:pages`             | Pages 演示站构建：应用模式产出 `dist/`（index.html + assets，相对路径 base，见[GitHub Pages 自动发布](#github-pages-自动发布)） |
-| `bun run preview`                 | 本地预览生产构建                                                                                                                |
-| `bun run typecheck`               | 全量类型检查（`vue-tsc --noEmit`）                                                                                              |
-| `vp check`                        | Vite+ 内置：格式 + lint + 类型检查（staged 提交时自动执行）                                                                     |
-| `vp install`                      | 安装依赖                                                                                                                        |
-| `bun scripts/eta-smoke.mjs`       | Eta 模板引擎 API 冒烟测试（模板功能改动前的快速回归）                                                                           |
-| `node scripts/ai-sse-mock.mjs`    | AI E2E 模拟服务（openai compatible SSE，脚本化两轮 AGENT 对话；配合 `AI_MOCK_PROXY=1 vp dev` 同源代理使用）                     |
-| `python3 scripts/check-readme.py` | README 链接 / 锚点 / 表格自检                                                                                                   |
-| `bash scripts/package.sh`         | 打包源码为交付 zip（`download/graph-db-model-editor.zip`，含 skills/DBManager 技能文档）                                        |
+| 命令                              | 说明                                                                                                                                             |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `bun run dev`（= `vp dev`）       | 启动开发服务器（localhost:3000，热更新）                                                                                                         |
+| `bun run build`（= `vp build`）   | 库构建：产出 `dist/DBManager.js` + `dist/DBManager.d.ts` 两个文件（CSS 已内联进 JS，详见[库构建与宿主接入](#库构建与宿主接入)）                  |
+| `bun run build:pages`             | Pages 演示站构建：应用模式产出 `dist/`（index.html + assets，相对路径 base，见[GitHub Pages 自动发布](#github-pages-自动发布)）                  |
+| `bun run preview`                 | 本地预览生产构建                                                                                                                                 |
+| `bun run typecheck`               | 全量类型检查（`vue-tsc --noEmit`）                                                                                                               |
+| `vp check`                        | Vite+ 内置：格式 + lint + 类型检查（staged 提交时自动执行）                                                                                      |
+| `vp install`                      | 安装依赖                                                                                                                                         |
+| `bun scripts/eta-smoke.mjs`       | Eta 模板引擎 API 冒烟测试（模板功能改动前的快速回归）                                                                                            |
+| `node scripts/ai-sse-mock.mjs`    | AI E2E 模拟服务（openai compatible SSE，脚本化三轮 AGENT 对话：代码生成 → 代码替换 → Markdown 总结；配合 `AI_MOCK_PROXY=1 vp dev` 同源代理使用） |
+| `bash scripts/e2e-task35.sh`      | AI 工具与设置页全流程 E2E（32 项断言：设置导航/统一保存、AGENT 三轮对话、zip 下载、替换确认、markstream 渲染、双主题）                           |
+| `python3 scripts/check-readme.py` | README 链接 / 锚点 / 表格自检                                                                                                                    |
+| `bash scripts/package.sh`         | 打包源码为交付 zip（`download/graph-db-model-editor.zip`，含 skills/DBManager 技能文档）                                                         |
 
 ## 库构建与宿主接入
 
@@ -96,7 +97,7 @@ bun run dev
 构建配置要点（`vite.config.ts`）：
 
 - **外部依赖**（peerDependencies，由宿主项目提供，不打包进产物）：`vue` / `antdv-next` / `@lucide/vue`
-- 其余依赖（eta / highlight.js / jszip 等）与全部应用代码、组件 scoped 样式、全局样式一并打进 `DBManager.js`
+- 其余依赖（eta / highlight.js / jszip / markstream-vue 等）与全部应用代码、组件 scoped 样式、全局样式一并打进 `DBManager.js`
 - 类型经 `vite-plugin-dts`（`bundleTypes`，底层 api-extractor）由 `src/index.ts` 滚动合并为单一声明文件
 - CSS 内联由 `scripts/inline-lib-css.mjs` 在 `vp build` 后完成（rolldown 底座下 `vite-plugin-lib-inject-css` 不生效，脚本等效替代并做产物白名单清理）
 
@@ -254,24 +255,28 @@ Eta 语法：`<% %>` 逻辑、`<%= %>` 输出、`<%# %>` 自定义注释标签�
 
 ### 系统设置
 
+- **分区导航与固定保存条**：页面左侧为设置项导航（列默认类型 / 索引类型 / 主键与审计字段 / 代码生成 / AI），点击平滑滚动到对应分区，滚动内容时自动高亮当前分区；底部「保存设置 / 放弃修改」操作栏固定在页面底部，不随内容滚动
 - **列默认类型**：从数据库导入时的 Java 类型默认映射。对字段的数据库类型（如 `VARCHAR(255)`、`Decimal(6, 4)`）按规则列表**自上而下依次**（`sort` 升序，越小越优先）进行正则表达式匹配（忽略大小写），取**第一条命中**规则的 Java 类型作为默认值；全部未命中时回退内置类型映射表
 - 可选 Java 类型：`Character` / `String` / `Long` / `Integer` / `Float` / `Double` / `BigDecimal` / `LocalDateTime` / `LocalDate` / `LocalTime` / `Timestamp`
 - 规则顺序即优先级，拖拽手柄调整（保存时按序重编号 `sort`）；非法正则即时标红并禁用保存；内置「规则测试」输入任意数据库类型实时预览命中结果（含未保存修改，区分「生效/命中被抢先」）
 - **索引类型**：索引类型列表管理（增删，自动转大写、去重校验）。「编辑表」对话框的索引类型下拉选项与数据库导入的索引类型归一化均使用该列表；至少保留一个类型
 - **主键与审计字段**：主键字段约定（默认 `id` / `BIGINT`，每表强制拥有且固定为第一个字段，不可修改、不可排序，Java 类型按「列默认类型」规则自动推导）与审计字段约定（创建人 `create_by` / 创建时间 `create_time` 强制非空，更新人 `update_by` / 更新时间 `update_time` 可空；创建/更新人默认 `BIGINT`，创建/更新时间默认 `DATETIME`；数据库蛇形命名，Java 属性名自动转小驼峰）。名称与类型均可编辑（类型可自动补全）；审计字段可单独设定 Java 类型（可自动补全、可清空，**留空 = 按「列默认类型」规则自动推导且随类型联动**，设定后建列固定使用该值；主键 Java 类型始终为自动推导），需为合法标识符且五个名称互不重复；非空约束为固定语义随字段角色而定；「恢复默认」一键回置 id/create_by/create_time/update_by/update_time（Java 类型全部回到自动推导）；「编辑表」对话框据此固定主键首字段并提供审计字段一键增删（审计字段建列时取约定的 Java 类型）
 - **代码生成**：作者（生成 javadoc 的 `@author`，留空则省略该标签）与表/列选项元定义（名称/类型/标签/说明/字典）。默认表选项为 `query`/`add`/`update`/`remove`（驱动 mapper/service/controller 分支），默认列选项为 `show`/`query`/`add`/`update`/`remove`（驱动 controller 查询条件与 vue 列表/表单）；选项类型支持 `boolean`/`string`/`int`/`long`/`double` 及自定义，名称需为合法标识符且列表内唯一
-- **AI（openai compatible）**：AI 供应商设置——服务地址（必须以 `/v1` 结尾，如 `https://api.example.com/v1`）与 API Key（Bearer 鉴权，本地服务可留空）；模型列表（模型 id / 展示名称 / 是否支持思考 / 思考强度 `low|medium|high|xhigh|max` / 输入输出上下文长度，id 非空唯一）；全局规则（多行文本，非空时作为规则文本附加在 AI 工具每次调用的系统提示中）。独立契约（`getAiSettings` / `saveAiSettings`），本区块自带「保存 AI 设置 / 放弃修改」，不并入整页保存
-- 设置保存后持久化（DemoManagerApi + localStorage），整页统一保存 / 放弃修改（AI 区块为独立保存）
+- **AI（openai compatible）**：AI 供应商设置——服务地址（必须以 `/v1` 结尾，如 `https://api.example.com/v1`）与 API Key（Bearer 鉴权，本地服务可留空）；模型列表（模型 id / 展示名称 / 是否支持思考 / 思考强度 `low|medium|high|xhigh|max` / 输入输出上下文长度，id 非空唯一）；全局规则（多行文本，非空时作为规则文本附加在 AI 工具每次调用的系统提示中）。独立契约（`getAiSettings` / `saveAiSettings`），但保存/放弃随整页底部操作栏**统一驱动**（AI 草稿独立校验，无效时连同提示一并禁用保存）
+- 设置保存后持久化（DemoManagerApi + localStorage），整页统一保存 / 放弃修改（含 AI 区块，两部分契约先后落盘）
 
 ### AI 工具（AGENT 对话式操作）
 
 顶栏「AI 工具」进入 AGENT 对话界面，用自然语言直接操作模型数据与代码生成：
 
 - **能力装载**：自动将 ManagerApi 全部能力（去除 AI 设置与 chatComplete 两项；`replace` 为 zip 二进制参数不可 JSON 化，由「代码替换」工具承担）+ 代码生成 + 代码替换注册为可调用工具（openai function calling 标准），按「流式输出 → 工具调用 → 结果回填 → 继续生成」循环直至最终回答（轮数上限 12 防失控）
+- **默认规则**：系统提示内置任务执行流程——① 修改任何元素前先读取其当前值，基于最新数据构造载荷（防脏数据覆盖）；② 需求不明确时列出可选项让用户确认；③ 复杂任务先制定分步计划；④ 按计划执行；⑤ 关键修改后校验结果再汇报
 - **全局规则**：AI 设置中的全局规则非空时附加在系统提示中（优先级最高）
-- **界面布局**：左侧上方为历史聊天数据，下方为文本输入框（Enter 发送 / Shift+Enter 换行，可随时停止生成、开启新会话）；右侧为能力调用记录（默认收起，点击展开查看参数与返回值）
+- **界面布局**：左侧上方为历史聊天数据，下方为文本输入框（Enter 发送 / Shift+Enter 换行，可随时停止生成、开启新会话）；右侧为能力调用记录（默认收起，点击展开查看参数与返回值；记录过多时不挤压变形，面板原本贴底时新记录自动跟随滚到底部）
 - **思考内容**：模型支持思考时，思考流以可收缩块展示——正在输出时自动展开、完成后自动收起，亦可手动切换
-- **消息渲染**：轻量 Markdown（标题 / 加粗 / 行内代码 / 围栏代码块带 highlight.js 高亮）；助手消息附工具调用芯片，点击定位右侧对应记录
+- **消息渲染**：助手正文用 [markstream-vue](https://markstream.simonhe.me/zh/) 做流式 Markdown 渲染（`mode="chat"` 平滑出字，标题 / 列表 / 加粗 / 行内代码 / 围栏代码块 / 表格 / 引用，代码块配色与主题令牌对接，随亮暗主题切换）；助手消息附工具调用芯片，点击定位右侧对应记录；展示文本（正文 / 思考 / 调用参数与返回）均去头尾空白
+- **代码生成产物下载**：`generateCode` 生成后自动打包 zip 并缓存 Blob，调用记录行提供下载按钮（收起态迷你图标 / 展开态完整文件名与大小），会话内可重复点击下载
+- **代码替换确认**：`replaceCode` 触发时先弹出待覆盖文件清单（文件名 / 路径 / 表 / 模板 / 大小），用户「确认替换」后才写回，取消则向模型返回未执行
 - **数据同步**：工具改动过模型 / 字典 / 模板 / 设置时，会话结束自动按域刷新对应仓库，画布与各页面保持一致
 - **上下文防溢出**：工具结果回填模型上限 48k 字符（超限截断标注）；代码生成可选用 `includeContent` 附带文件内容（单文件 6k 截断）
 
@@ -422,7 +427,7 @@ Logger.setLevel('INFO') // 或 Logger.level = 'INFO' / Logger.getLevel()
       ├─ layout/           # AppHeader
       ├─ outline/          # 左侧表格大纲
       ├─ canvas/           # ModelCanvas / TableCard / NavigateEdge / Minimap / 菜单 / 工具栏
-      ├─ settings/         # AI 设置区块（系统设置页内嵌卡片，独立保存）
+      ├─ settings/         # AI 设置区块（系统设置页内嵌卡片，随整页统一保存）
       └─ dialog/           # 表/导航/分类/导入/代码预览/替换确认 对话框
 ```
 
@@ -511,15 +516,23 @@ DemoManagerApi 将模型持久化到浏览器 `localStorage`（key 为 `gdbme:db
 | ---------------------------------------------- | ----------------------------------------------------------- |
 | ![代码预览](docs/screenshots/code-preview.png) | ![索引类型](docs/screenshots/settings-index-types-dark.png) |
 
-| AI 工具（AGENT 对话 + 调用记录）                        | AI 工具（暗色）                                        |
-| ------------------------------------------------------- | ------------------------------------------------------ |
-| ![AI 工具亮](docs/screenshots/task34-ai-tool-light.png) | ![AI 工具暗](docs/screenshots/task34-ai-tool-dark.png) |
+AI 工具（AGENT 对话 + 调用记录，markstream 流式 Markdown；右下角为 zip 下载）：
 
-AI 供应商与模型列表配置（系统设置页「AI（openai compatible）」区块）：
+| AI 工具 · 对话与调用记录                        | AI 工具 · 代码替换确认                                   |
+| ----------------------------------------------- | -------------------------------------------------------- |
+| ![AI 对话](docs/screenshots/task35-ai-chat.png) | ![替换确认](docs/screenshots/task35-replace-confirm.png) |
 
-| 系统设置 · AI（供应商 / 模型列表 / 全局规则）       |
-| --------------------------------------------------- |
-| ![AI 设置](docs/screenshots/task34-ai-settings.png) |
+暗色主题下的 AI 工具对话界面：
+
+| AI 工具（暗色）                                        |
+| ------------------------------------------------------ |
+| ![AI 工具暗](docs/screenshots/task35-ai-chat-dark.png) |
+
+AI 供应商与模型列表配置（系统设置页「AI（openai compatible）」区块，随底部「保存设置」统一保存；左侧分区导航平滑滚动定位）：
+
+| 设置页 · 分区导航与固定保存条                         | 系统设置 · AI（供应商 / 模型列表 / 全局规则）       |
+| ----------------------------------------------------- | --------------------------------------------------- |
+| ![设置导航](docs/screenshots/task35-settings-nav.png) | ![AI 设置](docs/screenshots/task34-ai-settings.png) |
 
 宿主项目冒烟页（`test/host-smoke.html`，直连构建产物 `dist/DBManager.js`，宿主侧仅提供 vue / antdv-next / @lucide/vue 三个 peer 依赖）：
 

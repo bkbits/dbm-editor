@@ -5,14 +5,18 @@
  *   自动展开、完成后自动收起；助手消息附工具调用芯片，点击定位右侧记录）
  * - 左侧下方：用户文本输入框（Enter 发送 / Shift+Enter 换行）+ 模型选择 + 停止
  * - 右侧：能力调用记录（ManagerApi 能力 + 代码生成 + 代码替换），默认收起
- *   详情，展开可查看参数与返回值
+ *   详情，展开可查看参数与返回值；代码生成记录提供 zip 下载
+ * - 助手正文用 markstream-vue 做流式 Markdown 渲染（mode=chat 平滑出字）
+ * - 代码替换触发时弹出文件清单确认框，用户确认后才写回
  */
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import {
+  AlertTriangle,
   Bot,
   Brain,
   CheckCircle2,
   ChevronRight,
+  Download,
   Eraser,
   Loader2,
   Send,
@@ -22,12 +26,15 @@ import {
   Wrench,
   XCircle,
 } from '@lucide/vue'
-import { useAiStore } from '@/stores/ai'
+import MarkdownRender from 'markstream-vue'
+import 'markstream-vue/index.css'
+import { useAiStore, type AiZipDownload } from '@/stores/ai'
 import { useUiStore } from '@/stores/ui'
-import { highlightCode } from '@/utils/highlight'
+import { useThemeStore } from '@/stores/theme'
 
 const ai = useAiStore()
 const ui = useUiStore()
+const theme = useThemeStore()
 
 /* ==================== 输入区 ==================== */
 
@@ -115,56 +122,6 @@ function gotoSettings() {
   ui.setPage('settings')
 }
 
-/* ==================== 轻量 Markdown 渲染 ==================== */
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-}
-
-/** 围栏语言 → 已注册的高亮语言别名 */
-function fenceLanguage(lang: string): string {
-  const l = lang.trim().toLowerCase()
-  if (['java', 'sql', 'xml', 'javascript', 'eta', 'plaintext'].includes(l)) return l
-  if (l === 'js' || l === 'ts' || l === 'mjs' || l === 'cjs' || l === 'json') return 'javascript'
-  if (l === 'html' || l === 'vue') return 'xml'
-  return 'plaintext'
-}
-
-function renderInline(text: string): string {
-  let s = escapeHtml(text)
-  s = s.replace(/`([^`\n]+)`/g, '<code class="md-code">$1</code>')
-  s = s.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
-  s = s.replace(/(^|\n)(#{1,4}) ([^\n]*)/g, (_m, br: string, hashes: string, t: string) => {
-    const level = Math.min(hashes.length + 2, 5)
-    return `${br}<span class="md-h md-h${level}">${t}</span>`
-  })
-  return s
-}
-
-/** 轻量 Markdown：``` 围栏代码块（highlight.js 高亮）+ 行内 code/加粗/标题 */
-function renderMarkdown(text: string): string {
-  const parts = String(text || '').split(/```(\w*)\n?([\s\S]*?)```/)
-  let out = ''
-  for (let i = 0; i < parts.length; i++) {
-    if (i % 3 === 0) {
-      out += renderInline(parts[i])
-    } else if (i % 3 === 2) {
-      const lang = fenceLanguage(parts[i - 1])
-      const code = parts[i].replace(/\n$/, '')
-      out += `<pre class="md-codeblock"><code>${highlightCode(code, lang)}</code></pre>`
-    }
-  }
-  return out
-}
-
-function renderedContent(content: string): string {
-  return renderMarkdown(content)
-}
-
 /* ==================== 右侧调用记录 ==================== */
 
 /** 展开的记录 id 集合（默认收起） */
@@ -177,12 +134,42 @@ function toggleRecord(id: string) {
   expandedRecords.value = next
 }
 
-/** 展示文本截断（详情面板显示上限） */
+/** 右侧记录面板滚动跟随：原本处于底部时，新记录添加后跟随滚到底部 */
+const toolsScrollEl = ref<HTMLElement>()
+const toolsStickBottom = ref(true)
+
+function onToolsScroll() {
+  const el = toolsScrollEl.value
+  if (!el) return
+  toolsStickBottom.value = el.scrollHeight - el.scrollTop - el.clientHeight < 24
+}
+
+watch(
+  () => ai.toolRecords.length,
+  async () => {
+    if (!toolsStickBottom.value) return
+    await nextTick()
+    const el = toolsScrollEl.value
+    if (el) el.scrollTop = el.scrollHeight
+  },
+)
+
+/** zip 下载缓存查询（代码生成记录） */
+function zipEntry(callId: string): AiZipDownload | undefined {
+  return ai.zipDownloads[callId]
+}
+
+function sizeText(size: number): string {
+  return size >= 1024 ? `${(size / 1024).toFixed(1)} KB` : `${size} B`
+}
+
+/** 展示文本截断（详情面板显示上限；顺带去头尾空白） */
 const DISPLAY_CAP = 8000
 function capDisplay(text: string): string {
-  return text.length > DISPLAY_CAP
-    ? `${text.slice(0, DISPLAY_CAP)}\n…（内容过长已截断，共 ${text.length} 字符）`
-    : text
+  const t = String(text ?? '').trim()
+  return t.length > DISPLAY_CAP
+    ? `${t.slice(0, DISPLAY_CAP)}\n…（内容过长已截断，共 ${t.length} 字符）`
+    : t
 }
 
 function durationText(ms?: number): string {
@@ -265,12 +252,18 @@ const runningCount = computed(() => ai.toolRecords.filter((r) => r.status === 'r
                 <div v-show="m.reasoningOpen" class="reasoning-body">{{ m.reasoning }}</div>
               </div>
 
-              <!-- 正文 -->
-              <div
-                v-if="m.content"
-                class="msg-content md-content"
-                v-html="renderedContent(m.content)"
-              ></div>
+              <!-- 正文：用户为纯文本，助手用 markstream 流式 Markdown 渲染 -->
+              <div v-if="m.content && m.role === 'user'" class="msg-content user-text">
+                {{ m.content }}
+              </div>
+              <MarkdownRender
+                v-else-if="m.content"
+                mode="chat"
+                class="msg-content md-render"
+                :content="m.content"
+                :final="m.status !== 'streaming'"
+                :is-dark="theme.isDark"
+              />
               <div v-else-if="m.status === 'streaming'" class="msg-content pending">…</div>
 
               <!-- 工具调用芯片 -->
@@ -342,7 +335,7 @@ const runningCount = computed(() => ai.toolRecords.filter((r) => r.status === 'r
               <Send :size="15" />
             </button>
             <button v-else class="send-btn stop" type="button" title="停止生成" @click="ai.stop()">
-              <Square :size="12" />
+              <Square :size="12" fill="currentColor" />
             </button>
           </div>
         </div>
@@ -361,7 +354,7 @@ const runningCount = computed(() => ai.toolRecords.filter((r) => r.status === 'r
           </span>
           <span v-else class="tools-count">{{ ai.toolRecords.length || '' }}</span>
         </div>
-        <div class="tools-list">
+        <div ref="toolsScrollEl" class="tools-list" @scroll="onToolsScroll">
           <div v-if="!ai.toolRecords.length" class="tools-empty">
             AI 调用工具时，参数与返回值将记录在这里（默认收起，点击展开详情）
           </div>
@@ -372,17 +365,36 @@ const runningCount = computed(() => ai.toolRecords.filter((r) => r.status === 'r
             class="tool-record"
             :class="r.status"
           >
-            <button class="record-head" type="button" @click="toggleRecord(r.id)">
+            <div class="record-head" @click="toggleRecord(r.id)">
               <span class="rec-status">
                 <Loader2 v-if="r.status === 'running'" :size="12" class="spin" />
                 <CheckCircle2 v-else-if="r.status === 'success'" :size="12" />
                 <XCircle v-else :size="12" />
               </span>
               <span class="rec-name mono">{{ r.name }}</span>
+              <button
+                v-if="zipEntry(r.callId)"
+                class="zip-mini"
+                type="button"
+                title="下载生成的代码 zip"
+                @click.stop="ai.downloadZip(r.callId)"
+              >
+                <Download :size="11" />
+              </button>
               <span class="rec-duration">{{ durationText(r.durationMs) }}</span>
               <ChevronRight :size="12" class="chev" :class="{ down: expandedRecords.has(r.id) }" />
-            </button>
+            </div>
             <div v-if="expandedRecords.has(r.id)" class="record-body">
+              <div v-if="zipEntry(r.callId)" class="rec-zip">
+                <button class="zip-btn" type="button" @click="ai.downloadZip(r.callId)">
+                  <Download :size="12" />
+                  <span class="mono">{{ zipEntry(r.callId)?.fileName }}</span>
+                  <span class="zip-meta">
+                    {{ sizeText(zipEntry(r.callId)?.size ?? 0) }} ·
+                    {{ zipEntry(r.callId)?.fileCount }} 个文件
+                  </span>
+                </button>
+              </div>
               <div class="rec-section">
                 <span class="sec-label">参数</span>
                 <pre class="mono">{{ capDisplay(r.argsText) }}</pre>
@@ -400,6 +412,40 @@ const runningCount = computed(() => ai.toolRecords.filter((r) => r.status === 'r
         </div>
       </section>
     </div>
+
+    <!-- 代码替换确认：先列出将被覆盖的文件，用户确认后才写回 -->
+    <a-modal
+      :open="Boolean(ai.pendingReplace)"
+      title="确认代码替换"
+      :width="600"
+      :mask-closable="false"
+      :keyboard="false"
+      ok-text="确认替换"
+      cancel-text="取消替换"
+      :ok-button-props="{ danger: true }"
+      @ok="ai.resolveReplace(true)"
+      @cancel="ai.resolveReplace(false)"
+    >
+      <div class="replace-confirm">
+        <p class="rp-tip">
+          <AlertTriangle :size="14" class="rp-warn-icon" />
+          以下 <b>{{ ai.pendingReplace?.files.length ?? 0 }}</b>
+          个源码文件将被生成的代码覆盖，该操作不可撤销，请确认后继续：
+        </p>
+        <div class="rp-list">
+          <div v-for="(f, i) in ai.pendingReplace?.files || []" :key="i" class="rp-row">
+            <span class="rp-idx">{{ i + 1 }}</span>
+            <div class="rp-file">
+              <span class="rp-name mono">{{ f.fileName }}</span>
+              <span class="rp-path mono">{{ f.filePath }}</span>
+            </div>
+            <span class="rp-meta"
+              >{{ f.tableName }} · {{ f.templateName }} · {{ sizeText(f.size) }}</span
+            >
+          </div>
+        </div>
+      </div>
+    </a-modal>
   </div>
 </template>
 
@@ -519,6 +565,7 @@ const runningCount = computed(() => ai.toolRecords.filter((r) => r.status === 'r
   display: flex;
   gap: 10px;
   max-width: 100%;
+  flex-shrink: 0; /* 长会话不破挤压，超出由容器滚动 */
 
   &.user {
     flex-direction: row-reverse;
@@ -575,12 +622,6 @@ const runningCount = computed(() => ai.toolRecords.filter((r) => r.status === 'r
   .msg-content.pending {
     color: var(--dbm-text-3);
     animation: pulse 1.4s ease infinite;
-  }
-
-  &.streaming .md-content::after {
-    content: '▍';
-    color: var(--dbm-primary);
-    animation: blink 1s steps(2) infinite;
   }
 
   .msg-error {
@@ -674,49 +715,115 @@ const runningCount = computed(() => ai.toolRecords.filter((r) => r.status === 'r
   }
 }
 
-/* ---------- Markdown 轻量渲染 ---------- */
-.md-content {
-  white-space: pre-wrap;
+/* ---------- markstream 流式 Markdown 渲染（主题令牌对接） ----------
+   注：MarkdownRender 根元素同时携带 markstream-vue / markdown-renderer / md-render
+   类（同一元素），变量需用复合选择器提升特异性覆盖内置主题 */
+.md-render {
+  font-size: 13px;
+  line-height: 1.75;
+  color: var(--dbm-text-1);
+  min-width: 0;
 
-  :deep(.md-code) {
-    font-family: var(--dbm-font-mono);
-    font-size: 12px;
-    background: var(--dbm-code-bg);
-    border: 1px solid var(--dbm-code-border);
-    border-radius: 4px;
-    padding: 0 4px;
+  &.markstream-vue {
+    /* 主题变量对接：正文尺寸 / 字体 / 代码块配色全部回接 --dbm- 令牌 */
+    --ms-text-body: 13px;
+    --ms-leading-body: 1.75;
+    --ms-font-mono: var(--dbm-font-mono);
+    --inline-code-bg: var(--dbm-code-bg);
+    --inline-code-fg: var(--dbm-text-2);
+    --inline-code-border: var(--dbm-code-border);
+    --code-bg: var(--dbm-code-bg);
+    --code-fg: var(--dbm-text-1);
+    --code-border: var(--dbm-code-border);
+    --code-header-bg: var(--dbm-bg-2);
+    background: transparent;
   }
 
-  :deep(.md-h) {
-    display: block;
+  /* 聊天气泡内的标题/段落尺寸收敛（markstream 默认面向文档页面，标题过大） */
+  :deep(h1),
+  :deep(h2),
+  :deep(h3),
+  :deep(h4),
+  :deep(h5),
+  :deep(h6) {
+    margin: 8px 0 4px;
     font-weight: 600;
     color: var(--dbm-text-1);
-    margin-top: 6px;
+    line-height: 1.4;
 
-    &.md-h3,
-    &.md-h4,
-    &.md-h5 {
-      font-weight: 600;
-      font-size: 13px;
+    &:first-child {
+      margin-top: 0;
+    }
+
+    &:last-child {
+      margin-bottom: 0;
     }
   }
 
-  :deep(.md-codeblock) {
-    margin: 6px 0;
-    padding: 10px 12px;
-    background: var(--dbm-code-bg);
-    border: 1px solid var(--dbm-code-border);
-    border-radius: var(--dbm-radius-m);
-    overflow-x: auto;
-    white-space: normal;
+  :deep(h1) {
+    font-size: 15px;
+  }
 
-    code {
-      font-family: var(--dbm-font-mono);
-      font-size: 12px;
-      line-height: 1.6;
-      display: block;
-      white-space: pre;
+  :deep(h2) {
+    font-size: 14px;
+  }
+
+  :deep(h3),
+  :deep(h4),
+  :deep(h5),
+  :deep(h6) {
+    font-size: 13px;
+  }
+
+  :deep(p) {
+    margin: 4px 0;
+
+    &:first-child {
+      margin-top: 0;
     }
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+  }
+
+  :deep(ul),
+  :deep(ol) {
+    margin: 4px 0;
+    padding-left: 1.5em;
+  }
+
+  :deep(blockquote) {
+    margin: 6px 0;
+    padding: 2px 10px;
+    border-left: 3px solid var(--dbm-border-strong);
+    color: var(--dbm-text-2);
+  }
+
+  :deep(a) {
+    color: var(--dbm-primary);
+  }
+
+  :deep(table) {
+    border-collapse: collapse;
+    margin: 6px 0;
+    font-size: 12px;
+
+    th,
+    td {
+      border: 1px solid var(--dbm-border);
+      padding: 4px 8px;
+    }
+
+    th {
+      background: var(--dbm-bg-2);
+    }
+  }
+
+  :deep(hr) {
+    border: none;
+    border-top: 1px solid var(--dbm-border);
+    margin: 8px 0;
   }
 }
 
@@ -804,8 +911,9 @@ const runningCount = computed(() => ai.toolRecords.filter((r) => r.status === 'r
     height: 32px;
     border: none;
     border-radius: var(--dbm-radius-m);
+    /* 主色实底上的前景色专用令牌：亮色白 / 暗色深青（原 --dbm-primary-text 与背景近乎同色，图标隐形） */
     background: var(--dbm-primary);
-    color: var(--dbm-primary-text);
+    color: var(--dbm-on-primary);
     cursor: pointer;
     flex-shrink: 0;
     transition: opacity 0.15s ease;
@@ -821,7 +929,12 @@ const runningCount = computed(() => ai.toolRecords.filter((r) => r.status === 'r
 
     &.stop {
       background: var(--dbm-danger);
-      color: #fff;
+      color: var(--dbm-on-danger);
+
+      /* 实心方块停止图标（缩放描边方形视觉上像空点） */
+      svg {
+        fill: currentColor;
+      }
     }
   }
 }
@@ -895,6 +1008,7 @@ const runningCount = computed(() => ai.toolRecords.filter((r) => r.status === 'r
   border-radius: var(--dbm-radius-m);
   background: var(--dbm-bg-2);
   overflow: hidden;
+  flex-shrink: 0; /* 记录过多时不被纵向挤压，超出由列表滚动 */
 
   &.success .rec-status {
     color: var(--dbm-success);
@@ -922,6 +1036,7 @@ const runningCount = computed(() => ai.toolRecords.filter((r) => r.status === 'r
     padding: 7px 10px;
     cursor: pointer;
     text-align: left;
+    user-select: none;
 
     &:hover {
       background: var(--dbm-bg-hover);
@@ -936,12 +1051,37 @@ const runningCount = computed(() => ai.toolRecords.filter((r) => r.status === 'r
       white-space: nowrap;
     }
 
+    .zip-mini {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+      border: 1px solid var(--dbm-border);
+      border-radius: var(--dbm-radius-s);
+      background: transparent;
+      color: var(--dbm-text-3);
+      cursor: pointer;
+      flex-shrink: 0;
+      padding: 0;
+
+      &:hover {
+        color: var(--dbm-primary);
+        border-color: var(--dbm-primary);
+        background: var(--dbm-primary-weak);
+      }
+    }
+
     .rec-duration {
       margin-left: auto;
       font-size: 10px;
       color: var(--dbm-text-3);
       font-family: var(--dbm-font-mono);
       flex-shrink: 0;
+    }
+
+    .rec-duration + .chev {
+      margin-left: 0;
     }
 
     .chev {
@@ -961,6 +1101,41 @@ const runningCount = computed(() => ai.toolRecords.filter((r) => r.status === 'r
     display: flex;
     flex-direction: column;
     gap: 8px;
+  }
+
+  .rec-zip {
+    .zip-btn {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      width: 100%;
+      border: 1px dashed var(--dbm-primary);
+      border-radius: var(--dbm-radius-s);
+      background: var(--dbm-primary-weak);
+      color: var(--dbm-primary-text);
+      padding: 6px 10px;
+      cursor: pointer;
+      font-size: 11.5px;
+      transition: all 0.15s ease;
+
+      &:hover {
+        border-style: solid;
+        background: color-mix(in srgb, var(--dbm-primary) 20%, transparent);
+      }
+
+      .mono {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .zip-meta {
+        margin-left: auto;
+        flex-shrink: 0;
+        font-size: 10.5px;
+        color: var(--dbm-text-3);
+      }
+    }
   }
 
   .rec-section {
@@ -996,13 +1171,91 @@ const runningCount = computed(() => ai.toolRecords.filter((r) => r.status === 'r
   }
 }
 
-/* ==================== 动画 ==================== */
-@keyframes blink {
-  50% {
-    opacity: 0;
+/* ==================== 代码替换确认弹窗 ==================== */
+.replace-confirm {
+  .rp-tip {
+    display: flex;
+    align-items: flex-start;
+    gap: 7px;
+    margin: 0 0 10px;
+    font-size: 12.5px;
+    line-height: 1.7;
+    color: var(--dbm-text-2);
+
+    .rp-warn-icon {
+      flex-shrink: 0;
+      margin-top: 3px;
+      color: var(--dbm-warning);
+    }
+
+    b {
+      color: var(--dbm-danger);
+    }
+  }
+
+  .rp-list {
+    max-height: 320px;
+    overflow-y: auto;
+    border: 1px solid var(--dbm-border);
+    border-radius: var(--dbm-radius-m);
+    background: var(--dbm-bg-2);
+    padding: 4px;
+  }
+
+  .rp-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: var(--dbm-radius-s);
+
+    &:hover {
+      background: var(--dbm-bg-hover);
+    }
+
+    .rp-idx {
+      flex-shrink: 0;
+      width: 20px;
+      font-size: 10.5px;
+      color: var(--dbm-text-3);
+      font-family: var(--dbm-font-mono);
+      text-align: right;
+    }
+
+    .rp-file {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+
+      .rp-name {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--dbm-text-1);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .rp-path {
+        font-size: 10.5px;
+        color: var(--dbm-text-3);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+    }
+
+    .rp-meta {
+      margin-left: auto;
+      flex-shrink: 0;
+      font-size: 10.5px;
+      color: var(--dbm-text-3);
+    }
   }
 }
 
+/* ==================== 动画 ==================== */
 @keyframes pulse {
   50% {
     opacity: 0.35;

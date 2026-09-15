@@ -60,7 +60,7 @@ export interface AiChatMessage {
 /** 能力调用记录（右侧面板展示形态） */
 export interface AiToolRecord {
   id: string
-  /** 对应 ChatToolCall.id（聊天区工具芯片点击定位用） */
+  /** 对应 ChatToolCall.id（聊天区工具芯片点击定位用；zip 下载也按此索引） */
   callId: string
   name: string
   argsText: string // 参数（pretty JSON / 原始文本）
@@ -70,16 +70,45 @@ export interface AiToolRecord {
   createdAt: number
 }
 
+/** 代码生成产物的 zip 下载缓存（Blob URL，会话内可重复下载） */
+export interface AiZipDownload {
+  fileName: string
+  url: string
+  size: number
+  fileCount: number
+  createdAt: number
+}
+
+/** 代码替换确认弹窗中的待替换文件 */
+export interface AiReplaceFile {
+  fileName: string
+  filePath: string
+  templateName: string
+  tableName: string
+  size: number
+}
+
+/** 待确认的代码替换（弹窗确认 / 取消后 resolve） */
+export interface AiPendingReplace {
+  files: AiReplaceFile[]
+  resolve: (ok: boolean) => void
+}
+
 /* ==================== 工具注册表 ==================== */
 
 /** 工具改动后会话结束需同步刷新的仓库域 */
 type ToolDomain = 'model' | 'dict' | 'template' | 'settings'
 
+/** 工具执行上下文（调用记录关联 zip 下载等界面态） */
+interface ToolInvokeCtx {
+  callId: string
+}
+
 /** AGENT 工具（openai function calling 形态 + 执行器） */
 interface AgentTool {
   spec: ChatToolSpec
   domains: ToolDomain[]
-  invoke: (args: Record<string, unknown>) => Promise<unknown>
+  invoke: (args: Record<string, unknown>, ctx: ToolInvokeCtx) => Promise<unknown>
 }
 
 /** 工厂依赖 */
@@ -89,6 +118,14 @@ export interface AiDeps {
   getDict: () => DictStore
   getTemplate: () => TemplateStore
   getSettings: () => SettingsStore
+}
+
+/** 界面态钩子（zip 缓存注册 / 代码替换确认），由仓库实例提供 */
+interface AgentHooks {
+  /** 代码生成完成后注册 zip 下载缓存（按 callId 索引） */
+  registerZip: (callId: string, blob: Blob, fileName: string, fileCount: number) => void
+  /** 代码替换前弹出确认（用户确认 resolve(true)、取消 resolve(false)） */
+  requestReplaceConfirm: (files: AiReplaceFile[]) => Promise<boolean>
 }
 
 /* ---------- JSON Schema 构建辅助（紧凑书写契约参数） ---------- */
@@ -266,7 +303,7 @@ function plainTool(
   desc: string,
   parameters: Record<string, unknown>,
   domains: ToolDomain[],
-  invoke: (args: Record<string, unknown>) => Promise<unknown>,
+  invoke: (args: Record<string, unknown>, ctx: ToolInvokeCtx) => Promise<unknown>,
 ): AgentTool {
   return {
     spec: { type: 'function', function: { name, description: desc, parameters } },
@@ -309,7 +346,7 @@ async function generateFilesOf(deps: AiDeps, args: Record<string, unknown>) {
 
 /* ==================== 系统提示 ==================== */
 
-/** AGENT 系统提示：能力说明 + 工作约定 +（可选）全局规则 */
+/** AGENT 系统提示：能力说明 + 默认规则（任务执行流程）+（可选）全局规则 */
 function buildSystemPrompt(globalRules: string): string {
   const base = `你是「图形数据库模型编辑工具」内嵌的 AI 助手，运行在 AGENT 模式：可以通过工具直接读写当前模型数据，并执行代码生成与代码替换。
 
@@ -320,15 +357,20 @@ function buildSystemPrompt(globalRules: string): string {
 - 字典：getDictCategories / addDictCategory / updateDictCategory / removeDictCategory / getDicts / addDict / updateDict / removeDict
 - 模板：getTemplates / addTemplate / updateTemplate / removeTemplate / getDictCategoryTemplate / updateDictCategoryTemplate
 - 设置与数据：getSettings / saveSettings / importFromDB / load / save / resetDemo
-- 代码生成：generateCode（按模板生成产物并返回文件清单）
-- 代码替换：replaceCode（生成并写回源码文件，属危险操作）
+- 代码生成：generateCode（按模板生成产物并打包 zip 供用户下载，返回文件清单）
+- 代码替换：replaceCode（生成并写回源码文件，执行前需经用户确认，属危险操作）
 
-工作约定：
-1. 修改前先调用查询类工具了解现状（如 getTables / getDicts），使用返回数据中的真实 id 与字段名构造载荷，不要虚构
-2. 新增对象需自行生成唯一 id，惯例前缀：分类 cat-、表 t-、字段 c-、索引 i-、导航 nav-、字典分类 dictcat-、字典 dict-、字典值 dv-、模板 tpl-
-3. 工具执行失败会返回中文原因：阅读后修正参数重试，不要以相同参数硬试
-4. 代码生成 / 替换按表名（tableName）指定范围，不使用 id
-5. 完成任务后，用简洁的中文总结所做的修改与结果`
+任务执行流程（默认规则，必须遵守）：
+1. 读取最新设置与数据：动手前先调用查询工具（getSettings / getTables / getDicts 等）获取当前真实状态；修改任何元素前必须先读取该元素的当前值，基于最新数据构造修改载荷——禁止凭记忆或推测直接提交，避免用脏数据覆盖真实数据
+2. 分析任务需求：需求存在多种可能的理解时不要擅自选择，先列出可选项让用户确认后再继续
+3. 复杂任务先规划：涉及多个对象或多步操作的任务，先制定分步任务计划再逐步执行
+4. 开始执行任务：按计划调用工具完成各步骤；新增对象自行生成唯一 id，惯例前缀：分类 cat-、表 t-、字段 c-、索引 i-、导航 nav-、字典分类 dictcat-、字典 dict-、字典值 dv-、模板 tpl-
+5. 校验执行结果：关键修改完成后按需调用查询工具核对结果是否符合预期，确认无误再汇报
+
+其他约定：
+- 工具执行失败会返回中文原因：阅读后修正参数重试，不要以相同参数硬试
+- 代码生成 / 替换按表名（tableName）指定范围，不使用 id；代码替换会覆盖目标源码文件，仅在用户明确要求时使用
+- 完成任务后，用简洁的中文总结所做的修改与结果`
   const rules = String(globalRules ?? '').trim()
   if (!rules) return base
   return `${base}
@@ -373,9 +415,9 @@ const MAX_TOOL_ROUNDS = 12
 /**
  * 构建 AGENT 工具注册表：ManagerApi 全部能力（去除 AI 设置与 chatComplete；
  * replace 为 zip 二进制参数不可 JSON 化，由代码替换工具承担）+ 代码生成 + 代码替换。
- * 每次 send 重建（捕获当次 deps；api prop 切换后取到新实例，resetDemo 按需注册）。
+ * 每次 send 重建（捕获当次 deps 与 hooks；api prop 切换后取到新实例，resetDemo 按需注册）。
  */
-function buildAgentTools(deps: AiDeps): AgentTool[] {
+function buildAgentTools(deps: AiDeps, hooks: AgentHooks): AgentTool[] {
   const api = deps.getApi()
   const tools: AgentTool[] = []
 
@@ -681,10 +723,28 @@ function buildAgentTools(deps: AiDeps): AgentTool[] {
     templateNames: strArr('参与的表模板名称列表（缺省 = 全部模板；表级启用模板配置仍生效）'),
     dictEnabled: bool('是否生成字典分类模板代码（默认 true）'),
   })
+
+  /** 生成文件 → 确认弹窗行 / 文件清单行（共用形态） */
+  const toFileRows = (files: Awaited<ReturnType<typeof generateFilesOf>>) =>
+    files.map((f) => ({
+      templateName: f.templateName,
+      tableName: f.tableName,
+      fileName: f.fileName,
+      filePath: f.filePath,
+      size: f.content.length,
+    }))
+
+  /** zip 下载文件名（与手动代码生成保持同风格：dbm-codegen-时间戳.zip） */
+  function zipFileName(): string {
+    const t = new Date()
+    const p = (n: number) => String(n).padStart(2, '0')
+    return `dbm-codegen-${t.getFullYear()}${p(t.getMonth() + 1)}${p(t.getDate())}-${p(t.getHours())}${p(t.getMinutes())}${p(t.getSeconds())}.zip`
+  }
+
   tools.push(
     plainTool(
       'generateCode',
-      '代码生成：按表模板与字典分类模板生成代码产物，返回文件清单（templateName / tableName / fileName / filePath / size）。不写回源码、不触发下载。',
+      '代码生成：按表模板与字典分类模板生成代码产物，自动打包为 zip 并在界面提供下载按钮（用户点击即可下载），返回文件清单（templateName / tableName / fileName / filePath / size）。不写回源码。',
       obj('生成参数', {
         ...(codegenParams.properties as Record<string, unknown>),
         includeContent: bool(
@@ -692,8 +752,10 @@ function buildAgentTools(deps: AiDeps): AgentTool[] {
         ),
       }),
       [],
-      async (a) => {
+      async (a, ctx) => {
         const files = await generateFilesOf(deps, a)
+        const blob = await deps.getTemplate().buildZip(files)
+        hooks.registerZip(ctx.callId, blob, zipFileName(), files.length)
         return {
           total: files.length,
           files: files.map((f) => ({
@@ -711,6 +773,11 @@ function buildAgentTools(deps: AiDeps): AgentTool[] {
                 }
               : {}),
           })),
+          zip: {
+            fileName: zipFileName(),
+            size: blob.size,
+            note: '已打包为 zip 并在界面调用记录中提供下载按钮，用户可自行下载',
+          },
         }
       },
     ),
@@ -718,23 +785,20 @@ function buildAgentTools(deps: AiDeps): AgentTool[] {
   tools.push(
     plainTool(
       'replaceCode',
-      '代码替换：按模板生成代码产物并经代码替换接口写回对应源码文件（危险操作：会覆盖目标源码文件，仅在用户明确要求时使用）。',
+      '代码替换：按模板生成代码产物，先向用户列出将被覆盖的文件清单并等待确认，确认后经代码替换接口写回对应源码文件（危险操作：会覆盖目标源码文件，仅在用户明确要求时使用；用户取消则本次不执行）。',
       codegenParams,
       [],
       async (a) => {
         const files = await generateFilesOf(deps, a)
         if (!files.length) throw new Error('未生成任何文件，请检查表与模板范围')
+        const rows = toFileRows(files)
+        const confirmed = await hooks.requestReplaceConfirm(rows)
+        if (!confirmed) throw new Error('用户已取消本次代码替换，未写回任何文件')
         const zip = await deps.getTemplate().buildZip(files)
         await deps.getApi().replace(zip)
         return {
           replaced: files.length,
-          files: files.map((f) => ({
-            templateName: f.templateName,
-            tableName: f.tableName,
-            fileName: f.fileName,
-            filePath: f.filePath,
-            size: f.content.length,
-          })),
+          files: rows,
         }
       },
     ),
@@ -760,6 +824,10 @@ export function createAiStore(deps: AiDeps) {
     toolRecords: [] as AiToolRecord[],
     running: false,
     abortController: null as AbortController | null,
+    /** 代码生成 zip 下载缓存（callId → Blob URL，会话内可重复下载） */
+    zipDownloads: {} as Record<string, AiZipDownload>,
+    /** 待确认的代码替换（弹窗展示文件清单，用户确认/取消后 resolve） */
+    pendingReplace: null as AiPendingReplace | null,
 
     /** 模型下拉选项 */
     get modelOptions(): Array<{ value: string; label: string }> {
@@ -821,16 +889,18 @@ export function createAiStore(deps: AiDeps) {
 
     /* ---------- 会话操作 ---------- */
 
-    /** 中止当前生成（流式请求 abort，消息标记为已中止） */
+    /** 中止当前生成（流式请求 abort，消息标记为已中止；待确认的替换一并取消） */
     stop() {
+      this.resolveReplace(false)
       this.abortController?.abort()
     },
 
-    /** 开启新会话（清空消息与调用记录；不影响模型选择） */
+    /** 开启新会话（清空消息与调用记录，释放 zip 缓存；不影响模型选择） */
     clearSession() {
       if (this.running) this.stop()
       this.messages = []
       this.toolRecords = []
+      this.releaseZipDownloads()
     },
 
     /** api 切换时重置会话与加载态（由 DBManagerView 调用） */
@@ -840,6 +910,39 @@ export function createAiStore(deps: AiDeps) {
       this.toolRecords = []
       this.loaded = false
       this.loading = false
+      this.releaseZipDownloads()
+    },
+
+    /* ---------- zip 下载缓存 ---------- */
+
+    /** 释放全部 zip 下载缓存（会话清理时调用） */
+    releaseZipDownloads() {
+      for (const key of Object.keys(this.zipDownloads)) {
+        URL.revokeObjectURL(this.zipDownloads[key].url)
+        delete this.zipDownloads[key]
+      }
+    },
+
+    /** 触发 zip 下载（缓存 Blob URL，可重复点击；不释放） */
+    downloadZip(callId: string) {
+      const entry = this.zipDownloads[callId]
+      if (!entry) return
+      const a = document.createElement('a')
+      a.href = entry.url
+      a.download = entry.fileName
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+    },
+
+    /* ---------- 代码替换确认 ---------- */
+
+    /** 弹窗回调：确认 / 取消待确认的代码替换 */
+    resolveReplace(ok: boolean) {
+      const pending = this.pendingReplace
+      if (!pending) return
+      this.pendingReplace = null
+      pending.resolve(ok)
     },
 
     /**
@@ -863,7 +966,28 @@ export function createAiStore(deps: AiDeps) {
         return
       }
       const model = this.currentModel!
-      const tools = buildAgentTools(deps)
+      /* 界面态钩子：zip 缓存注册 + 代码替换确认（绑定本仓库实例） */
+      const hooks: AgentHooks = {
+        registerZip: (callId, blob, fileName, fileCount) => {
+          const old = this.zipDownloads[callId]
+          if (old) URL.revokeObjectURL(old.url)
+          this.zipDownloads = {
+            ...this.zipDownloads,
+            [callId]: {
+              fileName,
+              url: URL.createObjectURL(blob),
+              size: blob.size,
+              fileCount,
+              createdAt: Date.now(),
+            },
+          }
+        },
+        requestReplaceConfirm: (files) =>
+          new Promise<boolean>((resolve) => {
+            this.pendingReplace = { files, resolve }
+          }),
+      }
+      const tools = buildAgentTools(deps, hooks)
       const dirtyDomains = new Set<string>()
 
       this.messages.push({
@@ -951,6 +1075,9 @@ export function createAiStore(deps: AiDeps) {
           if (result.reasoning) asst.reasoning = result.reasoning
           asst.status = 'done'
           asst.reasoningOpen = false // 完成后自动收起（用户可手动再展开）
+          // 展示文本去头尾空白（流式期间的中间态不做处理，完成时统一收口）
+          asst.content = String(asst.content ?? '').trim()
+          asst.reasoning = String(asst.reasoning ?? '').trim()
 
           if (!result.toolCalls.length) {
             reachedFinal = true
@@ -983,14 +1110,14 @@ export function createAiStore(deps: AiDeps) {
               const tool = tools.find((t) => t.spec.function.name === call.function.name)
               if (!tool) throw new Error(`未知工具：${call.function.name}`)
               const args = safeParseJson(call.function.arguments)
-              record.argsText = prettyJson(safeParseJson(call.function.arguments))
-              const value = await tool.invoke(args)
+              record.argsText = prettyJson(safeParseJson(call.function.arguments)).trim()
+              const value = await tool.invoke(args, { callId: call.id })
               for (const d of tool.domains) dirtyDomains.add(d)
               record.status = 'success'
-              record.resultText = prettyJson(value)
+              record.resultText = prettyJson(value).trim()
             } catch (e) {
               record.status = 'error'
-              record.resultText = errorMessageOf(e, '工具执行失败')
+              record.resultText = errorMessageOf(e, '工具执行失败').trim()
               record.durationMs = Date.now() - started
               chatMsgs.push({
                 role: 'tool',
@@ -1024,7 +1151,7 @@ export function createAiStore(deps: AiDeps) {
         if (last) {
           last.status = aborted ? 'aborted' : 'error'
           last.reasoningOpen = false
-          if (!aborted) last.error = errorMessageOf(e, 'AI 调用失败')
+          if (!aborted) last.error = errorMessageOf(e, 'AI 调用失败').trim()
         }
         if (aborted) {
           message.info('已停止生成')

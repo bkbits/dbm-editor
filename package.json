@@ -28,7 +28,8 @@
     "eta": "^4.6.0",
     "highlight.js": "^11.12.0",
     "highlightjs-eta": "^0.1.0",
-    "jszip": "^3.10.2"
+    "jszip": "^3.10.2",
+    "markstream-vue": "^2.0.11"
   },
   "devDependencies": {
     "@lucide/vue": "^1.44.0",

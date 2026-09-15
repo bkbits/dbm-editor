@@ -53,6 +53,9 @@
   --dbm-primary-strong: #0b7a70;
   --dbm-primary-weak: rgba(13, 148, 136, 0.12);
   --dbm-primary-text: #0b7a70;
+  /* 主色/危险色实底上的前景（图标、文字）：亮色主题用白，暗色主题主色变亮改用深色保证对比 */
+  --dbm-on-primary: #ffffff;
+  --dbm-on-danger: #ffffff;
   --dbm-danger: #d5424a;
   --dbm-danger-weak: rgba(213, 66, 74, 0.1);
   --dbm-warning: #d97706;
@@ -129,6 +132,9 @@
   --dbm-primary-strong: #14b8a6;
   --dbm-primary-weak: rgba(45, 212, 191, 0.16);
   --dbm-primary-text: #5eead4;
+  /* 亮彩主色/浅红危险色实底上改用深色前景，白字对比不足 */
+  --dbm-on-primary: #042f2a;
+  --dbm-on-danger: #3f1214;
   --dbm-danger: #f16a70;
   --dbm-danger-weak: rgba(241, 106, 112, 0.16);
   --dbm-warning: #f0a84c;

@@ -48,8 +48,10 @@ function normalizeOptionSettings(raw: unknown): OptionSetting[] {
       name: String(o?.name ?? '').trim(),
       type: String(o?.type ?? 'boolean').trim() || 'boolean',
       label: String(o?.label ?? '').trim(),
-      remark: String(o?.remark ?? '').trim() || undefined,
-      dict: String(o?.dict ?? '').trim() || undefined,
+      // 空串保留（不转 undefined）：设置页草稿与已保存态的 JSON 比较需两侧键集一致，
+      // 否则「未填写」选项会让设置页一加载就误报「有未保存的修改」
+      remark: String(o?.remark ?? '').trim(),
+      dict: String(o?.dict ?? '').trim(),
     }))
     .filter((o) => o.name)
     .map((o) => ({ ...o, label: o.label || o.name }))
