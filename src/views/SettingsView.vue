@@ -550,7 +550,10 @@ async function save() {
         </div>
 
         <div class="card-intro">
-          「编辑表」对话框中，每张表的<b>第一个字段固定为主键</b>（按下方约定生成，不可修改、不可排序，每表强制拥有）；「添加审计字段」按下方约定一键补齐四个审计字段（创建人/创建时间强制非空，更新人/更新时间可空），可整组移除。名称与类型保存后对新加入的约定字段生效；字段名采用数据库蛇形命名，Java
+          「编辑表」对话框中，每张表的<b>第一个字段固定为主键</b>（按下方约定生成，不可修改、不可排序，每表强制拥有，Java
+          类型按「列默认类型」规则自动推导）；「添加审计字段」按下方约定一键补齐四个审计字段（创建人/创建时间强制非空，更新人/更新时间可空），可整组移除。名称、类型与审计字段
+          Java 类型保存后对新加入的约定字段生效；审计字段 Java
+          类型留空时按「列默认类型」规则自动推导、随类型联动，设定后固定使用该值；字段名采用数据库蛇形命名，Java
           属性名自动转小驼峰。
         </div>
 
@@ -585,7 +588,7 @@ async function save() {
             />
             <span
               class="conv-java mono"
-              :title="`Java 类型：${javaOf(fieldConventions.primaryKey.type)}`"
+              :title="`Java 类型（按「列默认类型」规则自动推导）：${javaOf(fieldConventions.primaryKey.type)}`"
             >
               {{ javaOf(fieldConventions.primaryKey.type) }}
             </span>
@@ -612,12 +615,18 @@ async function save() {
                   String(option.value).toUpperCase().includes(input.toUpperCase())
               "
             />
-            <span
-              class="conv-java mono"
-              :title="`Java 类型：${javaOf(fieldConventions.auditFields[role].type)}`"
-            >
-              {{ javaOf(fieldConventions.auditFields[role].type) }}
-            </span>
+            <a-auto-complete
+              v-model:value="fieldConventions.auditFields[role].javaType"
+              :options="javaTypeOptions"
+              size="small"
+              class="mono conv-java-input"
+              allow-clear
+              :placeholder="javaOf(fieldConventions.auditFields[role].type)"
+              :filter-option="
+                (input: string, option: any) =>
+                  String(option.value).toLowerCase().includes(input.toLowerCase())
+              "
+            />
             <span class="conv-tag" :class="AUDIT_FIELD_NOT_NULL[role] ? 'required' : 'optional'">
               {{ AUDIT_FIELD_NOT_NULL[role] ? '非空' : '可空' }}
             </span>
@@ -635,7 +644,8 @@ async function save() {
           </span>
           <span v-else class="conv-tip">
             默认：id / create_by / create_time / update_by / update_time（Java
-            属性名自动转小驼峰；非空约束为固定语义，随字段角色而定）
+            属性名自动转小驼峰；非空约束为固定语义，随字段角色而定；审计字段 Java 类型留空 =
+            按类型映射自动推导）
           </span>
         </div>
       </section>
@@ -1223,6 +1233,16 @@ async function save() {
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+    }
+
+    /* 审计字段 Java 类型输入（可编辑，留空 placeholder 展示推导值） */
+    .conv-java-input {
+      width: 100%;
+      text-align: center;
+
+      :deep(.ant-input) {
+        text-align: center;
+      }
     }
 
     .conv-tag {

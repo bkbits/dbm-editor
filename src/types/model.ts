@@ -297,6 +297,8 @@ export interface PrimaryKeyConvention {
 export interface AuditFieldConvention {
   name: string // 字段名（默认为角色名蛇形，如 create_by）
   type: string // 数据库类型（创建人/更新人默认 BIGINT，创建时间/更新时间默认 DATETIME）
+  /** Java 类型（空 = 按列类型映射规则自动推导；显式设定后建列固定使用该值） */
+  javaType?: string
 }
 
 /**

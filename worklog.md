@@ -963,3 +963,30 @@ Stage Summary:
 - 四项需求全部完成并经真实浏览器验证：小地图视口矩形半透明（复用 Task 30 的 --dbm-select-fill 令牌）、dict 模板常量统一 String、字典值常量属性名 propertyName（UI 即时大写 + API 归一 + 重复校验 + 种子回填迁移）、字典分类 basePackage/className（大驼峰失焦自动转换 + 保存/API 双层校验 + file 迁移推导）
 - 关键决策：① propertyName 可选 + 模板兜底（值键推导大写蛇形）——旧数据/未填值不阻塞生成；② 迁移兜底类名不合法时置空而非持久化非法值；③ 字典分类模板种子升级走独立版本号（DICT_TEMPLATE_SEED_VERSION），与表模板版本互不干扰；④ 常量属性名/类名的大小写转换在 UI 与 API 双层实施（防御纵深）
 - 沙箱工作流沉淀：脏树 pin（worklog 未提交修改钉住 devel 分支）+ 未跟踪目录 patch 备份，验证通过后单次原子提交推送
+
+---
+Task ID: 33
+Agent: main (Super Z)
+Task: 审计字段约定增加 javaType 设置（「系统设置 → 主键与审计字段」）
+
+Work Log:
+- 需求：「审计字段要能设置 javaType」。原实现 AuditFieldConvention 仅 name/type，Java 类型为只读派生展示（javaOf(type)），建列时 makeAuditColumn 走内置映射推导
+- 设计：javaType 为可选字段——**空 = 按类型映射规则自动推导**（输入框 placeholder 展示推导值，随类型改动天然联动，无需 watch），**显式设定 = 建列固定使用该值**（清空即回归自动）；主键 Java 类型保持只读自动推导
+- 类型层（types/model.ts）：AuditFieldConvention 增 javaType?: string（注释说明空=自动推导语义）
+- 归一化（fieldConvention.ts）：normalizeFieldConventions 对 javaType 去空白、空串归一 undefined；旧数据缺 javaType 无需迁移即落到自动模式（normalize 兜底，不动 SEED_TEMPLATES_VERSION）
+- UI（SettingsView.vue）：审计行只读 span → a-auto-complete（javaTypeOptions 候选 + allow-clear 可清空回归自动 + 大小写不敏感过滤），placeholder=javaOf(type) 实时展示推导值；主键行 title 注明「按规则自动推导」；卡片说明与底部提示补语义；新增 .conv-java-input 居中样式
+- 建列（TableEditDialog.vue makeAuditColumn）：javaType = conv.javaType || (settingsStore.matchJavaType(conv.type) ?? getJavaTypeByType(conv.type))——显式优先，回退链与数据库导入/设置页展示同语义（先规则后内置）
+- README 同步：主键与审计字段段落补「审计字段可单独设定 Java 类型（留空自动推导且随类型联动/恢复默认全部回自动/建列取约定值）」
+- 验证（干净副本覆盖区 + dev server 3100 + agent-browser 1920×1080，18/18 断言通过、0 控制台错误）：
+  * 初始态：四审计行占位符 Long/LocalDateTime/Long/LocalDateTime；主键只读 Long；输入框 x4
+  * 显式设定：create_by=String、update_by=Integer（有值时占位符消失）；create_time 类型 DATETIME→DATE 后空 javaType 占位符联动 LocalDate；update_time 保持 LocalDateTime
+  * 持久化：保存设置→重载，值/类型/自动推导全部还原；localStorage fieldConventions 精确断言（"javaType":"String"/"Integer" 显式落库、DATE 行无 javaType 键=自动）
+  * 建列：sys_user「添加审计字段」→ 对话框四列 javaType=String/LocalDate/Integer/LocalDateTime；点「保 存」后 localStorage 列数据同值
+  * 截图：docs/screenshots/task33-settings-javatype.png、task33-table-audit-columns.png
+- bun run typecheck 通过；vp check 54 文件 lint 零告警（--fix 修两处折行后格式全绿）；check-readme.py 通过（31 标题）
+- 沙箱对策（本任务回滚仍是「工具调用之间」，且新发现调用间派生进程一律被杀——setsid 亦无效）：① 覆盖区 .wt/task32（git archive devel 解包 + node_modules 绝对软链，未跟踪目录不受回滚影响）内用常规 Read/Edit 工具开发；② 覆盖区 git init 独立小仓解决 vp check 因父仓 ignore 规则排除 .wt 的问题；③ dev server 无法跨调用存活——验证脚本在单次 Bash 调用内完成「起服务→浏览器全流程→证据落盘→杀服务」（scripts-verify/common.sh + step-*.sh）；④ agent-browser 踩坑记录：find nth 为 0 基索引；antdv-next AutoComplete 的 placeholder 渲染为 .ant-select-placeholder 覆盖 div（非原生属性），断言需读该元素；antd 弹窗确定按钮文本为「保 存」（带空格）
+
+Stage Summary:
+- 审计字段 Java 类型可设置全链路落地：设置页可编辑（自动补全/可清空）、持久化、建列取值（显式优先，自动=规则链推导）；空值语义让「自动跟随类型」零代码实现（占位符天然联动）
+- 关键决策：① 可选字段+空值自动语义——免旧数据迁移、免类型联动 watch、清空即回归自动（优于显式默认值方案）；② 建列回退链 matchJavaType→getJavaTypeByType 与导入/设置页展示同语义；③ a-auto-complete（自由输入+候选+allow-clear）而非 a-select 枚举——支持 SETTINGS_JAVA_TYPES 之外的自定义类型（如 Instant）
+- 沙箱工作流新增：覆盖区独立 git init（让 vp check 在 git archive 副本中可用）+ 单调用验证脚本框架（common.sh 起/杀服务 + step 脚本跑浏览器断言 + verify/ 落证据）

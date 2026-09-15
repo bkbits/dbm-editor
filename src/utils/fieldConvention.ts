@@ -1,6 +1,6 @@
 /**
  * 主键与审计字段约定：默认值、角色元信息与归一化工具
- * （「系统设置 → 主键与审计字段」编辑名称/类型；表编辑对话框据此固定首字段
+ * （「系统设置 → 主键与审计字段」编辑名称/类型与审计字段 Java 类型；表编辑对话框据此固定首字段
  *   与「添加审计字段 / 删除审计字段」一键增删）
  */
 import type {
@@ -34,7 +34,10 @@ export const AUDIT_FIELD_NOT_NULL: Record<AuditFieldRole, boolean> = {
   updateTime: false,
 }
 
-/** 默认约定（需求规格：主键 id/BIGINT；审计字段蛇形命名 create_by 等，Java 属性名由小驼峰转换自动得到 createBy） */
+/**
+ * 默认约定（需求规格：主键 id/BIGINT；审计字段蛇形命名 create_by 等，Java 属性名由小驼峰转换自动得到 createBy）。
+ * 审计字段 javaType 缺省（空 = 按列类型映射规则自动推导，建列时取推导值；显式设定则固定使用）
+ */
 export const DEFAULT_FIELD_CONVENTIONS: FieldConventions = {
   primaryKey: { name: 'id', type: 'BIGINT' },
   auditFields: {
@@ -47,7 +50,8 @@ export const DEFAULT_FIELD_CONVENTIONS: FieldConventions = {
 
 /**
  * 归一化（旧数据/外部数据缺省时按默认补齐；名称/类型去空白，空值回退默认）。
- * 非空约束不在数据内（随角色的固定语义），由 AUDIT_FIELD_NOT_NULL 提供
+ * 非空约束不在数据内（随角色的固定语义），由 AUDIT_FIELD_NOT_NULL 提供；
+ * javaType 去空白后为空串时归一为 undefined（语义：按类型映射规则自动推导）
  */
 export function normalizeFieldConventions(raw: unknown): FieldConventions {
   const s = (raw || {}) as {
@@ -61,6 +65,7 @@ export function normalizeFieldConventions(raw: unknown): FieldConventions {
     auditFields[role] = {
       name: String(r.name ?? def.auditFields[role].name).trim() || def.auditFields[role].name,
       type: String(r.type ?? def.auditFields[role].type).trim() || def.auditFields[role].type,
+      javaType: String(r.javaType ?? '').trim() || undefined,
     }
   }
   return {

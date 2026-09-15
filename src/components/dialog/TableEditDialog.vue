@@ -256,7 +256,7 @@ function makePkColumn(): DraftColumn {
   return col
 }
 
-/** 依约定构造审计字段草稿（非空约束随角色固定语义） */
+/** 依约定构造审计字段草稿（非空约束随角色固定语义；Java 类型显式设定优先，空则按类型映射规则推导） */
 function makeAuditColumn(role: AuditFieldRole): DraftColumn {
   const conv = conventions.value.auditFields[role]
   const col: DraftColumn = {
@@ -266,7 +266,8 @@ function makeAuditColumn(role: AuditFieldRole): DraftColumn {
     propertyName: toCamelCase(conv.name, true),
     sort: draft.columns.length,
     type: conv.type,
-    javaType: getJavaTypeByType(conv.type),
+    javaType:
+      conv.javaType || (settingsStore.matchJavaType(conv.type) ?? getJavaTypeByType(conv.type)),
     comment: AUDIT_FIELD_LABELS[role],
     notNull: AUDIT_FIELD_NOT_NULL[role],
     primaryKey: false,
