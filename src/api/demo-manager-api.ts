@@ -20,6 +20,7 @@ import { Logger } from '@/log/Logger'
 import type {
   DBTable,
   Dict,
+  DictCategory,
   DictValue,
   LoadResultVO,
   ManagerApi,
@@ -408,6 +409,47 @@ export class DemoManagerApi implements ManagerApi {
     persistDB()
   }
 
+  /* ==================== 字典分类 ==================== */
+
+  async getDictCategories(): Promise<DictCategory[]> {
+    return clone(getDB().dictCategories)
+  }
+
+  async addDictCategory(category: DictCategory): Promise<void> {
+    const db = getDB()
+    const name = requireStr(category?.name, 'name', '分类名称')
+    if (db.dictCategories.some((c) => c.name === name))
+      throw new Error(`字典分类名称已存在: ${name}`)
+    if (!category.id) throw new Error('新增字典分类必须提供 id')
+    db.dictCategories.push({
+      id: category.id,
+      name,
+      file: String(category?.file || '').trim(),
+    })
+    persistDB()
+  }
+
+  async updateDictCategory(category: DictCategory): Promise<void> {
+    const db = getDB()
+    const id = requireStr(category?.id, 'id', '字典分类ID')
+    const target = db.dictCategories.find((c) => c.id === id)
+    if (!target) throw new Error(`字典分类不存在: ${id}`)
+    const name = requireStr(category?.name, 'name', '分类名称')
+    if (db.dictCategories.some((c) => c.name === name && c.id !== id))
+      throw new Error(`字典分类名称已存在: ${name}`)
+    target.name = name
+    target.file = String(category?.file || '').trim()
+    persistDB()
+  }
+
+  async removeDictCategory(categoryId: string): Promise<void> {
+    const db = getDB()
+    if (db.dicts.some((d) => d.categoryId === categoryId))
+      throw new Error('该分类下仍有字典，无法删除（请先移动或删除其下字典）')
+    db.dictCategories = db.dictCategories.filter((c) => c.id !== categoryId)
+    persistDB()
+  }
+
   /* ==================== 字典 ==================== */
 
   async getDicts(): Promise<Dict[]> {
@@ -442,7 +484,25 @@ export class DemoManagerApi implements ManagerApi {
     persistDB()
   }
 
-  /* ==================== 模板 ==================== */
+  /* ==================== 字典分类模板 ==================== */
+
+  async getDictCategoryTemplate(): Promise<Template> {
+    const t = getDB().dictCategoryTemplate
+    return { id: t.id, templateName: t.name, content: t.content }
+  }
+
+  async updateDictCategoryTemplate(template: Template): Promise<void> {
+    const db = getDB()
+    const target = db.dictCategoryTemplate
+    if (!target || target.id !== template?.id)
+      throw new Error(`字典分类模板不存在: ${template?.id}`)
+    const name = requireStr(template?.templateName, 'templateName', '模板名称')
+    target.name = name
+    target.content = String(template.content || '')
+    persistDB()
+  }
+
+  /* ==================== 表模板 ==================== */
 
   async getTemplates(): Promise<Template[]> {
     return getDB().templates.map((t) => ({ id: t.id, templateName: t.name, content: t.content }))
@@ -584,6 +644,7 @@ function normalizeDict(dict: Partial<Dict>, dictKey: string): Dict {
   const label = requireStr(dict?.label, 'label', '字典标签')
   return {
     id: String(dict?.id || ''),
+    categoryId: String(dict?.categoryId || '').trim(),
     dictKey,
     label,
     comment: String(dict?.comment || ''),
