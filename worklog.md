@@ -907,3 +907,27 @@ Stage Summary:
 - 两项 UI 修复完成：框选矩形半透明（透出框住内容，亮暗主题均为 12% 主色填充）；导航线悬停色与激活色同为 antd 主色相、仅透明度/线宽/光晕递进——「差别大」问题消除
 - 关键决策：① 早绑定是浏览器实测行为而非猜测——微测试页四元素取证后才动手；② 不改动 --dbm-primary-weak 的 antd 映射（colorPrimaryBg 实色适合按钮/徽标等小面积弱底），框选单建 --dbm-select-fill 令牌；③ 同根因的选中卡片描边一并修复并在 antd-theme.scss 头注释沉淀早绑定结论，防止后续再犯
 - 连带交付：重置演示数据 Modal 卡死回归修复（setup 顶层捕获 history store）；worklog 记录 var() 早绑定陷阱与曲线取点方法论
+
+---
+Task ID: 31
+Agent: main (Super Z)
+Task: 字典分类（名称/分类文件）+ 模板功能改名表模板（TemplateContext→TableTemplateContext）+ 字典分类模板（每分类渲染一次，生成/替换可选默认开）+ controller 默认模板新风格（/api/模块/功能/操作、模块.功能.操作权限码、时间 rangeClosed / id 与字典 eq / 字符串 like）
+
+Work Log:
+- 类型层：DictCategory（id/name/file——分类文件即字典代码默认产物路径）；Dict 增 categoryId（可选，空=未分类）；TemplateContext 改名 TableTemplateContext；新增 DictCategoryTemplateContext（category/dicts 含值/settings/aborted）；ManagerApi 新增字典分类 CRUD 四方法 + getDictCategoryTemplate/updateDictCategoryTemplate（仅一个）；原模板注释改「表模板」
+- 渲染层：render.ts 新增 renderDictCategoryTemplate（每分类执行一次；默认产物路径取分类文件 file，模板内可对 fileName/filePath 赋值覆盖；import 后空行保证复用）
+- 种子层：SEED_DICT_CATEGORIES（系统字典/业务字典，file 指向 SysDictConstants.java/BizDictConstants.java）+ 5 个种子字典补 categoryId；SEED_DICT_CATEGORY_TEMPLATE（name=dict，Java 常量类——分类文件推导包名/类名、每字典一个内部类、数字值键 int 常量其余 String、常量名大写蛇形）；controller/vue/menuSql 模板改造：表名按首下划线拆「模块/功能」（sys_user→sys/user、无下划线同段）——类级 @Mapping("/api/模块/功能")、@SaCheckPermission("模块.功能.操作")、menuSql 按钮权限同步、vue API_BASE 对齐；controller list 查询条件三分支——时间类型（LocalDate/LocalDateTime/LocalTime/Timestamp）rangeClosed（<prop>Begin/<prop>End 起止双参数）、id 类（_id 外键）或关联字典 eq、字符串 like、其余数值 eq；SEED_TEMPLATES_VERSION 4→5
+- 持久层：MockDB 增 dictCategories/dictCategoryTemplate；loadDB v6 迁移——无 dictCategories 补种子并按种子 dictKey 映射补字典 categoryId（未匹配保持未分类）；无 dictCategoryTemplate 补种子（独立于表模板版本，用户编辑过即保留）
+- API 层：DemoManagerApi 实现字典分类 CRUD（名称唯一；删除时分类下有字典抛「请先移动或删除其下字典」）+ 字典分类模板读写（按 id 匹配更新）；normalizeDict 带 categoryId
+- store 层：dict store 增 categories/grouped（未分类排末尾）/categoryById/saveDictCategory/removeDictCategory；template store 增 dictCategoryTemplate（init 加载）+ saveDictCategoryTemplate + generateFiles 第三参 dictEnabled（缺省视为开；按分类内联分组渲染，未分类不参与）+ generateAndDownload/replaceWithGenerated 透传；context 工厂注入 getDict
+- UI 层：DictView 列表按分类分组（折叠组头+悬停编辑/删除按钮+分类计数，footer 两段计数）、分类编辑弹窗（名称*/分类文件+用途提示）、字典表单「所属分类」下拉（allow-clear=未分类）；TemplateView 左列表分「表模板（每表渲染一次）/字典分类模板（每分类渲染一次）」两节、编辑区双模式（dict 模式无增删、保存走 saveDictCategoryTemplate）、预览目标模式化（表 select ↔ 分类 select）、runDictPreview 实时渲染、帮助面板补 category/dicts 上下文说明；TemplateSelectModal 增「生成字典分类模板代码」开关（默认开，两模式共用）；CanvasToolbar onSelectConfirm 方法绑定分发（templateNames+dictEnabled 双参回传，规避模板内联多参数表达式）
+- 验证（干净副本 git archive + dev server 3100 + agent-browser 1920×1080）：字典分组（系统字典:2/业务字典:3，v6 迁移生效）；新增/编辑分类弹窗（名称+file 回显）；删除空分类成功、有字典的分类被拒（toast「该分类下仍有字典，无法删除」）；字典表单分类下拉两选项；模板页两节列表（8 表模板+1 字典分类模板）+ dict 模式编辑区（仅一个提示）+ 分类预览目标；字典模板渲染 SysDictConstants.java（package com.example.constants.dict 推导、SysStatus 内部类、KEY 常量、int/String 常量分型）；controller 预览 sys_user——@Mapping("/api/sys/user")、权限码 sys.user.info/list/add/edit/del、rangeClosed、username like、外键 eq；代码替换清单 106 个文件（13 表×8 模板+2 字典分类产物）↔ 关闭开关 104 个（纯表模板）；重置演示数据后模板种子为修复版；0 页面错误（唯一 error 级日志为预期业务拒绝）
+- 踩坑与修复：① 字典模板正则 /^\\\\// 多余斜杠导致 Eta 编译 Unexpected token ','（hexdump 逐字符定位修复为 /^\\\\/）；② 旧库已写入坏模板且 seedTemplatesVersion 已最新不覆盖——清 localStorage 复验；③ antd 弹窗关闭后保留隐藏 DOM（可见性过滤 + last wrap 选取），多次开关弹窗叠加需按 title 区分
+- 沙箱对策（本任务期间回滚频率升至「工具调用之间」）：① 修改全部收敛为幂等 python 脚本（scripts/task31-*.py，从 git 对象库取 devel 基准锚点替换，未跟踪文件不受回滚影响）；② 提交走 plumbing 链（hash-object + read-tree + update-index + commit-tree + update-ref）完全绕开被锁定的工作区；③ 落错链提交用 cherry-pick 摘回；④ 干净副本 git archive 起独立 dev server 验证
+- bun run typecheck 通过（干净副本）；vp check 64 文件格式 + 54 文件 lint 零告警；check-readme.py 通过（29 标题）
+
+Stage Summary:
+- 数据字典分类完整落地（类型/API/存储/迁移/UI 分组管理），属性为分类名称+分类文件；模板功能改名表模板，TemplateContext→TableTemplateContext 全链路更名
+- 字典分类模板：仅一个（默认 dict 种子生成 Java 常量类），DictCategoryTemplateContext（分类+全部字典含值），每分类渲染一次，代码生成/替换可选（默认生成，106↔104 断言）
+- controller 新风格：/api/模块/功能/操作 路径 + 模块.功能.操作 权限码（表名首下划线拆分）+ 查询条件三分支（时间 rangeClosed 起止双参 / id 与字典 eq / 字符串 like），vue/menuSql 同步对齐
+- 关键决策：① 字典 categoryId 可选+运行时归一（兼容存量数据，未分类组兜底）；② 字典分类模板独立于表模板版本迁移（用户编辑过即保留）；③ 生成开关放模板选择框（两流程共用）而非全局设置；④ 沙箱极端回滚下以 git 对象库为唯一权威（plumbing 提交 + 干净副本验证）
