@@ -81,6 +81,12 @@ async function onGenerateConfirm(templateNames: string[], dictEnabled: boolean) 
   await templateStore.generateAndDownload(scopeTableIds.value, templateNames, dictEnabled)
 }
 
+/** 模板选择确认分发：按模式路由（避免模板内联多参数表达式） */
+function onSelectConfirm(templateNames: string[], dictEnabled: boolean) {
+  if (selectMode.value === 'generate') onGenerateConfirm(templateNames, dictEnabled)
+  else onReplaceConfirm(templateNames, dictEnabled)
+}
+
 /** 代码替换：先弹模板选择框，确认后生成文件并进入替换确认 */
 function replace() {
   if (!model.tables.length) {
@@ -195,7 +201,7 @@ async function onReplaceConfirm(templateNames: string[], dictEnabled: boolean) {
     <TemplateSelectModal
       v-model:open="selectOpen"
       :mode="selectMode"
-      @confirm="selectMode === 'generate' ? onGenerateConfirm($event) : onReplaceConfirm($event)"
+      @confirm="onSelectConfirm"
     />
   </div>
 </template>
