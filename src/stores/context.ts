@@ -55,6 +55,7 @@ export function createDBManagerState(getApi: () => ManagerApi): DBManagerState {
     getApi,
     getModel: () => model,
     getSettings: () => settings,
+    getDict: () => dict,
   })
   const history = createHistoryStore({ getModel: () => model })
   model = createModelStore({

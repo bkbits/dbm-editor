@@ -1,5 +1,5 @@
 /**
- * 模板仓库：代码模板 CRUD + 代码生成（zip 打包下载 / 上传替换）
+ * 模板仓库：表模板/字典分类模板 CRUD + 代码生成（zip 打包下载 / 上传替换）
  * （reactive 对象工厂形态，由 DBManagerView 经上下文注入，不依赖 Pinia；
  *   模板读写经 ManagerApi，Template.templateName ↔ 应用内部 CodeTemplate.name 适配）
  */
@@ -9,8 +9,9 @@ import JSZip from 'jszip'
 import { useDBManagerContext } from './context'
 import type { CodeTemplate, GeneratedFile, ManagerApi, TableVO, Template } from '@/types/model'
 import { errorMessageOf } from '@/api/manager-api'
-import { renderTemplate } from '@/utils/render'
+import { renderDictCategoryTemplate, renderTemplate } from '@/utils/render'
 import { uid } from '@/utils/id'
+import type { DictStore } from './dict'
 import type { ModelStore } from './model'
 import type { SettingsStore } from './settings'
 
@@ -23,6 +24,7 @@ export interface TemplateDeps {
   getApi: () => ManagerApi
   getModel: () => ModelStore
   getSettings: () => SettingsStore
+  getDict: () => DictStore
 }
 
 export function createTemplateStore(deps: TemplateDeps) {
@@ -30,6 +32,8 @@ export function createTemplateStore(deps: TemplateDeps) {
     loaded: false,
     loading: false,
     templates: [] as CodeTemplate[],
+    /** 字典分类模板（仅一个；null = 未加载） */
+    dictCategoryTemplate: null as CodeTemplate | null,
     /** 实时编辑预览状态 */
     previewTableId: '',
 
@@ -44,11 +48,18 @@ export function createTemplateStore(deps: TemplateDeps) {
       if (this.loaded || this.loading) return
       this.loading = true
       try {
-        this.templates = (await deps.getApi().getTemplates()).map((t) => ({
+        const api = deps.getApi()
+        this.templates = (await api.getTemplates()).map((t) => ({
           id: t.id,
           name: t.templateName,
           content: t.content,
         }))
+        const dictTpl = await api.getDictCategoryTemplate()
+        this.dictCategoryTemplate = {
+          id: dictTpl.id,
+          name: dictTpl.templateName,
+          content: dictTpl.content,
+        }
         this.loaded = true
       } catch (e) {
         message.error(errorMessageOf(e, '模板加载失败'))
@@ -82,6 +93,18 @@ export function createTemplateStore(deps: TemplateDeps) {
         this.templates = this.templates.filter((t) => t.id !== id)
       } catch (e) {
         message.error(errorMessageOf(e, '模板删除失败'))
+        throw e
+      }
+    },
+    /** 保存字典分类模板（仅一个，无新增/删除） */
+    async saveDictCategoryTemplate(draft: CodeTemplate) {
+      try {
+        const spec: Template = { id: draft.id, templateName: draft.name, content: draft.content }
+        await deps.getApi().updateDictCategoryTemplate(spec)
+        this.dictCategoryTemplate = { id: draft.id, name: draft.name, content: draft.content }
+        return this.dictCategoryTemplate
+      } catch (e) {
+        message.error(errorMessageOf(e, '字典分类模板保存失败'))
         throw e
       }
     },
@@ -130,6 +153,7 @@ export function createTemplateStore(deps: TemplateDeps) {
     generateFiles(
       tableIds: string[],
       templateNames?: string[],
+      dictEnabled?: boolean,
     ): {
       files: GeneratedFile[]
       errors: string[]
@@ -169,6 +193,46 @@ export function createTemplateStore(deps: TemplateDeps) {
           })
         }
       }
+      // 字典分类模板：每个字典分类执行一次（产物含该分类下全部字典与值）；
+      // dictEnabled 缺省视为开启（与「默认生成」语义一致）；未分类字典不参与
+      if (dictEnabled !== false && this.dictCategoryTemplate) {
+        const dictStore = deps.getDict()
+        const dictTpl = this.dictCategoryTemplate
+        const byCat = new Map<string, typeof dictStore.dicts>()
+        for (const d of dictStore.dicts) {
+          if (!d.categoryId) continue
+          const list = byCat.get(d.categoryId) || []
+          list.push(d)
+          byCat.set(d.categoryId, list)
+        }
+        for (const category of dictStore.categories) {
+          const dicts = byCat.get(category.id) || []
+          if (!dicts.length) continue
+          const out = renderDictCategoryTemplate(
+            dictTpl.name,
+            dictTpl.content,
+            category,
+            dicts,
+            settings,
+          )
+          if (out.aborted) {
+            aborted.push(`[dict:${category.name}]`)
+            continue
+          }
+          if (out.error) {
+            errors.push(`[dict:${category.name}] ${out.error}`)
+          }
+          files.push({
+            templateName: dictTpl.name,
+            tableName: `dict:${category.name}`,
+            fileName: out.fileName,
+            filePath: String(out.filePath || '')
+              .replace(/\\/g, '/')
+              .replace(/^\/+/, ''),
+            content: out.result || '',
+          })
+        }
+      }
       return { files, errors, aborted }
     },
 
@@ -193,13 +257,14 @@ export function createTemplateStore(deps: TemplateDeps) {
       setTimeout(() => URL.revokeObjectURL(url), 3000)
     },
 
-    /** 代码生成：直接触发下载 zip（templateNames 为本次选中的模板，缺省全部） */
-    async generateAndDownload(tableIds: string[], templateNames?: string[]) {
-      if (!this.templates.length) {
+    /** 代码生成：直接触发下载 zip（templateNames 为本次选中的模板，缺省全部；
+     *  dictEnabled = 是否生成字典分类代码，缺省生成） */
+    async generateAndDownload(tableIds: string[], templateNames?: string[], dictEnabled?: boolean) {
+      if (!this.templates.length && !this.dictCategoryTemplate) {
         message.warning('请先在「模板管理」中创建代码模板')
         return
       }
-      const { files, errors, aborted } = this.generateFiles(tableIds, templateNames)
+      const { files, errors, aborted } = this.generateFiles(tableIds, templateNames, dictEnabled)
       if (!files.length) {
         message.warning(
           aborted.length
@@ -221,12 +286,16 @@ export function createTemplateStore(deps: TemplateDeps) {
 
     /** 代码替换：构建 zip 并经 ManagerApi.replace 上传（调用前必须经用户确认）
      *  （成功反馈由 api 实现自行处理，失败 reject 向上传播） */
-    async replaceWithGenerated(tableIds: string[], templateNames?: string[]) {
-      if (!this.templates.length) {
+    async replaceWithGenerated(
+      tableIds: string[],
+      templateNames?: string[],
+      dictEnabled?: boolean,
+    ) {
+      if (!this.templates.length && !this.dictCategoryTemplate) {
         message.warning('请先在「模板管理」中创建代码模板')
         return null
       }
-      const { files } = this.generateFiles(tableIds, templateNames)
+      const { files } = this.generateFiles(tableIds, templateNames, dictEnabled)
       if (!files.length) {
         message.warning('未生成任何文件，请检查选择范围与模板')
         return null
