@@ -1625,7 +1625,8 @@ export const SEED_COLUMN_OPTIONS: OptionSetting[] = [
 
 /**
  * 种子设置：索引类型列表 + 列类型映射规则（按 sort 升序，导入时依序正则匹配，取第一条命中）
- * + 代码生成配置（作者 javadoc @author / 表选项 / 列选项元定义）。
+ * + 代码生成配置（作者 javadoc @author / 表选项 / 列选项元定义）
+ * + 主键与审计字段约定（表编辑固定首字段与审计字段一键增删）。
  * 注意顺序依赖：bigint 先于 int、datetime/timestamp 先于 time/date、
  * char(1) 先于 char，否则前缀类类型会被宽泛规则抢先命中
  */
@@ -1650,4 +1651,14 @@ export const SEED_SETTINGS: Settings = {
   author: 'dbm-editor',
   tableOptions: SEED_TABLE_OPTIONS.map((o) => ({ ...o })),
   columnOptions: SEED_COLUMN_OPTIONS.map((o) => ({ ...o })),
+  /** 主键与审计字段约定（默认值，与 utils/fieldConvention.ts 的 DEFAULT_FIELD_CONVENTIONS 一致） */
+  fieldConventions: {
+    primaryKey: { name: 'id', type: 'BIGINT' },
+    auditFields: {
+      createBy: { name: 'createBy', type: 'BIGINT' },
+      createTime: { name: 'createTime', type: 'DATETIME' },
+      updateBy: { name: 'updateBy', type: 'BIGINT' },
+      updateTime: { name: 'updateTime', type: 'DATETIME' },
+    },
+  },
 }

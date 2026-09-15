@@ -251,6 +251,34 @@ export interface TypeMapping {
   javaType: string // 目标 Java 类型
 }
 
+/* ==================== 主键与审计字段约定 ==================== */
+
+/** 审计字段角色（固定四项：创建人/创建时间/更新人/更新时间） */
+export type AuditFieldRole = 'createBy' | 'createTime' | 'updateBy' | 'updateTime'
+
+/** 主键字段约定 */
+export interface PrimaryKeyConvention {
+  name: string // 字段名（默认 id）
+  type: string // 数据库类型（默认 BIGINT）
+}
+
+/** 审计字段约定 */
+export interface AuditFieldConvention {
+  name: string // 字段名（默认取角色名，如 createBy）
+  type: string // 数据库类型（创建人/更新人默认 BIGINT，创建时间/更新时间默认 DATETIME）
+}
+
+/**
+ * 主键与审计字段约定：表编辑对话框据此固定首字段与审计字段一键增删。
+ * 主键每表强制拥有且固定为第一个字段（不可修改、不可排序）；
+ * 创建人/创建时间强制非空，更新人/更新时间可空（非空约束为固定语义，随角色而定）
+ */
+export interface FieldConventions {
+  primaryKey: PrimaryKeyConvention
+  /** 审计字段（按角色标识，顺序见 utils/fieldConvention.ts 的 AUDIT_FIELD_ROLES） */
+  auditFields: Record<AuditFieldRole, AuditFieldConvention>
+}
+
 /** 应用设置 */
 export interface Settings {
   indexTypes: string[] // 索引类型列表
@@ -261,6 +289,8 @@ export interface Settings {
   tableOptions: OptionSetting[]
   /** 列选项设置列表（表编辑对话框按此渲染列选项编辑项） */
   columnOptions: OptionSetting[]
+  /** 主键与审计字段约定（可选：旧数据缺省时按内置默认补齐，见 utils/fieldConvention.ts） */
+  fieldConventions?: FieldConventions
 }
 
 /* ==================== 数据库导入（ManagerApi 契约形态） ==================== */

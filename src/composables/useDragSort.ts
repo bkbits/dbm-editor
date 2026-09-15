@@ -8,6 +8,8 @@
  *   未形成拖拽（按下即松开）时由一次性 window pointerup 监听复位
  * - 落点依据悬停行的上/下半区决定插入位置，插入位置按 splice
  *   语义换算，任意 from/to 组合均正确
+ * - 头部锁定行（lockCount）：不可拖动、也不可插入到其之前
+ *   （如表编辑字段表固定的主键首行）
  */
 import { reactive } from 'vue'
 
@@ -20,11 +22,22 @@ export interface DragSortState {
   pos: 'above' | 'below'
 }
 
-export function useDragSort<T>(getList: () => T[], onSorted?: () => void) {
+export interface DragSortOptions {
+  /** 头部锁定行数：这些行不可拖动，也不可插入到其之前（默认 0） */
+  lockCount?: number
+}
+
+export function useDragSort<T>(
+  getList: () => T[],
+  onSorted?: () => void,
+  opts: DragSortOptions = {},
+) {
+  const lockCount = opts.lockCount ?? 0
   const state = reactive<DragSortState>({ from: -1, over: -1, pos: 'above' })
 
-  /** 手柄按下：置 draggable 并注册一次性指针复位（未形成拖拽时） */
+  /** 手柄按下：锁定行直接忽略；置 draggable 并注册一次性指针复位（未形成拖拽时） */
   function handleDown(idx: number) {
+    if (idx < lockCount) return
     state.from = idx
     state.over = -1
     window.addEventListener(
@@ -74,17 +87,19 @@ export function useDragSort<T>(getList: () => T[], onSorted?: () => void) {
     // 先移除再插入：插入目标大于来源时需要回退一位换算
     const insertRaw = above ? over : over + 1
     const [item] = list.splice(from, 1)
-    const insert = insertRaw > from ? insertRaw - 1 : insertRaw
+    let insert = insertRaw > from ? insertRaw - 1 : insertRaw
+    // 头部锁定：插入位置不允许落在锁定区内（最低插到锁定区之后）
+    if (insert < lockCount) insert = lockCount
     list.splice(insert, 0, item)
     onSorted?.()
   }
 
-  /** 行样式类：拖拽中半透明 + 上/下落点指示线 */
+  /** 行样式类：拖拽中半透明 + 上/下落点指示线（锁定行不显示上落点线——不可能插入其上方） */
   function rowClass(idx: number) {
     const active = state.from >= 0
     return {
       dragging: state.from === idx,
-      'drop-above': active && state.over === idx && state.pos === 'above',
+      'drop-above': active && state.over === idx && state.pos === 'above' && idx >= lockCount,
       'drop-below': active && state.over === idx && state.pos === 'below',
     }
   }

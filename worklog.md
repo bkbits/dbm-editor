@@ -840,3 +840,26 @@ Stage Summary:
 - 站点上线：https://bkbits.github.io/dbm-editor/（run https://github.com/bkbits/dbm-editor/actions/runs/34918841900）
 - 关键决策：① 触发分支取 devel（当前主线；main 落后 30+ 提交，纳入会发布旧代码）；② 环境分支策略为 legacy 残留，收敛为 devel/main；③ 构建配置入库保证 CI 可复现
 - 遗留提示：workflow_dispatch 手动触发需工作流文件存在于默认分支（当前默认 main）——若需 UI 手动触发，可后续将默认分支切为 devel 或把工作流合入 main
+
+
+---
+Task ID: 28
+Agent: main (Super Z)
+Task: 新增主键与审计字段设置（id/BIGINT 强制首字段；createBy/createTime 强制非空、updateBy/updateTime 可空）+ 表编辑固定主键首字段（不可修改/不可排序）与审计字段一键增删
+
+Work Log:
+- 类型与工具：types/model.ts 新增 FieldConventions 体系（AuditFieldRole 四角色 / PrimaryKeyConvention / AuditFieldConvention / Settings.fieldConventions 可选字段）；新建 utils/fieldConvention.ts——DEFAULT_FIELD_CONVENTIONS（id/BIGINT + createBy/createTime/updateBy/updateTime 默认）、AUDIT_FIELD_ROLES 顺序、AUDIT_FIELD_LABELS、AUDIT_FIELD_NOT_NULL（创建人/创建时间 true，更新人/更新时间 false——固定语义不入数据）、normalizeFieldConventions（缺省补默认、去空白）
+- 设置链路：stores/settings.ts 增 fieldConventions 状态（init/save/snapshot 全链路）；mock/seed.ts SEED_SETTINGS 带默认约定；mock/db.ts normalizeSettings 补齐 + 迁移条件加 fieldConventions===undefined（旧库读取即补）；api/demo-manager-api.ts getSettings 返回归一约定、saveSettings 校验名称合法标识符 + 五名互不重复
+- 设置页 UI（SettingsView）：新增「主键与审计字段」卡片（索引类型与代码生成之间）——六列约定表（角色标签/名称/类型自动补全/Java 类型实时推导（先设置规则后内置映射）/非空徽标/主键徽标），非空约束为固定语义仅展示；恢复默认按钮；即时校验（名称空/非法/重复标红并禁用保存）；dirty/resetDraft/save 全链路接入；移动端六列压两列（隐藏 Java/非空/主键列）
+- 表编辑对话框（TableEditDialog）：首字段固定为主键约定字段——新建表 makePkColumn() 生成；打开旧表 normalizePkColumn 归一（同名列上移首位并对齐约定属性，缺失则补建，其余列清除主键标记=单主键语义）；主键行全部控件 disabled + Lock 图标替拖拽手柄 + 无删除按钮 + pk-row 底色；主键复选框全表锁定（title 说明）；validate 兜底校验首字段=约定主键；审计字段一键增删按钮（添加=按角色补齐缺失、跳过同名；删除=按约定名整组移除且不动首行）+ 约定名提示；修复 addColumn/审计字段/主键构造时 _optVals 未填默认值（选项复选框假未勾选，语义应为缺省启用）
+- useDragSort 新增 lockCount 选项：头部锁定行不可拖（handleDown 拒绝）、不可插入其上方（onDrop 钳制 insert>=lockCount）、锁定行不显示 drop-above 指示线；SettingsView 等既有调用零改动（默认 0）
+- README：系统设置增「主键与审计字段」条目；编辑对话框「表编辑」条目补固定主键与审计字段一键增删说明
+- 验证（scripts/verify-field-conventions.sh 29/29 全绿 + 移动端）：设置迁移（旧库补齐）；约定卡片 5 行默认值/类型/Java 推导/徽标；名称重复即时拦截 + 恢复默认；sys_user 打开首字段 id、13/13 输入禁用、Lock 图标、非空/主键复选 1D1D、普通行非空可编辑主键锁定；一键添加 4 审计（createTime DATETIME/1011111、updateBy BIGINT/0011111 含选项默认勾选）；拖拽钳制（拖第 4 行到首行上方→落位第二、id 恒第一）；保存落库（id 首位）；约定改 uid 后打开旧表自动归一补建 uid 首位；新建表 id/lock；0 页面错误/0 控制台 error；移动端 390 约定表两列网格 + 对话框锁定图标与审计按钮正常
+- 验证方法论沉淀：① agent-browser eval 返回 JSON 字符串（带引号）需统一剥离；② antd 模态框关闭后保留隐藏 DOM——可见性轮询必须查 wrap 的 computed display；③ 按钮文本「取 消」「保 存」含全角空格——匹配需去空格；④ 对话框已开时再 openTableEdit 不触发 watch（open 布尔未变）——测试序列必须确保真正关闭后再开
+- bun run typecheck 通过；vp check 64 文件格式 + 54 文件 lint 零告警；check-readme.py 通过（31 标题）
+
+Stage Summary:
+- Settings 新增 fieldConventions（主键 + 四审计字段的名称/类型约定，非空约束随角色固定）；全链路持久化与旧库迁移
+- 表编辑不变量：首字段恒为约定主键（不可修改/不可排序/不可删除，打开旧表自动归一）；审计字段按约定一键增删
+- 关键决策：① 非空约束为角色固定语义（创建人/创建时间非空，更新人/更新时间可空）不做成可配置；② 单主键语义——其余列主键标记清除并锁定复选框（与模板 columns.find(c=>c.primaryKey) 假定一致）；③ useDragSort 以 lockCount 选项扩展而非复制实现，既有调用零改动
+- 交付文件：src/utils/fieldConvention.ts（新）+ types/model.ts + stores/settings.ts + mock/{seed,db}.ts + api/demo-manager-api.ts + composables/useDragSort.ts + views/SettingsView.vue + components/dialog/TableEditDialog.vue + README.md

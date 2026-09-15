@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { message } from 'antdv-next'
-import { Plus, Trash2, GripVertical } from '@lucide/vue'
-import type { OptionSetting, TableColumn, TableIndex } from '@/types/model'
+import { Plus, Trash2, GripVertical, Lock, ShieldCheck } from '@lucide/vue'
+import type { AuditFieldRole, OptionSetting, TableColumn, TableIndex } from '@/types/model'
 import { useUiStore } from '@/stores/ui'
 import { useModelStore } from '@/stores/model'
 import { useDictStore } from '@/stores/dict'
@@ -14,6 +14,11 @@ import { getJavaTypeByType, COMMON_DB_TYPES, COMMON_JAVA_TYPES } from '@/utils/j
 import { uid } from '@/utils/id'
 import { NAVIGATE_TYPE_LABEL, CASCADE_LABEL, flipNavigateType } from '@/utils/navigate'
 import { useDragSort } from '@/composables/useDragSort'
+import {
+  AUDIT_FIELD_LABELS,
+  AUDIT_FIELD_NOT_NULL,
+  AUDIT_FIELD_ROLES,
+} from '@/utils/fieldConvention'
 
 const ui = useUiStore()
 const model = useModelStore()
@@ -164,10 +169,12 @@ watch(dialogOpen, (open) => {
           .filter(Boolean)
       : []
     draft.optionVals = flattenRawOptions(t.options)
-    draft.columns = model.columnsOf(t.id).map((c) => ({
-      ...c,
-      _optVals: flattenRawOptions(c.options),
-    }))
+    draft.columns = normalizePkColumn(
+      model.columnsOf(t.id).map((c) => ({
+        ...c,
+        _optVals: flattenRawOptions(c.options),
+      })),
+    )
     draft.indexes = model.indexesOf(t.id).map((i) => ({ ...i, columns: [...i.columns] }))
     fillOptionDefaults(draft.optionVals, settingsStore.tableOptions)
     for (const col of draft.columns)
@@ -186,22 +193,8 @@ watch(dialogOpen, (open) => {
     templatesExplicit.value = false
     draft.templates = []
     draft.optionVals = {}
-    draft.columns = [
-      {
-        id: uid('c-'),
-        tableId: '',
-        columnName: 'id',
-        propertyName: 'id',
-        sort: 0,
-        type: 'BIGINT',
-        javaType: 'Long',
-        comment: '主键',
-        notNull: true,
-        primaryKey: true,
-        dict: '',
-        _optVals: {},
-      },
-    ]
+    // 新建表：首字段固定为设置约定的主键字段
+    draft.columns = [makePkColumn()]
     draft.indexes = []
   }
   draft.activeTab = 'columns'
@@ -232,8 +225,127 @@ const dictOptions = computed(() => [
 const dbTypeOptions = COMMON_DB_TYPES.map((t) => ({ value: t, label: t }))
 const javaTypeOptions = COMMON_JAVA_TYPES.map((t) => ({ value: t, label: t }))
 
+/* ==================== 主键与审计字段约定（来自应用设置） ==================== */
+
+const conventions = computed(() => settingsStore.fieldConventions)
+
+/** 主键行 = 首行（固定不可修改、不可排序） */
+function isPkRow(idx: number): boolean {
+  return idx === 0
+}
+
+/** 依约定构造主键字段草稿 */
+function makePkColumn(): DraftColumn {
+  const pk = conventions.value.primaryKey
+  const col: DraftColumn = {
+    id: uid('c-'),
+    tableId: '',
+    columnName: pk.name,
+    propertyName: toCamelCase(pk.name, true),
+    sort: 0,
+    type: pk.type,
+    javaType: getJavaTypeByType(pk.type),
+    comment: '主键',
+    notNull: true,
+    primaryKey: true,
+    dict: '',
+    _optVals: {},
+  }
+  // 列选项默认值在创建时即补齐（设置未加载时为空列表，加载后 watch 兜底）
+  fillOptionDefaults(col._optVals, settingsStore.columnOptions)
+  return col
+}
+
+/** 依约定构造审计字段草稿（非空约束随角色固定语义） */
+function makeAuditColumn(role: AuditFieldRole): DraftColumn {
+  const conv = conventions.value.auditFields[role]
+  const col: DraftColumn = {
+    id: uid('c-'),
+    tableId: '',
+    columnName: conv.name,
+    propertyName: toCamelCase(conv.name, true),
+    sort: draft.columns.length,
+    type: conv.type,
+    javaType: getJavaTypeByType(conv.type),
+    comment: AUDIT_FIELD_LABELS[role],
+    notNull: AUDIT_FIELD_NOT_NULL[role],
+    primaryKey: false,
+    dict: '',
+    _optVals: {},
+  }
+  fillOptionDefaults(col._optVals, settingsStore.columnOptions)
+  return col
+}
+
+/**
+ * 打开既有表时归一：主键字段强制存在且固定为首行——
+ * 已有同名列则上移到首位并对齐约定属性（名称/类型/主键/非空），
+ * 没有则依约定补建；其余列一律清除主键标记（单一主键语义，与模板渲染假定一致）
+ */
+function normalizePkColumn(cols: DraftColumn[]): DraftColumn[] {
+  const pk = conventions.value.primaryKey
+  const pkName = pk.name.trim()
+  const out = [...cols]
+  const idx = out.findIndex((c) => c.columnName.trim() === pkName)
+  let pkCol: DraftColumn
+  if (idx >= 0) {
+    ;[pkCol] = out.splice(idx, 1)
+    pkCol.columnName = pkName
+    pkCol.type = pk.type
+    pkCol.javaType = getJavaTypeByType(pk.type)
+    pkCol.notNull = true
+    pkCol.primaryKey = true
+    pkCol.propertyName = toCamelCase(pkName, true)
+  } else {
+    pkCol = makePkColumn()
+  }
+  for (const c of out) c.primaryKey = false
+  const result = [pkCol, ...out]
+  result.forEach((c, i) => (c.sort = i))
+  return result
+}
+
+/** 当前表中是否已存在指定名称的字段 */
+function hasColumnName(name: string): boolean {
+  const n = name.trim()
+  return Boolean(n) && draft.columns.some((c) => c.columnName.trim() === n)
+}
+
+/** 审计字段约定名列表（按当前设置） */
+const auditNames = computed(() =>
+  AUDIT_FIELD_ROLES.map((role) => conventions.value.auditFields[role].name.trim()).filter(Boolean),
+)
+const allAuditPresent = computed(() => auditNames.value.every((n) => hasColumnName(n)))
+const anyAuditPresent = computed(() => auditNames.value.some((n) => hasColumnName(n)))
+const auditNamesLabel = computed(() => auditNames.value.join(' · '))
+
+/** 一键补齐审计字段（已存在的同名字段跳过，不动用户数据） */
+function addAuditFields() {
+  let added = 0
+  for (const role of AUDIT_FIELD_ROLES) {
+    const name = conventions.value.auditFields[role].name.trim()
+    if (!name || hasColumnName(name)) continue
+    draft.columns.push(makeAuditColumn(role))
+    added++
+  }
+  renumber()
+  if (added) message.success(`已按设置约定添加 ${added} 个审计字段`)
+  else message.info('审计字段均已存在，无需添加')
+}
+
+/** 一键移除审计字段（仅删约定名称匹配的列，主键首行不受影响） */
+function removeAuditFields() {
+  const names = new Set(auditNames.value)
+  const before = draft.columns.length
+  draft.columns = draft.columns.filter((c, i) => i === 0 || !names.has(c.columnName.trim()))
+  renumber()
+  const removed = before - draft.columns.length
+  if (removed) message.success(`已移除 ${removed} 个审计字段`)
+  else message.info('当前表没有约定名称的审计字段')
+}
+
 function addColumn() {
-  draft.columns.push({
+  const col: DraftColumn = {
     id: uid('c-'),
     tableId: '',
     columnName: '',
@@ -246,15 +358,19 @@ function addColumn() {
     primaryKey: false,
     dict: '',
     _optVals: {},
-  })
+  }
+  // 新建字段即补齐列选项默认值（修复：选项复选框缺省应显示为启用）
+  fillOptionDefaults(col._optVals, settingsStore.columnOptions)
+  draft.columns.push(col)
 }
 function removeColumn(idx: number) {
+  if (isPkRow(idx)) return // 主键首行不可删除
   draft.columns.splice(idx, 1)
   renumber()
 }
 
-/* 字段拖拽排序（手柄触发，替代上移/下移按钮） */
-const columnDrag = useDragSort(() => draft.columns, renumber)
+/* 字段拖拽排序（手柄触发，替代上移/下移按钮；主键首行锁定不可拖、不可插入其上方） */
+const columnDrag = useDragSort(() => draft.columns, renumber, { lockCount: 1 })
 function renumber() {
   draft.columns.forEach((c, i) => (c.sort = i))
 }
@@ -337,6 +453,11 @@ function validate(): string | null {
     (t) => t.tableName === draft.tableName.trim() && t.id !== draft.id,
   )
   if (dupName) return `表名已存在：${draft.tableName}`
+  // 主键不变量：首字段固定为设置约定的主键字段（正常交互下构造保证，此为兑底校验）
+  const pkName = conventions.value.primaryKey.name.trim()
+  if (!draft.columns.length || draft.columns[0].columnName.trim() !== pkName) {
+    return `首字段必须为主键字段「${pkName}」（可在系统设置中调整约定）`
+  }
   const names = new Set<string>()
   for (const c of draft.columns) {
     if (!c.columnName.trim()) return '存在空字段名'
@@ -579,16 +700,29 @@ async function save() {
               v-for="(col, idx) in draft.columns"
               :key="col.id"
               class="column-row cols-grid"
+              :class="[columnDrag.rowClass(idx), { 'pk-row': isPkRow(idx) }]"
               :data-idx="idx"
               :style="colsGridStyle"
-              :class="columnDrag.rowClass(idx)"
               :draggable="columnDrag.state.from === idx"
               @dragstart="columnDrag.onDragStart(idx, $event)"
               @dragend="columnDrag.onDragEnd()"
               @dragover.prevent="columnDrag.onDragOver(idx, $event)"
               @drop.prevent="columnDrag.onDrop()"
             >
-              <span class="drag-handle" title="拖拽排序" @pointerdown="columnDrag.handleDown(idx)">
+              <!-- 主键首行：锁定图标（不可拖拽排序）；其余行：拖拽手柄 -->
+              <span
+                v-if="isPkRow(idx)"
+                class="drag-handle pk-lock"
+                title="主键字段（依设置约定固定为第一个字段，不可修改、不可排序）"
+              >
+                <Lock :size="12" />
+              </span>
+              <span
+                v-else
+                class="drag-handle"
+                title="拖拽排序"
+                @pointerdown="columnDrag.handleDown(idx)"
+              >
                 <GripVertical :size="13" />
               </span>
               <a-input
@@ -596,6 +730,7 @@ async function save() {
                 size="small"
                 class="mono"
                 placeholder="字段名"
+                :disabled="isPkRow(idx)"
                 @change="onColumnName(col)"
               />
               <a-input
@@ -603,6 +738,7 @@ async function save() {
                 size="small"
                 class="mono"
                 placeholder="小驼峰"
+                :disabled="isPkRow(idx)"
                 @change="col._propTouched = true"
               />
               <a-auto-complete
@@ -611,6 +747,7 @@ async function save() {
                 size="small"
                 class="mono"
                 placeholder="如 VARCHAR(50)"
+                :disabled="isPkRow(idx)"
                 :filter-option="
                   (input: string, option: any) =>
                     String(option.value).toUpperCase().includes(input.toUpperCase())
@@ -623,6 +760,7 @@ async function save() {
                 size="small"
                 class="mono"
                 placeholder="如 String"
+                :disabled="isPkRow(idx)"
                 :filter-option="
                   (input: string, option: any) =>
                     String(option.value).toLowerCase().includes(input.toLowerCase())
@@ -630,10 +768,10 @@ async function save() {
                 @change="col._javaTouched = true"
               />
               <div class="center-cell">
-                <a-checkbox v-model:checked="col.notNull" />
+                <a-checkbox v-model:checked="col.notNull" :disabled="isPkRow(idx)" />
               </div>
-              <div class="center-cell">
-                <a-checkbox v-model:checked="col.primaryKey" />
+              <div class="center-cell" title="主键标记锁定：首字段固定为主键（依设置约定）">
+                <a-checkbox v-model:checked="col.primaryKey" disabled />
               </div>
               <a-select
                 v-model:value="col.dict"
@@ -643,15 +781,21 @@ async function save() {
                 allow-clear
                 show-search
                 option-filter-prop="label"
+                :disabled="isPkRow(idx)"
               />
-              <a-input v-model:value="col.comment" size="small" placeholder="选填" />
+              <a-input
+                v-model:value="col.comment"
+                size="small"
+                placeholder="选填"
+                :disabled="isPkRow(idx)"
+              />
               <template v-for="def in columnOptionDefs" :key="def.name">
                 <div
                   v-if="def.type === 'boolean'"
                   class="center-cell"
                   :title="def.remark || def.label"
                 >
-                  <a-checkbox v-model:checked="col._optVals[def.name]" />
+                  <a-checkbox v-model:checked="col._optVals[def.name]" :disabled="isPkRow(idx)" />
                 </div>
                 <a-input
                   v-else
@@ -660,11 +804,19 @@ async function save() {
                   class="mono opt-col-input"
                   :placeholder="def.name"
                   :title="def.remark || def.label"
+                  :disabled="isPkRow(idx)"
                 />
               </template>
-              <button class="row-del" type="button" title="删除字段" @click="removeColumn(idx)">
+              <button
+                v-if="!isPkRow(idx)"
+                class="row-del"
+                type="button"
+                title="删除字段"
+                @click="removeColumn(idx)"
+              >
                 <Trash2 :size="12" />
               </button>
+              <span v-else class="row-del-placeholder" title="主键字段不可删除"></span>
             </div>
           </div>
         </div>
@@ -672,6 +824,29 @@ async function save() {
           <template #icon><Plus :size="12" /></template>
           添加字段
         </a-button>
+        <!-- 审计字段一键增删（依设置约定） -->
+        <div class="audit-actions">
+          <a-button
+            v-if="!allAuditPresent"
+            size="small"
+            class="audit-add-btn"
+            @click="addAuditFields"
+          >
+            <template #icon><ShieldCheck :size="12" /></template>
+            添加审计字段
+          </a-button>
+          <a-button
+            v-if="anyAuditPresent"
+            size="small"
+            danger
+            class="audit-del-btn"
+            @click="removeAuditFields"
+          >
+            <template #icon><Trash2 :size="12" /></template>
+            删除审计字段
+          </a-button>
+          <span class="audit-tip" :title="auditNamesLabel">审计字段：{{ auditNamesLabel }}</span>
+        </div>
       </a-tab-pane>
 
       <!-- ========== 索引（窄屏整体横向滚动） ========== -->
@@ -988,6 +1163,47 @@ async function save() {
     &.drop-below {
       box-shadow: 0 2px 0 0 var(--dbm-primary);
     }
+
+    /* 主键首行：轻微底色区分锁定态（与悬停同色系，亮暗两态均可见） */
+    &.pk-row {
+      background: var(--dbm-bg-hover);
+    }
+  }
+}
+
+/* 主键行锁定手柄：无拖拽语义，主色提示 */
+.pk-lock {
+  color: var(--dbm-primary);
+  cursor: default;
+
+  &:hover {
+    color: var(--dbm-primary);
+    background: transparent;
+  }
+}
+
+/* 主键行末列占位（删除按钮位置，保持网格列数一致） */
+.row-del-placeholder {
+  display: inline-block;
+  width: 22px;
+  height: 22px;
+}
+
+/* 审计字段一键增删按钮行 */
+.audit-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+
+  .audit-tip {
+    font-size: 11px;
+    color: var(--dbm-text-3);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
   }
 }
 

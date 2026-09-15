@@ -16,6 +16,7 @@ import type {
   TableNavigate,
   TypeMapping,
 } from '@/types/model'
+import { normalizeFieldConventions } from '@/utils/fieldConvention'
 import {
   SEED_CATEGORIES,
   SEED_COLUMN_OPTIONS,
@@ -98,7 +99,7 @@ function normalizeOptionSettings(raw: unknown, fallback: OptionSetting[]): Optio
   return list.length ? list : clone(fallback)
 }
 
-/** 旧版设置读取时归一为完整 Settings 形态（保留已有 indexTypes/typeMappings/author，补齐选项定义） */
+/** 旧版设置读取时归一为完整 Settings 形态（保留已有 indexTypes/typeMappings/author，补齐选项定义与字段约定） */
 function normalizeSettings(raw: unknown): Settings {
   const s = (raw || {}) as {
     indexTypes?: unknown
@@ -107,6 +108,7 @@ function normalizeSettings(raw: unknown): Settings {
     author?: unknown
     tableOptions?: unknown
     columnOptions?: unknown
+    fieldConventions?: unknown
   }
   const typeMappings: TypeMapping[] = Array.isArray(s.typeMappings)
     ? s.typeMappings.map((m: Partial<TypeMapping>, i: number) => ({
@@ -128,7 +130,8 @@ function normalizeSettings(raw: unknown): Settings {
   const author = String(s.author ?? '').trim() || undefined
   const tableOptions = normalizeOptionSettings(s.tableOptions, SEED_TABLE_OPTIONS)
   const columnOptions = normalizeOptionSettings(s.columnOptions, SEED_COLUMN_OPTIONS)
-  return { indexTypes, typeMappings, author, tableOptions, columnOptions }
+  const fieldConventions = normalizeFieldConventions(s.fieldConventions)
+  return { indexTypes, typeMappings, author, tableOptions, columnOptions, fieldConventions }
 }
 
 function loadDB(): MockDB {
@@ -139,16 +142,23 @@ function loadDB(): MockDB {
       if (parsed && parsed.version === 2 && Array.isArray(parsed.tables)) {
         let migrated = false
         // 兼容旧数据（设置字段形态升级 / 缺失）：读取时迁移并立即归一落盘。
-        // v4 起设置新增 author / tableOptions / columnOptions，任一缺失即归一补齐
+        // v4 起设置新增 author / tableOptions / columnOptions，任一缺失即归一补齐；
+        // v5 起新增 fieldConventions（主键与审计字段约定），缺省同样补齐默认值
         const s = parsed.settings as
-          | { author?: unknown; tableOptions?: unknown; columnOptions?: unknown }
+          | {
+              author?: unknown
+              tableOptions?: unknown
+              columnOptions?: unknown
+              fieldConventions?: unknown
+            }
           | undefined
         if (
           !parsed.settings ||
           !Array.isArray(parsed.settings.typeMappings) ||
           s?.tableOptions === undefined ||
           s?.columnOptions === undefined ||
-          s?.author === undefined
+          s?.author === undefined ||
+          s?.fieldConventions === undefined
         ) {
           parsed.settings = normalizeSettings(parsed.settings)
           migrated = true

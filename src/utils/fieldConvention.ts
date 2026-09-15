@@ -1,0 +1,78 @@
+/**
+ * 主键与审计字段约定：默认值、角色元信息与归一化工具
+ * （「系统设置 → 主键与审计字段」编辑名称/类型；表编辑对话框据此固定首字段
+ *   与「添加审计字段 / 删除审计字段」一键增删）
+ */
+import type {
+  AuditFieldConvention,
+  AuditFieldRole,
+  FieldConventions,
+  PrimaryKeyConvention,
+} from '@/types/model'
+
+/** 审计字段角色顺序（「添加审计字段」时的插入顺序） */
+export const AUDIT_FIELD_ROLES: AuditFieldRole[] = [
+  'createBy',
+  'createTime',
+  'updateBy',
+  'updateTime',
+]
+
+/** 审计字段角色标签 */
+export const AUDIT_FIELD_LABELS: Record<AuditFieldRole, string> = {
+  createBy: '创建人',
+  createTime: '创建时间',
+  updateBy: '更新人',
+  updateTime: '更新时间',
+}
+
+/** 审计字段非空约束（固定语义：创建人/创建时间强制非空，更新人/更新时间可空） */
+export const AUDIT_FIELD_NOT_NULL: Record<AuditFieldRole, boolean> = {
+  createBy: true,
+  createTime: true,
+  updateBy: false,
+  updateTime: false,
+}
+
+/** 默认约定（需求规格：主键 id/BIGINT；审计 createBy/createTime/updateBy/updateTime） */
+export const DEFAULT_FIELD_CONVENTIONS: FieldConventions = {
+  primaryKey: { name: 'id', type: 'BIGINT' },
+  auditFields: {
+    createBy: { name: 'createBy', type: 'BIGINT' },
+    createTime: { name: 'createTime', type: 'DATETIME' },
+    updateBy: { name: 'updateBy', type: 'BIGINT' },
+    updateTime: { name: 'updateTime', type: 'DATETIME' },
+  },
+}
+
+/**
+ * 归一化（旧数据/外部数据缺省时按默认补齐；名称/类型去空白，空值回退默认）。
+ * 非空约束不在数据内（随角色的固定语义），由 AUDIT_FIELD_NOT_NULL 提供
+ */
+export function normalizeFieldConventions(raw: unknown): FieldConventions {
+  const s = (raw || {}) as {
+    primaryKey?: Partial<PrimaryKeyConvention>
+    auditFields?: Partial<Record<AuditFieldRole, Partial<AuditFieldConvention>>>
+  }
+  const def = DEFAULT_FIELD_CONVENTIONS
+  const auditFields = {} as FieldConventions['auditFields']
+  for (const role of AUDIT_FIELD_ROLES) {
+    const r = s.auditFields?.[role] || {}
+    auditFields[role] = {
+      name: String(r.name ?? def.auditFields[role].name).trim() || def.auditFields[role].name,
+      type: String(r.type ?? def.auditFields[role].type).trim() || def.auditFields[role].type,
+    }
+  }
+  return {
+    primaryKey: {
+      name: String(s.primaryKey?.name ?? def.primaryKey.name).trim() || def.primaryKey.name,
+      type: String(s.primaryKey?.type ?? def.primaryKey.type).trim() || def.primaryKey.type,
+    },
+    auditFields,
+  }
+}
+
+/** 全部约定字段名（主键在前，审计按角色顺序；校验/展示用） */
+export function conventionNames(fc: FieldConventions): string[] {
+  return [fc.primaryKey.name, ...AUDIT_FIELD_ROLES.map((role) => fc.auditFields[role].name)]
+}

@@ -1,5 +1,6 @@
 /**
  * 设置仓库：索引类型列表 + 列类型映射规则 + 代码生成配置（作者 / 表选项 / 列选项元定义）
+ * + 主键与审计字段约定
  * （reactive 对象工厂形态，由 DBManagerView 经上下文注入，不依赖 Pinia；
  *   ManagerApi 经工厂入参 getApi 惰性读取，prop 切换后自动走新实例）
  *
@@ -13,6 +14,7 @@ import { useDBManagerContext } from './context'
 import type { ManagerApi, OptionSetting, Settings, TypeMapping } from '@/types/model'
 import { errorMessageOf } from '@/api/manager-api'
 import { uid } from '@/utils/id'
+import { normalizeFieldConventions } from '@/utils/fieldConvention'
 
 function clone<T>(v: T): T {
   return JSON.parse(JSON.stringify(v)) as T
@@ -67,6 +69,8 @@ export function createSettingsStore(deps: SettingsDeps) {
     tableOptions: [] as OptionSetting[],
     /** 列选项元定义（表编辑对话框据此渲染列选项编辑项） */
     columnOptions: [] as OptionSetting[],
+    /** 主键与审计字段约定（表编辑据此固定首字段与审计字段一键增删） */
+    fieldConventions: normalizeFieldConventions(undefined),
 
     /** 索引类型选项（空时兜底三常规类型，避免设置未加载时无可选项） */
     get indexTypeOptions(): string[] {
@@ -107,6 +111,7 @@ export function createSettingsStore(deps: SettingsDeps) {
             this.author = String(settings.author ?? '')
             this.tableOptions = normalizeOptionSettings(settings.tableOptions)
             this.columnOptions = normalizeOptionSettings(settings.columnOptions)
+            this.fieldConventions = normalizeFieldConventions(settings.fieldConventions)
             this.loaded = true
           } catch (e) {
             message.error(errorMessageOf(e, '设置加载失败'))
@@ -128,6 +133,7 @@ export function createSettingsStore(deps: SettingsDeps) {
       this.author = String(saved.author ?? '')
       this.tableOptions = normalizeOptionSettings(saved.tableOptions)
       this.columnOptions = normalizeOptionSettings(saved.columnOptions)
+      this.fieldConventions = normalizeFieldConventions(saved.fieldConventions)
       this.loaded = true
       return saved
     },
@@ -140,6 +146,7 @@ export function createSettingsStore(deps: SettingsDeps) {
         author: this.author,
         tableOptions: clone(this.tableOptions),
         columnOptions: clone(this.columnOptions),
+        fieldConventions: clone(this.fieldConventions),
       }
     },
 

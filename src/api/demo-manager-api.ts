@@ -38,6 +38,7 @@ import type {
 import { getDB, persistDB, resetDB } from '@/mock/db'
 import { SEED_DB_TABLES } from '@/mock/seed'
 import { uid } from '@/utils/id'
+import { AUDIT_FIELD_ROLES, normalizeFieldConventions } from '@/utils/fieldConvention'
 
 function clone<T>(v: T): T {
   return JSON.parse(JSON.stringify(v)) as T
@@ -180,6 +181,7 @@ export class DemoManagerApi implements ManagerApi {
       author: String(s.author ?? '').trim() || undefined,
       tableOptions: normalizeOptionSettings(s.tableOptions),
       columnOptions: normalizeOptionSettings(s.columnOptions),
+      fieldConventions: normalizeFieldConventions(s.fieldConventions),
     }
   }
 
@@ -205,12 +207,25 @@ export class DemoManagerApi implements ManagerApi {
     if (!indexTypes.length) throw new Error('至少保留一个索引类型')
     const tableOptions = normalizeOptionSettings(settings.tableOptions, '表选项')
     const columnOptions = normalizeOptionSettings(settings.columnOptions, '列选项')
+    // 主键与审计字段约定：归一后校验名称合法且互不重复（主键与四个审计字段间）
+    const fieldConventions = normalizeFieldConventions(settings.fieldConventions)
+    const convNames = [
+      fieldConventions.primaryKey.name,
+      ...AUDIT_FIELD_ROLES.map((role) => fieldConventions.auditFields[role].name),
+    ]
+    for (const n of convNames) {
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(n))
+        throw new Error(`字段约定名称需为合法标识符（字母/数字/下划线）：${n}`)
+    }
+    if (new Set(convNames).size !== convNames.length)
+      throw new Error('主键与审计字段的名称需互不重复')
     getDB().settings = {
       indexTypes,
       typeMappings,
       author: String(settings.author ?? '').trim() || undefined,
       tableOptions,
       columnOptions,
+      fieldConventions,
     }
     persistDB()
   }
