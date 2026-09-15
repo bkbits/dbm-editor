@@ -15,7 +15,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'update:open', v: boolean): void
-  (e: 'confirm', templateNames: string[]): void
+  (e: 'confirm', templateNames: string[], dictEnabled: boolean): void
 }>()
 
 const templateStore = useTemplateStore()
@@ -23,12 +23,16 @@ const templateStore = useTemplateStore()
 /** 所选模板名称（打开时重置为全部选中） */
 const checked = ref<string[]>([])
 
+/** 是否生成字典分类模板代码（每个字典分类一个文件；默认生成） */
+const dictEnabled = ref(true)
+
 watch(
   () => props.open,
   (open) => {
     if (!open) return
     templateStore.init()
     checked.value = [...templateStore.templateNames]
+    dictEnabled.value = true
   },
 )
 
@@ -63,8 +67,8 @@ function onCancel() {
 }
 
 function onConfirm() {
-  if (!checked.value.length) return
-  emit('confirm', [...checked.value])
+  if (!checked.value.length && !dictEnabled.value) return
+  emit('confirm', [...checked.value], dictEnabled.value)
   emit('update:open', false)
 }
 </script>
@@ -80,15 +84,22 @@ function onConfirm() {
   >
     <template #footer>
       <a-button @click="onCancel">取消</a-button>
-      <a-button type="primary" :disabled="!checked.length" @click="onConfirm">
+      <a-button type="primary" :disabled="!checked.length && !dictEnabled" @click="onConfirm">
         {{ mode === 'generate' ? '生成并下载' : '下一步：确认替换' }}
       </a-button>
     </template>
 
     <p class="select-tip">
-      勾选本次要生成代码文件的模板（默认全选）；表级「启用模板」配置仍会一并生效，
+      勾选本次要生成代码文件的表模板（默认全选）；表级「启用模板」配置仍会一并生效，
       模板内标记丢弃（aborted）的产物不会打包。
     </p>
+
+    <div class="dict-toggle">
+      <a-checkbox v-model:checked="dictEnabled">
+        生成字典分类模板代码
+        <span class="toggle-hint">（每个字典分类一个文件，含分类下全部字典与值）</span>
+      </a-checkbox>
+    </div>
 
     <div class="tpl-list">
       <div class="list-head">
@@ -125,6 +136,20 @@ function onConfirm() {
   font-size: 12px;
   line-height: 1.7;
   color: var(--dbm-text-2);
+}
+
+.dict-toggle {
+  margin-bottom: 10px;
+  padding: 7px 12px;
+  border: 1px solid var(--dbm-border);
+  border-radius: var(--dbm-radius-m);
+  background: var(--dbm-bg-2);
+  font-size: 12px;
+
+  .toggle-hint {
+    color: var(--dbm-text-3);
+    font-size: 11px;
+  }
 }
 
 .tpl-list {

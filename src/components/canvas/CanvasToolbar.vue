@@ -19,6 +19,7 @@ import { useModelStore } from '@/stores/model'
 import { useHistoryStore } from '@/stores/history'
 import { useUiStore } from '@/stores/ui'
 import { useTemplateStore } from '@/stores/template'
+import { useDictStore } from '@/stores/dict'
 import type { GeneratedFile } from '@/types/model'
 import TemplateSelectModal from '@/components/dialog/TemplateSelectModal.vue'
 
@@ -27,6 +28,7 @@ const model = useModelStore()
 const history = useHistoryStore()
 const ui = useUiStore()
 const templateStore = useTemplateStore()
+const dictStore = useDictStore()
 
 /** 模板选择对话框（生成/替换前勾选本次参与的模板，默认全选） */
 const selectOpen = ref(false)
@@ -72,9 +74,11 @@ function generate() {
   selectOpen.value = true
 }
 
-/** 模板选择确认：生成并下载 zip */
-async function onGenerateConfirm(templateNames: string[]) {
-  await templateStore.generateAndDownload(scopeTableIds.value, templateNames)
+/** 模板选择确认：生成并下载 zip（dictEnabled = 是否生成字典分类代码，默认生成） */
+async function onGenerateConfirm(templateNames: string[], dictEnabled: boolean) {
+  // 字典分类代码依赖字典数据：生成前确保字典仓库已加载（未进过字典页时补拉）
+  if (dictEnabled) await dictStore.init()
+  await templateStore.generateAndDownload(scopeTableIds.value, templateNames, dictEnabled)
 }
 
 /** 代码替换：先弹模板选择框，确认后生成文件并进入替换确认 */
@@ -88,9 +92,10 @@ function replace() {
 }
 
 /** 模板选择确认：生成文件，经确认后调用 /api/codegen/replace */
-async function onReplaceConfirm(templateNames: string[]) {
+async function onReplaceConfirm(templateNames: string[], dictEnabled: boolean) {
   await templateStore.init()
-  const { files } = templateStore.generateFiles(scopeTableIds.value, templateNames)
+  if (dictEnabled) await dictStore.init()
+  const { files } = templateStore.generateFiles(scopeTableIds.value, templateNames, dictEnabled)
   if (!files.length) {
     message.warning('未生成任何文件')
     return
