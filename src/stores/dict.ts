@@ -1,12 +1,12 @@
 /**
- * 字典仓库：数据字典 CRUD + 模糊搜索
+ * 字典仓库：字典分类 CRUD + 字典 CRUD + 模糊搜索
  * （reactive 对象工厂形态，由 DBManagerView 经上下文注入，不依赖 Pinia；
- *   数据读写经 ManagerApi，新增字典的 id 由本地生成后随载荷提交）
+ *   数据读写经 ManagerApi，新增分类/字典的 id 由本地生成后随载荷提交）
  */
 import { reactive } from 'vue'
 import { message } from 'antdv-next'
 import { useDBManagerContext } from './context'
-import type { Dict, ManagerApi } from '@/types/model'
+import type { Dict, DictCategory, ManagerApi } from '@/types/model'
 import { errorMessageOf } from '@/api/manager-api'
 import { uid } from '@/utils/id'
 
@@ -23,6 +23,7 @@ export function createDictStore(deps: DictDeps) {
   return reactive({
     loaded: false,
     loading: false,
+    categories: [] as DictCategory[],
     dicts: [] as Dict[],
     keyword: '',
     selectedDictId: '',
@@ -51,6 +52,23 @@ export function createDictStore(deps: DictDeps) {
     get dictKeys(): string[] {
       return this.dicts.map((d) => d.dictKey)
     },
+    /** 分类取值：不存在（含未分类空串）时返回 undefined */
+    get categoryById(): (id: string) => DictCategory | undefined {
+      return (id) => this.categories.find((c) => c.id === id)
+    },
+    /** 按分类分组：未分类（categoryId 空）排在末尾，返回 [{category|null, dicts}] */
+    get grouped(): Array<{ category: DictCategory | null; dicts: Dict[] }> {
+      const groups: Array<{ category: DictCategory | null; dicts: Dict[] }> = this.categories.map(
+        (category) => ({ category, dicts: [] }),
+      )
+      const ungrouped = { category: null, dicts: [] as Dict[] }
+      const byId = new Map(groups.map((g) => [g.category!.id, g]))
+      for (const d of this.filteredDicts) {
+        const g = d.categoryId ? byId.get(d.categoryId) : undefined
+        ;(g || ungrouped).dicts.push(d)
+      }
+      return ungrouped.dicts.length ? [...groups, ungrouped] : groups
+    },
     /** 某值键是否命中搜索（用于高亮） */
     get isValueHit(): (dictId: string, valueId: string) => boolean {
       const kw = this.keyword.trim().toLowerCase()
@@ -71,13 +89,43 @@ export function createDictStore(deps: DictDeps) {
       if (this.loaded || this.loading) return
       this.loading = true
       try {
-        this.dicts = (await deps.getApi().getDicts()).map(clone)
+        const api = deps.getApi()
+        this.categories = (await api.getDictCategories()).map(clone)
+        this.dicts = (await api.getDicts()).map(clone)
         this.loaded = true
         if (!this.selectedDictId && this.dicts.length) this.selectedDictId = this.dicts[0].id
       } catch (e) {
         message.error(errorMessageOf(e, '字典加载失败'))
       } finally {
         this.loading = false
+      }
+    },
+    async saveDictCategory(draft: DictCategory) {
+      try {
+        const category = clone(draft)
+        const api = deps.getApi()
+        if (draft.id) {
+          await api.updateDictCategory(category)
+          const idx = this.categories.findIndex((c) => c.id === draft.id)
+          if (idx >= 0) this.categories[idx] = clone(category)
+        } else {
+          category.id = uid('dictcat-')
+          await api.addDictCategory(category)
+          this.categories.push(clone(category))
+        }
+        return category
+      } catch (e) {
+        message.error(errorMessageOf(e, '字典分类保存失败'))
+        throw e
+      }
+    },
+    async removeDictCategory(id: string) {
+      try {
+        await deps.getApi().removeDictCategory(id)
+        this.categories = this.categories.filter((c) => c.id !== id)
+      } catch (e) {
+        message.error(errorMessageOf(e, '字典分类删除失败'))
+        throw e
       }
     },
     async saveDict(draft: Dict) {
