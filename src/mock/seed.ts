@@ -1531,7 +1531,7 @@ export const SEED_DICT_CATEGORY_TEMPLATE: CodeTemplate = {
   name: 'dict',
   content: `<%
   // 分类文件（file）推导产物路径与 Java 包名/类名；模板内可对 fileName/filePath 赋值覆盖
-  const file = String(context.category.file || "").split("\\\\").join("/").replace(/^\\\\//, "");
+  const file = String(context.category.file || "").split("\\\\").join("/").replace(/^\\\\/, "");
   const parts = file.split("/").filter(Boolean);
   const fileBase = parts.length ? parts[parts.length - 1] : "";
   const cls = fileBase ? fileBase.replace(/\\.java$/, "") : utils.toCamelCase(context.category.name) + "DictConstants";
