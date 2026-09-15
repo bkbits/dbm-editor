@@ -18,6 +18,12 @@ import JSZip from 'jszip'
 import { message } from 'antdv-next'
 import { Logger } from '@/log/Logger'
 import type {
+  AiModelConfig,
+  AiSettings,
+  ChatCompletionDelta,
+  ChatCompletionRequest,
+  ChatCompletionResult,
+  ChatMessage,
   DBTable,
   Dict,
   DictCategory,
@@ -33,6 +39,7 @@ import type {
   TableIndex,
   TableNavigate,
   Template,
+  ThinkingIntensity,
   TypeMapping,
   UpdateTablePosDTO,
 } from '@/types/model'
@@ -89,6 +96,23 @@ function normalizeOptionSettings(raw: unknown, listLabel?: string): OptionSettin
 }
 
 const NAVIGATE_TYPES = ['11', '1N', 'N1', 'NN']
+
+/** 思考强度合法档位（AI 设置保存校验用） */
+const THINKING_INTENSITIES: ThinkingIntensity[] = ['low', 'medium', 'high', 'xhigh', 'max']
+
+/** openai wire 消息形态：camelCase 契约 → snake_case 标准 */
+function toWireMessage(m: ChatMessage): Record<string, unknown> {
+  const out: Record<string, unknown> = { role: m.role, content: m.content ?? null }
+  if (m.toolCalls?.length) {
+    out.tool_calls = m.toolCalls.map((c) => ({
+      id: c.id,
+      type: 'function',
+      function: { name: c.function.name, arguments: c.function.arguments || '{}' },
+    }))
+  }
+  if (m.toolCallId) out.tool_call_id = m.toolCallId
+  return out
+}
 
 /**
  * 调用日志包装：为实例的全部方法用 Logger（src/log/Logger.ts）打印入参与返回结果，
@@ -229,6 +253,248 @@ export class DemoManagerApi implements ManagerApi {
       fieldConventions,
     }
     persistDB()
+  }
+
+  /* ==================== AI 设置 ==================== */
+
+  async getAiSettings(): Promise<AiSettings> {
+    const raw = getDB().aiSettings
+    // 读取时兜底归一（旧库缺字段 / 形态漂移防御），不落盘
+    const models: AiModelConfig[] = []
+    const seen = new Set<string>()
+    for (const m of raw?.models || []) {
+      const id = String(m?.id ?? '').trim()
+      if (!id || seen.has(id)) continue
+      seen.add(id)
+      const supportsThinking = Boolean(m?.supportsThinking)
+      models.push({
+        id,
+        name: String(m?.name ?? '').trim() || id,
+        supportsThinking,
+        thinkingIntensity: supportsThinking
+          ? THINKING_INTENSITIES.includes(m?.thinkingIntensity as ThinkingIntensity)
+            ? (m?.thinkingIntensity as ThinkingIntensity)
+            : 'medium'
+          : undefined,
+        inputContextLength:
+          Math.max(0, Math.floor(Number(m?.inputContextLength) || 0)) || undefined,
+        outputContextLength:
+          Math.max(0, Math.floor(Number(m?.outputContextLength) || 0)) || undefined,
+      })
+    }
+    return {
+      baseUrl: String(raw?.baseUrl ?? '').trim(),
+      apiKey: String(raw?.apiKey ?? ''),
+      models,
+      globalRules: String(raw?.globalRules ?? ''),
+    }
+  }
+
+  async saveAiSettings(settings: AiSettings): Promise<void> {
+    const baseUrl = String(settings?.baseUrl ?? '').trim()
+    const apiKey = String(settings?.apiKey ?? '')
+    if (baseUrl) {
+      if (!/^https?:\/\//i.test(baseUrl))
+        throw new Error('AI 服务地址必须以 http:// 或 https:// 开头')
+      if (!/\/v1\/?$/i.test(baseUrl))
+        throw new Error('AI 服务地址必须以 /v1 结尾（如 https://api.example.com/v1）')
+    }
+    const models: AiModelConfig[] = []
+    const seen = new Set<string>()
+    for (const m of settings?.models || []) {
+      const id = String(m?.id ?? '').trim()
+      if (!id) throw new Error('模型 id 不能为空')
+      if (seen.has(id)) throw new Error(`模型 id 重复：${id}`)
+      seen.add(id)
+      const supportsThinking = Boolean(m?.supportsThinking)
+      let thinkingIntensity: ThinkingIntensity | undefined
+      if (supportsThinking) {
+        thinkingIntensity = THINKING_INTENSITIES.includes(m?.thinkingIntensity as ThinkingIntensity)
+          ? (m?.thinkingIntensity as ThinkingIntensity)
+          : 'medium'
+      }
+      models.push({
+        id,
+        name: String(m?.name ?? '').trim() || id,
+        supportsThinking,
+        thinkingIntensity,
+        inputContextLength:
+          Math.max(0, Math.floor(Number(m?.inputContextLength) || 0)) || undefined,
+        outputContextLength:
+          Math.max(0, Math.floor(Number(m?.outputContextLength) || 0)) || undefined,
+      })
+    }
+    if (models.length && !baseUrl) throw new Error('已配置模型列表时必须填写 AI 服务地址')
+    getDB().aiSettings = {
+      baseUrl,
+      apiKey,
+      models,
+      globalRules: String(settings?.globalRules ?? ''),
+    }
+    persistDB()
+  }
+
+  /* ==================== AI 对话（openai compatible 流式） ==================== */
+
+  async chatComplete(
+    request: ChatCompletionRequest,
+    onDelta?: (delta: ChatCompletionDelta) => void,
+  ): Promise<ChatCompletionResult> {
+    const settings = getDB().aiSettings
+    const baseUrl = String(settings?.baseUrl ?? '')
+      .trim()
+      .replace(/\/+$/, '')
+    if (!baseUrl) throw new Error('未配置 AI 服务地址，请先在「系统设置 → AI」中配置')
+    const model = String(request?.model ?? '').trim()
+    if (!model) throw new Error('缺少模型 id')
+
+    const body: Record<string, unknown> = {
+      model,
+      messages: (request?.messages || []).map(toWireMessage),
+      stream: true,
+    }
+    if (request?.tools?.length) body.tools = request.tools
+    if (request?.reasoningEffort) body.reasoning_effort = request.reasoningEffort
+    if (request?.maxTokens) body.max_tokens = request.maxTokens
+
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (settings.apiKey) headers.Authorization = `Bearer ${settings.apiKey}`
+
+    let res: Response
+    try {
+      res = await fetch(`${baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+        signal: request?.signal,
+      })
+    } catch (e: unknown) {
+      if ((e as Error)?.name === 'AbortError') throw e
+      throw new Error(
+        `无法连接 AI 服务（${baseUrl}）：${(e as Error)?.message || '网络错误'}；跨域或证书问题请检查服务端 CORS 配置`,
+      )
+    }
+    if (!res.ok) {
+      const text = await res.text().catch(() => '')
+      let detail = text
+      try {
+        const parsed = JSON.parse(text) as { error?: { message?: string }; message?: string }
+        detail = parsed?.error?.message || parsed?.message || text
+      } catch {
+        /* 非 JSON 错误体原样展示 */
+      }
+      throw new Error(`AI 服务请求失败（HTTP ${res.status}）：${String(detail).slice(0, 400)}`)
+    }
+    const reader = res.body?.getReader()
+    if (!reader) throw new Error('AI 服务未返回流式响应（响应体为空）')
+
+    // SSE 逐行解析：data: {chunk} 与 [DONE] 哨兵；三类增量聚合
+    const decoder = new TextDecoder()
+    const contentParts: string[] = []
+    const reasoningParts: string[] = []
+    const toolSlots = new Map<number, { id: string; name: string; args: string }>()
+    let finishReason: string | undefined
+    let doneSentinel = false
+    const emit = (delta: ChatCompletionDelta) => {
+      if (!onDelta) return
+      try {
+        onDelta(delta)
+      } catch {
+        /* 回调异常不中断流式消费 */
+      }
+    }
+    let buffer = ''
+    while (!doneSentinel) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() ?? ''
+      for (const line of lines) {
+        const trimmed = line.trim()
+        if (!trimmed || trimmed.startsWith(':')) continue // 空行 / SSE 注释与心跳
+        if (!trimmed.startsWith('data:')) continue
+        const payload = trimmed.slice(5).trim()
+        if (payload === '[DONE]') {
+          doneSentinel = true
+          break
+        }
+        let chunk: {
+          choices?: Array<{
+            finish_reason?: string | null
+            delta?: {
+              content?: string | null
+              reasoning_content?: string | null
+              reasoning?: string | null
+              tool_calls?: Array<{
+                index?: number
+                id?: string
+                function?: { name?: string; arguments?: string }
+              }>
+            }
+          }>
+        }
+        try {
+          chunk = JSON.parse(payload)
+        } catch {
+          continue // 非完整 JSON 分片（粘包残留）跳过
+        }
+        const choice = chunk.choices?.[0]
+        if (choice?.finish_reason) finishReason = String(choice.finish_reason)
+        const delta = choice?.delta
+        if (!delta) continue
+        if (typeof delta.content === 'string' && delta.content) {
+          contentParts.push(delta.content)
+          emit({ content: delta.content })
+        }
+        const reasoning =
+          typeof delta.reasoning_content === 'string'
+            ? delta.reasoning_content
+            : typeof delta.reasoning === 'string'
+              ? delta.reasoning
+              : ''
+        if (reasoning) {
+          reasoningParts.push(reasoning)
+          emit({ reasoning })
+        }
+        if (Array.isArray(delta.tool_calls)) {
+          for (const tc of delta.tool_calls) {
+            const index = Number(tc?.index ?? 0) || 0
+            let slot = toolSlots.get(index)
+            if (!slot) {
+              slot = { id: '', name: '', args: '' }
+              toolSlots.set(index, slot)
+            }
+            if (tc?.id) slot.id = String(tc.id)
+            const fn = tc?.function || {}
+            if (fn.name) slot.name = String(fn.name)
+            const argsPiece = typeof fn.arguments === 'string' ? fn.arguments : ''
+            if (argsPiece) slot.args += argsPiece
+            emit({
+              toolCall: {
+                index,
+                ...(tc?.id ? { id: String(tc.id) } : {}),
+                ...(fn.name ? { name: String(fn.name) } : {}),
+                ...(argsPiece ? { arguments: argsPiece } : {}),
+              },
+            })
+          }
+        }
+      }
+    }
+    return {
+      content: contentParts.join(''),
+      reasoning: reasoningParts.length ? reasoningParts.join('') : undefined,
+      toolCalls: [...toolSlots.entries()]
+        .sort((a, b) => a[0] - b[0])
+        .filter(([, t]) => t.name)
+        .map(([i, t]) => ({
+          id: t.id || `call_${i}`,
+          type: 'function' as const,
+          function: { name: t.name, arguments: t.args || '{}' },
+        })),
+      finishReason,
+    }
   }
 
   /* ==================== 数据库导入 ==================== */

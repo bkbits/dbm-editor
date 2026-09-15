@@ -6,7 +6,7 @@ import { reactive } from 'vue'
 import { useDBManagerContext } from './context'
 import type { GeneratedFile } from '@/types/model'
 
-export type PageName = 'editor' | 'dict' | 'template' | 'settings'
+export type PageName = 'editor' | 'dict' | 'template' | 'settings' | 'ai'
 
 export interface TableEditDialogState {
   open: boolean

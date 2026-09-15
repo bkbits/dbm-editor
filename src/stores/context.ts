@@ -23,6 +23,7 @@ import { createTemplateStore, type TemplateStore } from './template'
 import { createHistoryStore, type HistoryStore } from './history'
 import { createModelStore, type ModelStore } from './model'
 import { createCanvasStore, type CanvasStore } from './canvas'
+import { createAiStore, type AiStore } from './ai'
 
 /** 注入的整体状态形态 */
 export interface DBManagerState {
@@ -34,6 +35,7 @@ export interface DBManagerState {
   history: HistoryStore
   model: ModelStore
   canvas: CanvasStore
+  ai: AiStore
 }
 
 /** 注入键 */
@@ -70,7 +72,15 @@ export function createDBManagerState(getApi: () => ManagerApi): DBManagerState {
     getUi: () => ui,
     getHistory: () => history,
   })
-  return { theme, ui, settings, dict, template, history, model, canvas }
+  // AI 仓库依赖 model / dict / template / settings（AGENT 工具执行与域同步刷新）
+  const ai = createAiStore({
+    getApi,
+    getModel: () => model,
+    getDict: () => dict,
+    getTemplate: () => template,
+    getSettings: () => settings,
+  })
+  return { theme, ui, settings, dict, template, history, model, canvas, ai }
 }
 
 /**

@@ -59,6 +59,18 @@ export default defineConfig({
     port: 3000,
     host: '0.0.0.0',
     allowedHosts: true,
+    // E2E 专用（AI_MOCK_PROXY=1 时生效）：把 openai compatible 模拟服务挂到同源路径，
+    // 规避浏览器跨域/跨命名空间限制；正常开发不设置该环境变量，不产生任何影响
+    ...(process.env.AI_MOCK_PROXY
+      ? {
+          proxy: {
+            '/__ai-mock': {
+              target: 'http://localhost:4833',
+              rewrite: (path) => path.replace(/^\/__ai-mock/, ''),
+            },
+          },
+        }
+      : {}),
   },
   build: {
     // 库模式：入口仅导出 DBManagerView 组件 + ManagerApi 契约类型，

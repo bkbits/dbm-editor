@@ -326,6 +326,97 @@ export interface Settings {
   fieldConventions?: FieldConventions
 }
 
+/* ==================== AI（openai compatible） ==================== */
+
+/** 思考强度档位（随请求以 reasoning_effort 下发，openai compatible 服务约定取值） */
+export type ThinkingIntensity = 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+
+/** AI 模型配置（AI 设置「模型列表」项） */
+export interface AiModelConfig {
+  id: string // 模型 id（openai compatible 接口的 model 参数）
+  name: string // 展示名称（空时回退显示模型 id）
+  supportsThinking: boolean // 是否支持思考（思考内容经 reasoning_content 流式回传）
+  /** 思考强度（模型支持思考时随请求下发） */
+  thinkingIntensity?: ThinkingIntensity
+  inputContextLength?: number // 输入上下文长度（token）
+  outputContextLength?: number // 输出上下文长度（token）
+}
+
+/** AI 设置：供应商（openai compatible）+ 模型列表 + 全局规则 */
+export interface AiSettings {
+  baseUrl: string // 服务地址（必须以 /v1 结尾，如 https://api.example.com/v1）
+  apiKey: string // API Key（Bearer 鉴权；本地服务可留空）
+  models: AiModelConfig[] // 模型列表
+  /** 全局规则（多行文本；非空时作为规则文本附加在 AI 工具的系统提示中） */
+  globalRules?: string
+}
+
+/* ---------- openai chat completions 标准流式契约 ---------- */
+
+/** 工具调用（openai 标准形态：assistant 消息携带，tool 消息按 id 回填结果） */
+export interface ChatToolCall {
+  id: string
+  type: 'function'
+  function: {
+    name: string
+    arguments: string
+  }
+}
+
+/** 聊天消息（openai chat completions 标准角色与字段子集） */
+export interface ChatMessage {
+  role: 'system' | 'user' | 'assistant' | 'tool'
+  content?: string | null
+  /** assistant 消息的工具调用列表 */
+  toolCalls?: ChatToolCall[]
+  /** tool 消息对应的调用 id */
+  toolCallId?: string
+}
+
+/** 工具定义（openai function calling 标准形态） */
+export interface ChatToolSpec {
+  type: 'function'
+  function: {
+    name: string
+    description: string
+    parameters: Record<string, unknown> // JSON Schema
+  }
+}
+
+/** chatComplete 请求 */
+export interface ChatCompletionRequest {
+  model: string // 模型 id
+  messages: ChatMessage[] // 对话消息（含 system / user / assistant / tool）
+  tools?: ChatToolSpec[] // 可调用工具定义（function calling）
+  /** 思考强度（模型支持思考时生效） */
+  reasoningEffort?: ThinkingIntensity
+  /** 最大输出 token 数 */
+  maxTokens?: number
+  /** 取消信号（中止流式输出，abort 后以 reject 收尾） */
+  signal?: AbortSignal
+}
+
+/** 流式增量（SSE 每个分片解析出的增量；三类内容互斥到达） */
+export interface ChatCompletionDelta {
+  content?: string // 正文增量
+  reasoning?: string // 思考增量（reasoning_content / reasoning 字段）
+  /** 工具调用增量（按 index 聚合：id/name 先到，arguments 分片追加） */
+  toolCall?: {
+    index: number
+    id?: string
+    name?: string
+    arguments?: string
+  }
+}
+
+/** chatComplete 结果（流结束后的聚合） */
+export interface ChatCompletionResult {
+  content: string // 正文（无正文仅工具调用时为空串）
+  reasoning?: string // 思考内容
+  toolCalls: ChatToolCall[] // 本轮流到的工具调用（按 index 序）
+  finishReason?: string // stop / tool_calls / length 等
+}
+
 /* ==================== 数据库导入（ManagerApi 契约形态） ==================== */
 
 /** 数据库列定义：从真实数据库导入的表列信息 */
@@ -486,6 +577,25 @@ export interface ManagerApi {
 
   /** 上传 zip 产物代码，直接替换对应源码文件 */
   replace(zipFile: Blob): Promise<void>
+
+  /* ---------- AI（openai compatible） ---------- */
+
+  /** 获取 AI 设置（供应商地址 / API Key / 模型列表 / 全局规则） */
+  getAiSettings(): Promise<AiSettings>
+
+  /** 保存 AI 设置（校验失败 reject 中文业务提示） */
+  saveAiSettings(settings: AiSettings): Promise<void>
+
+  /**
+   * openai compatible chat completions 标准流式接口：
+   * 请求 / 增量 / 结果对齐 openai 规范子集；onDelta 逐片回调流式增量
+   * （正文 / 思考 / 工具调用三类），流结束后 resolve 聚合结果；
+   * 中止经 request.signal（abort 后以 reject 收尾）。
+   */
+  chatComplete(
+    request: ChatCompletionRequest,
+    onDelta?: (delta: ChatCompletionDelta) => void,
+  ): Promise<ChatCompletionResult>
 
   /**
    * demo 扩展：重置为内置演示数据（仅 DemoManagerApi 提供，

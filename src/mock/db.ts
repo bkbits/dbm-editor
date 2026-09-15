@@ -5,6 +5,8 @@
  * 持久化键保持 v2 不变，读取时按需迁移（设置形态 / hidden 字段 / 模板种子版本）。
  */
 import type {
+  AiModelConfig,
+  AiSettings,
   CodeTemplate,
   Dict,
   DictCategory,
@@ -15,6 +17,7 @@ import type {
   TableCategory,
   TableIndex,
   TableNavigate,
+  ThinkingIntensity,
   TypeMapping,
 } from '@/types/model'
 import { normalizeFieldConventions } from '@/utils/fieldConvention'
@@ -73,6 +76,8 @@ export interface MockDB {
   /** 字典分类模板（仅一个；v6 新增：旧库读取时补种子） */
   dictCategoryTemplate: CodeTemplate
   settings: Settings
+  /** AI 设置（openai compatible 供应商 / 模型列表 / 全局规则；旧库读取时补空缺省） */
+  aiSettings: AiSettings
 }
 
 function clone<T>(v: T): T {
@@ -102,6 +107,7 @@ function createSeedDB(): MockDB {
     templates: clone(SEED_TEMPLATES),
     dictCategoryTemplate: clone(SEED_DICT_CATEGORY_TEMPLATE),
     settings: clone(SEED_SETTINGS),
+    aiSettings: { baseUrl: '', apiKey: '', models: [], globalRules: '' },
   }
 }
 
@@ -154,6 +160,51 @@ function normalizeSettings(raw: unknown): Settings {
   const columnOptions = normalizeOptionSettings(s.columnOptions, SEED_COLUMN_OPTIONS)
   const fieldConventions = normalizeFieldConventions(s.fieldConventions)
   return { indexTypes, typeMappings, author, tableOptions, columnOptions, fieldConventions }
+}
+
+/** 思考强度合法档位（AI 模型配置校验用） */
+const THINKING_INTENSITIES: ThinkingIntensity[] = ['low', 'medium', 'high', 'xhigh', 'max']
+
+/**
+ * AI 设置读取时归一：保留用户已配置内容，逐字段兜底形态；
+ * 模型列表去重（按 id）、思考强度非法值回退 medium、上下文长度归一为非负整数
+ */
+function normalizeAiSettings(raw: unknown): AiSettings {
+  const s = (raw || {}) as {
+    baseUrl?: unknown
+    apiKey?: unknown
+    models?: unknown
+    globalRules?: unknown
+  }
+  const models: AiModelConfig[] = []
+  const seen = new Set<string>()
+  if (Array.isArray(s.models)) {
+    for (const m of s.models as Array<Partial<AiModelConfig>>) {
+      const id = String(m?.id ?? '').trim()
+      if (!id || seen.has(id)) continue
+      seen.add(id)
+      const supportsThinking = Boolean(m?.supportsThinking)
+      const intensity = THINKING_INTENSITIES.includes(m?.thinkingIntensity as ThinkingIntensity)
+        ? (m?.thinkingIntensity as ThinkingIntensity)
+        : 'medium'
+      models.push({
+        id,
+        name: String(m?.name ?? '').trim() || id,
+        supportsThinking,
+        thinkingIntensity: supportsThinking ? intensity : undefined,
+        inputContextLength:
+          Math.max(0, Math.floor(Number(m?.inputContextLength) || 0)) || undefined,
+        outputContextLength:
+          Math.max(0, Math.floor(Number(m?.outputContextLength) || 0)) || undefined,
+      })
+    }
+  }
+  return {
+    baseUrl: String(s.baseUrl ?? '').trim(),
+    apiKey: String(s.apiKey ?? ''),
+    models,
+    globalRules: String(s.globalRules ?? ''),
+  }
 }
 
 function loadDB(): MockDB {
@@ -298,6 +349,12 @@ function loadDB(): MockDB {
         if ((parsed.dictTemplateSeedVersion ?? 1) < DICT_TEMPLATE_SEED_VERSION) {
           parsed.dictCategoryTemplate = clone(SEED_DICT_CATEGORY_TEMPLATE)
           parsed.dictTemplateSeedVersion = DICT_TEMPLATE_SEED_VERSION
+          migrated = true
+        }
+        // v8：AI 设置（openai compatible 供应商 / 模型列表 / 全局规则）。
+        // 旧库无 aiSettings 字段：补空缺省（未配置态），此后用户保存即持久化
+        if (!parsed.aiSettings) {
+          parsed.aiSettings = normalizeAiSettings(undefined)
           migrated = true
         }
         if (migrated) {

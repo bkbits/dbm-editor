@@ -60,6 +60,11 @@ const myApi: ManagerApi = {
   async removeTemplate(id: string) { /* … */ },
   async replace(zip: Blob) { /* 代码替换：接收生成结果 zip */ },
 
+  // —— AI（openai compatible）——
+  async getAiSettings(): Promise<AiSettings> { /* AI 设置：供应商地址(/v1 结尾) / apiKey / 模型列表 / 全局规则 */ },
+  async saveAiSettings(s: AiSettings) { /* … */ },
+  async chatComplete(req: ChatCompletionRequest, onDelta?: (d: ChatCompletionDelta) => void): Promise<ChatCompletionResult> { /* openai chat completions 标准流式（SSE）：onDelta 逐片回调（正文/思考/工具调用），流结束 resolve 聚合结果；中止经 req.signal */ },
+
   // 可选扩展：重置演示数据（演示实现提供，真实后端可不实现）
   async resetDemo() { /* … */ },
 }

@@ -80,6 +80,7 @@ bun run dev
 | `vp check`                        | Vite+ 内置：格式 + lint + 类型检查（staged 提交时自动执行）                                                                     |
 | `vp install`                      | 安装依赖                                                                                                                        |
 | `bun scripts/eta-smoke.mjs`       | Eta 模板引擎 API 冒烟测试（模板功能改动前的快速回归）                                                                           |
+| `node scripts/ai-sse-mock.mjs`    | AI E2E 模拟服务（openai compatible SSE，脚本化两轮 AGENT 对话；配合 `AI_MOCK_PROXY=1 vp dev` 同源代理使用）                     |
 | `python3 scripts/check-readme.py` | README 链接 / 锚点 / 表格自检                                                                                                   |
 | `bash scripts/package.sh`         | 打包源码为交付 zip（`download/graph-db-model-editor.zip`，含 skills/DBManager 技能文档）                                        |
 
@@ -137,7 +138,7 @@ createApp(() => h(DBManagerView, { api: myApi }))
 
 ## 功能总览
 
-应用由顶栏切换的四个页面组成：**模型编辑器**（画布 + 左侧大纲）、**字典管理**、**模板管理**（代码生成）与**系统设置**。以下按功能域逐一说明。
+应用由顶栏切换的五个页面组成：**模型编辑器**（画布 + 左侧大纲）、**字典管理**、**模板管理**（代码生成）、**AI 工具**（AGENT 对话式操作）与**系统设置**。以下按功能域逐一说明。
 
 ### 画布（模型编辑器）
 
@@ -259,7 +260,20 @@ Eta 语法：`<% %>` 逻辑、`<%= %>` 输出、`<%# %>` 自定义注释标签�
 - **索引类型**：索引类型列表管理（增删，自动转大写、去重校验）。「编辑表」对话框的索引类型下拉选项与数据库导入的索引类型归一化均使用该列表；至少保留一个类型
 - **主键与审计字段**：主键字段约定（默认 `id` / `BIGINT`，每表强制拥有且固定为第一个字段，不可修改、不可排序，Java 类型按「列默认类型」规则自动推导）与审计字段约定（创建人 `create_by` / 创建时间 `create_time` 强制非空，更新人 `update_by` / 更新时间 `update_time` 可空；创建/更新人默认 `BIGINT`，创建/更新时间默认 `DATETIME`；数据库蛇形命名，Java 属性名自动转小驼峰）。名称与类型均可编辑（类型可自动补全）；审计字段可单独设定 Java 类型（可自动补全、可清空，**留空 = 按「列默认类型」规则自动推导且随类型联动**，设定后建列固定使用该值；主键 Java 类型始终为自动推导），需为合法标识符且五个名称互不重复；非空约束为固定语义随字段角色而定；「恢复默认」一键回置 id/create_by/create_time/update_by/update_time（Java 类型全部回到自动推导）；「编辑表」对话框据此固定主键首字段并提供审计字段一键增删（审计字段建列时取约定的 Java 类型）
 - **代码生成**：作者（生成 javadoc 的 `@author`，留空则省略该标签）与表/列选项元定义（名称/类型/标签/说明/字典）。默认表选项为 `query`/`add`/`update`/`remove`（驱动 mapper/service/controller 分支），默认列选项为 `show`/`query`/`add`/`update`/`remove`（驱动 controller 查询条件与 vue 列表/表单）；选项类型支持 `boolean`/`string`/`int`/`long`/`double` 及自定义，名称需为合法标识符且列表内唯一
-- 设置保存后持久化（DemoManagerApi + localStorage），整页统一保存 / 放弃修改
+- **AI（openai compatible）**：AI 供应商设置——服务地址（必须以 `/v1` 结尾，如 `https://api.example.com/v1`）与 API Key（Bearer 鉴权，本地服务可留空）；模型列表（模型 id / 展示名称 / 是否支持思考 / 思考强度 `low|medium|high|xhigh|max` / 输入输出上下文长度，id 非空唯一）；全局规则（多行文本，非空时作为规则文本附加在 AI 工具每次调用的系统提示中）。独立契约（`getAiSettings` / `saveAiSettings`），本区块自带「保存 AI 设置 / 放弃修改」，不并入整页保存
+- 设置保存后持久化（DemoManagerApi + localStorage），整页统一保存 / 放弃修改（AI 区块为独立保存）
+
+### AI 工具（AGENT 对话式操作）
+
+顶栏「AI 工具」进入 AGENT 对话界面，用自然语言直接操作模型数据与代码生成：
+
+- **能力装载**：自动将 ManagerApi 全部能力（去除 AI 设置与 chatComplete 两项；`replace` 为 zip 二进制参数不可 JSON 化，由「代码替换」工具承担）+ 代码生成 + 代码替换注册为可调用工具（openai function calling 标准），按「流式输出 → 工具调用 → 结果回填 → 继续生成」循环直至最终回答（轮数上限 12 防失控）
+- **全局规则**：AI 设置中的全局规则非空时附加在系统提示中（优先级最高）
+- **界面布局**：左侧上方为历史聊天数据，下方为文本输入框（Enter 发送 / Shift+Enter 换行，可随时停止生成、开启新会话）；右侧为能力调用记录（默认收起，点击展开查看参数与返回值）
+- **思考内容**：模型支持思考时，思考流以可收缩块展示——正在输出时自动展开、完成后自动收起，亦可手动切换
+- **消息渲染**：轻量 Markdown（标题 / 加粗 / 行内代码 / 围栏代码块带 highlight.js 高亮）；助手消息附工具调用芯片，点击定位右侧对应记录
+- **数据同步**：工具改动过模型 / 字典 / 模板 / 设置时，会话结束自动按域刷新对应仓库，画布与各页面保持一致
+- **上下文防溢出**：工具结果回填模型上限 48k 字符（超限截断标注）；代码生成可选用 `includeContent` 附带文件内容（单文件 6k 截断）
 
 ### 主题
 
@@ -307,7 +321,7 @@ const myApi: ManagerApi = {
 注入链路：
 
 - **DBManagerView** 解析 `api` 属性（缺省共享 `sharedDemoApi` 单例）后做两件事：`provide` 注入子组件（`useManagerApi()` 取用响应式引用）；调用 `createDBManagerState(() => api)` 创建整套状态仓库并 `provide` 注入子树——**每个 DBManagerView 实例一套状态**，不依赖 Pinia 等应用级全局单例
-- **状态仓库**（`src/stores/`）：theme / ui / model / canvas / dict / template / settings / history 八个仓库均为 Vue `reactive` 对象（state 字段 + getter 访问器 + action 方法），子组件经 `useXxxStore()` 注入取用（函数名与早期 Pinia 版本一致）；仓库间相互引用与 api 读取均经工厂入参的惰性取值函数建立，切换 api 时 DBManagerView 自动全量重载各仓库数据
+- **状态仓库**（`src/stores/`）：theme / ui / model / canvas / dict / template / settings / history / ai 九个仓库均为 Vue `reactive` 对象（state 字段 + getter 访问器 + action 方法），子组件经 `useXxxStore()` 注入取用（函数名与早期 Pinia 版本一致）；仓库间相互引用与 api 读取均经工厂入参的惰性取值函数建立，切换 api 时 DBManagerView 自动全量重载各仓库数据
 - **子组件**（如数据库导入 / 代码替换对话框）通过 `useManagerApi()`（`src/api/manager-api.ts`）注入响应式引用，在合适位置 `await` 调用 `api.importFromDB()` / `api.replace(zip)` 等异步方法
 - **模型变更**遵循细粒度异步契约——每次操作先改本地状态，再 `await` 对应 api 方法（`addTable` / `updateTable` / `removeTable` / `updateTablePos` / `addNavigate` …）即时持久化，持久化失败（reject）自动回滚快照；撤销/重做恢复后通过 diff 同步（`syncToApi`）把持久层对齐到本地状态
 
@@ -329,8 +343,10 @@ const myApi: ManagerApi = {
 | `getDicts() / addDict / updateDict / removeDict`                                  | 字典 CRUD（含所属分类 categoryId）                                                                                                                       |
 | `getTemplates() / addTemplate / updateTemplate / removeTemplate`                  | 表模板 CRUD（每表渲染一次）                                                                                                                              |
 | `replace(zipFile)`                                                                | 上传 zip 产物代码，直接替换对应源码文件（zip 解析为真实异步，失败 reject 由调用方捕获）                                                                  |
+| `getAiSettings() / saveAiSettings(settings)`                                      | AI 设置读写（openai compatible 供应商地址 / API Key / 模型列表 / 全局规则；地址必须以 `/v1` 结尾，模型 id 非空唯一）                                     |
+| `chatComplete(request, onDelta?)`                                                 | openai compatible chat completions 标准流式接口：`onDelta` 逐片回调增量（正文 / 思考 / 工具调用），流结束 resolve 聚合结果；中止经 `request.signal`      |
 
-> 调用时机约定：应用视图启动即幂等预载 `getSettings()`（设置是编辑器/导入共用的全局配置）与 `load()`；此后各操作按细粒度契约即时调用对应方法。`DBColumn.notNull` 为 demo 扩展字段（真实实现可不提供，缺省视为可空）；`Table.hidden` 随模型数据持久化（隐藏态在刷新/重开后保持）；`resetDemo()` 为 DemoManagerApi 的扩展方法（重置为内置演示数据），正式实现无需提供。
+> 调用时机约定：应用视图启动即幂等预载 `getSettings()`（设置是编辑器/导入共用的全局配置）与 `load()`；此后各操作按细粒度契约即时调用对应方法。`DBColumn.notNull` 为 demo 扩展字段（真实实现可不提供，缺省视为可空）；`Table.hidden` 随模型数据持久化（隐藏态在刷新/重开后保持）；`resetDemo()` 为 DemoManagerApi 的扩展方法（重置为内置演示数据），正式实现无需提供。AI 相关：`AiSettings` 为独立设置契约（不并入 `Settings`）；`chatComplete` 的请求 / 增量 / 结果对齐 openai 规范子集（`reasoningEffort` 随请求下发、思考经 `reasoning_content` 流式回传、`tool_calls` 按 index 聚合）；AI 工具页将除 AI 设置与 chatComplete 外的全部 ManagerApi 能力 + 代码生成 / 代码替换注册为 AGENT 工具。
 
 ### 统一日志 Logger（src/log/Logger.ts）
 
@@ -354,7 +370,7 @@ Logger.setLevel('INFO') // 或 Logger.level = 'INFO' / Logger.getLevel()
 
 ### DemoManagerApi（内置演示实现）
 
-`src/api/demo-manager-api.ts`：数据存于内存（`src/mock/db.ts`）并持久化到 `localStorage`（`gdbme:db:v2`）。按契约全部方法返回 `Promise`：除 `replace` 的 zip 解析为真实异步外，其余方法内部同步完成后在微任务内 resolve；校验失败 reject 含中文业务提示的 `Error`。数据重置：左下大纲面板「重置演示数据」按钮。
+`src/api/demo-manager-api.ts`：数据存于内存（`src/mock/db.ts`）并持久化到 `localStorage`（`gdbme:db:v2`）。按契约全部方法返回 `Promise`：除 `replace` 的 zip 解析为真实异步外，其余方法内部同步完成后在微任务内 resolve；校验失败 reject 含中文业务提示的 `Error`。数据重置：左下大纲面板「重置演示数据」按钮。AI 契约演示语义：`getAiSettings` / `saveAiSettings` 读写 localStorage 中的 AI 设置（校验同 UI：地址以 `/v1` 结尾等）；`chatComplete` 经浏览器 `fetch` 直连 openai compatible 服务（SSE 逐行解析 `data:` 分片与 `[DONE]` 哨兵，`reasoning_content` 思考流、`tool_calls` 分片聚合），跨域受限于服务端 CORS 配置。E2E 冒烟：`node scripts/ai-sse-mock.mjs` 起本地模拟服务（脚本化两轮 AGENT 对话：工具调用 + Markdown 总结），配合 `AI_MOCK_PROXY=1 vp dev` 的同源代理（`/__ai-mock` → `localhost:4833`）可在浏览器内完整验证流式 / 思考 / 工具调用链路。
 
 所有方法经 Proxy 包装打印调用日志：每次契约调用输出 `[DemoManagerApi] <方法>() 入参` 与 `返回`（debug 级，异步方法**等待落定后**打印 resolved 值，reject 时以 error 级输出后原样透传拒绝）；内部辅助方法互调不打日志。联调时可在控制台按 `DemoManagerApi` 过滤，直接观测各契约方法的实际调用时机与参数（如应用启动即触发 `getSettings` / `load`）；`Logger.setLevel('INFO')` 可静默追踪噪音，`DISABLED` 可完全关闭。
 
@@ -387,7 +403,7 @@ Logger.setLevel('INFO') // 或 Logger.level = 'INFO' / Logger.getLevel()
 ├─ vite.config.ts          # Vite+ 配置（@ 别名 / 端口 3000 / allowedHosts / lint / fmt / staged / 库构建）
 ├─ tsconfig.json
 ├─ docs/screenshots/       # 界面截图
-├─ scripts/                # 开发辅助脚本（Eta 冒烟 / README 自检 / 库产物 CSS 内联 / 打包）
+├─ scripts/                # 开发辅助脚本（Eta 冒烟 / README 自检 / 库产物 CSS 内联 / 打包 / AI E2E 模拟服务）
 ├─ skills/DBManager/       # 本仓库使用方法技能文档（SKILL.md，随仓库发布）
 └─ src/
    ├─ index.ts             # 库入口（导出 DBManagerView 组件 + ManagerApi 契约类型）
@@ -397,15 +413,16 @@ Logger.setLevel('INFO') // 或 Logger.level = 'INFO' / Logger.getLevel()
    ├─ composables/         # useDragSort 行拖拽排序（字段/设置规则共用）
    ├─ log/                 # 统一日志器 Logger（级别过滤：DEBUG/INFO/WARN/ERROR/FATAL/DISABLED）
    ├─ mock/                # 种子数据 + demo 内存数据库（localStorage 持久化）
-   ├─ stores/              # 状态注入体系：context（工厂+provide/inject）+ model / canvas / dict / template / theme / ui / history / settings 八个 reactive 仓库
+   ├─ stores/              # 状态注入体系：context（工厂+provide/inject）+ model / canvas / dict / template / theme / ui / history / settings / ai 九个 reactive 仓库
    ├─ types/               # 数据模型类型（含 ManagerApi 契约，与规格说明书一致）
    ├─ utils/               # 字符串 / Java 类型映射 / 导航推导 / 几何 / 力导向布局 / Eta 渲染 / 高亮
    ├─ styles/              # --dbm- 设计令牌（静态基线）/ antd 主题同步层 / 全局样式 / hljs 配色（库构建时内联进 JS）
-   ├─ views/               # DBManagerView（页面封装+状态注入入口）/ EditorView / DictView / TemplateView / SettingsView
+   ├─ views/               # DBManagerView（页面封装+状态注入入口）/ EditorView / DictView / TemplateView / SettingsView / AiView
    └─ components/
       ├─ layout/           # AppHeader
       ├─ outline/          # 左侧表格大纲
       ├─ canvas/           # ModelCanvas / TableCard / NavigateEdge / Minimap / 菜单 / 工具栏
+      ├─ settings/         # AI 设置区块（系统设置页内嵌卡片，独立保存）
       └─ dialog/           # 表/导航/分类/导入/代码预览/替换确认 对话框
 ```
 
@@ -493,6 +510,16 @@ DemoManagerApi 将模型持久化到浏览器 `localStorage`（key 为 `gdbme:db
 | 代码预览（高亮 / 可复制）                      | 系统设置 · 索引类型（暗色）                                 |
 | ---------------------------------------------- | ----------------------------------------------------------- |
 | ![代码预览](docs/screenshots/code-preview.png) | ![索引类型](docs/screenshots/settings-index-types-dark.png) |
+
+| AI 工具（AGENT 对话 + 调用记录）                        | AI 工具（暗色）                                        |
+| ------------------------------------------------------- | ------------------------------------------------------ |
+| ![AI 工具亮](docs/screenshots/task34-ai-tool-light.png) | ![AI 工具暗](docs/screenshots/task34-ai-tool-dark.png) |
+
+AI 供应商与模型列表配置（系统设置页「AI（openai compatible）」区块）：
+
+| 系统设置 · AI（供应商 / 模型列表 / 全局规则）       |
+| --------------------------------------------------- |
+| ![AI 设置](docs/screenshots/task34-ai-settings.png) |
 
 宿主项目冒烟页（`test/host-smoke.html`，直连构建产物 `dist/DBManager.js`，宿主侧仅提供 vue / antdv-next / @lucide/vue 三个 peer 依赖）：
 

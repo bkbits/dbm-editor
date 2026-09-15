@@ -1,5 +1,15 @@
 <script setup lang="ts">
-import { Database, BookText, FileCode, Sun, Moon, Settings, SaveAll, RefreshCw } from '@lucide/vue'
+import {
+  Database,
+  BookText,
+  FileCode,
+  Sun,
+  Moon,
+  Settings,
+  SaveAll,
+  RefreshCw,
+  Bot,
+} from '@lucide/vue'
 import { onBeforeUnmount, onMounted } from 'vue'
 import { message } from 'antdv-next'
 import { useThemeStore } from '@/stores/theme'
@@ -17,6 +27,7 @@ const pages: Array<{ key: PageName; label: string; icon: unknown }> = [
   { key: 'editor', label: '模型编辑器', icon: Database },
   { key: 'dict', label: '字典管理', icon: BookText },
   { key: 'template', label: '模板管理', icon: FileCode },
+  { key: 'ai', label: 'AI 工具', icon: Bot },
   { key: 'settings', label: '系统设置', icon: Settings },
 ]
 

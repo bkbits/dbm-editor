@@ -17,6 +17,7 @@ import {
 import type { FieldConventions, OptionSetting, TypeMapping } from '@/types/model'
 import { useSettingsStore, SETTINGS_JAVA_TYPES } from '@/stores/settings'
 import { errorMessageOf } from '@/api/manager-api'
+import AiSettingsSection from '@/components/settings/AiSettingsSection.vue'
 import { useDragSort } from '@/composables/useDragSort'
 import { uid } from '@/utils/id'
 import { getJavaTypeByType, COMMON_DB_TYPES } from '@/utils/javaType'
@@ -758,6 +759,8 @@ async function save() {
           </a-button>
         </div>
       </section>
+
+      <AiSettingsSection />
 
       <div class="settings-foot">
         <span class="dirty-tip" :class="{ dirty }">

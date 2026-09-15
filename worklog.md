@@ -990,3 +990,26 @@ Stage Summary:
 - 审计字段 Java 类型可设置全链路落地：设置页可编辑（自动补全/可清空）、持久化、建列取值（显式优先，自动=规则链推导）；空值语义让「自动跟随类型」零代码实现（占位符天然联动）
 - 关键决策：① 可选字段+空值自动语义——免旧数据迁移、免类型联动 watch、清空即回归自动（优于显式默认值方案）；② 建列回退链 matchJavaType→getJavaTypeByType 与导入/设置页展示同语义；③ a-auto-complete（自由输入+候选+allow-clear）而非 a-select 枚举——支持 SETTINGS_JAVA_TYPES 之外的自定义类型（如 Instant）
 - 沙箱工作流新增：覆盖区独立 git init（让 vp check 在 git archive 副本中可用）+ 单调用验证脚本框架（common.sh 起/杀服务 + step 脚本跑浏览器断言 + verify/ 落证据）
+
+---
+Task ID: 34
+Agent: main (Super Z)
+Task: AI 能力——AI 设置（openai compatible 供应商 / 模型列表 / 全局规则）+ ManagerApi 新契约（getAiSettings / saveAiSettings / chatComplete 标准流式）+ AI 工具页（AGENT 对话式操作）
+
+Work Log:
+- 需求三件套：① AI 设置：供应商（url 须带 /v1 后缀、api key）+ 模型列表（模型 id / 展示名称 / 是否支持思考 / 思考强度 low|medium|high|xhigh|max / 输入输出上下文长度）+ 全局规则（多行文本，附加在 ai 调用中）；② ManagerApi 增加上述 AI 设置与 openai chat complete 标准流式接口；③ AI 工具：ManagerApi 能力（去除 AI 设置与 chatComplete）+ 代码生成 + 代码替换作为 AGENT 能力装载，全局规则非空时附加；界面左侧上方历史聊天（思考可收缩、输出中自动展开、完成后自动收起）、左侧下方文本输入、右侧调用记录（默认收起，展开见参数与返回值）
+- 基线恢复：主工作区被沙箱机制周期性 checkout 回 main@43ba124（Task 31 中途脏快照，typecheck 47 错）；origin/devel=dd801f0 为正确终态 → 隔离克隆 dbm-work 开展（cp -al 硬链 node_modules 免安装），克隆不受主仓重置影响（45s 观察验证）
+- 类型层（types/model.ts）：ThinkingIntensity / AiModelConfig / AiSettings / ChatToolCall / ChatMessage / ChatToolSpec / ChatCompletionRequest / ChatCompletionDelta / ChatCompletionResult；ManagerApi 增 getAiSettings / saveAiSettings / chatComplete 三方法（请求 / 增量 / 结果对齐 openai 规范子集）
+- Demo 实现（demo-manager-api.ts）：AI 设置读写（地址 /v1 结尾、模型 id 非空唯一、强度档位校验）；chatComplete 经 fetch 直连 {baseUrl}/chat/completions（stream:true + reasoning_effort + tools 透传），SSE 逐行解析（data: 分片 / [DONE] 哨兵 / reasoning_content 兼容 reasoning / tool_calls 按 index 聚合 / finish_reason 捕获），abort 经 signal 传导，非 200 解析错误体 reject 中文提示；mock/db.ts 增 aiSettings 字段（旧库读取补空缺省）
+- AI 仓库（stores/ai.ts 新建）：设置加载保存 + 会话状态（messages / toolRecords / running / abortController）；AGENT 运行循环——系统提示（能力清单 + 工作约定 + 非空附加全局规则）→ 流式输出（思考自动展开）→ 工具调用（记录 → 执行 → 结果回填消息序列）→ 继续生成直至最终回答（12 轮上限防失控）；工具注册表 34 项 = ManagerApi 全能力（去除 AI 设置 / chatComplete；replace 为 zip 二进制参数不可 JSON 化，由代码替换承担）+ generateCode / replaceCode 合成能力（按 tableName 指定范围、dictEnabled 开关、includeContent 可选附内容单文件 6k 截断）；工具结果回填模型上限 48k 字符；脏域（model/dict/template/settings）会话结束按域刷新对应仓库
+- UI：AiSettingsSection.vue（系统设置页内嵌卡片，独立契约自带「保存 AI 设置 / 放弃修改」；/v1 即时校验、模型行编辑、思考强度下拉、上下文长度数字输入）；AiView.vue（第五页「AI 工具」）——左侧聊天（用户气泡 / 助手轻量 Markdown：标题、加粗、行内代码、围栏代码块 highlight.js 高亮；工具芯片点击定位右侧记录）、思考可收缩块（流式中自动展开 / 完成后自动收起 / 手动可切换）、输入区（模型选择 / Enter 发送 / Shift+Enter 换行 / 停止 / 新会话）、右侧调用记录面板（默认收起，展开见参数与返回值，状态图标 + 时长）
+- 接线：ui.ts PageName 增 'ai'；context.ts 增 ai 仓库（deps：api/model/dict/template/settings）；AppHeader 导航；DBManagerView 渲染 AiView + initPage 预载 AI 设置 + api 切换重置 ai 会话
+- **响应式 bug（E2E 捕获）**：推入 reactive 数组后持原始对象引用做流式变更（asst.content += / record.status =）不触发视图更新——思考自动展开、打字机、记录状态流转全部静默失效（仅靠其它触发点重渲染）；修复：消息与记录对象 reactive() 包裹（E2E poll3 捕获 true|true|true 展开态验证生效）
+- E2E（scripts/ai-sse-mock.mjs 模拟服务 + vite.config.ts 环境变量门控 AI_MOCK_PROXY 同源代理 /__ai-mock→4833，规避浏览器与 shell 网络命名空间隔离）：两轮 AGENT 脚本（reasoning 流 → tool_calls getTables → [DONE]；工具结果回填后 → Markdown 总结含代码围栏）；驱动脚本在单次 Bash 调用内完成「起服务 → 浏览器全流程断言 → 截图 → 杀服务」（沙箱在调用间回收派生进程）；17/17 断言通过——/v1 校验、设置持久化、空态引导、模型回显、流式标记、思考渲染 / 自动展开 / 自动收起、Markdown 标题与代码块、工具芯片、记录数 / 默认收起 / 详情（参数 {} 与含表数据的返回）、手动展开、模拟服务收到两轮请求（tools=35）
+- 文档：README（五页总览、AI 工具章节、命令表、ManagerApi 清单 3 行、备注、DemoManagerApi AI 语义与 E2E 冒烟、项目结构、截图×3）、SKILL.md 契约示例、AGENTS.md（能力 / 九仓库 / 五页目录 / 命令表）；check-readme 32 标题通过（表格正则跨空行并块坑：单列表格与前表间插说明文字断块）
+- bun run typecheck 通过；vp check 67 文件格式与 lint 全绿；bun run build 库构建通过（.d.ts 滚动合并含新契约类型）；截图 docs/screenshots/task34-ai-tool-light/dark.png、task34-ai-settings.png
+
+Stage Summary:
+- AI 能力全链路落地：设置（供应商 / 模型 / 规则）→ 契约（三方法，流式标准）→ AGENT 工具页（34+1 工具调用循环、思考流式交互、调用记录面板）；真实浏览器 E2E 17/17 断言通过，并捕获修复「原始对象变更不触发更新」响应式 bug
+- 关键决策：① chatComplete 回调式流式（onDelta 逐片 + Promise 聚合结果）——保持全 Promise 契约、HTTP/IPC 可移植；② AI 设置独立契约（不并入 Settings），设置卡片独立保存；③ replace 不直接注册（Blob 参数不可 JSON 化）而以 replaceCode 合成工具承担；④ 思考强度以 reasoning_effort 随请求下发（模型级配置，supportsThinking 时携带）；⑤ 全局规则仅附加在 AI 工具系统提示（chatComplete 保持通用标准接口）；⑥ 工具执行后按域刷新仓库，画布与各页数据保持一致
+- 沙箱工作流沉淀：dbm-work 隔离克隆（免疫主仓周期性 checkout 重置）+ 单调用原子 E2E 驱动脚本 + agent-browser eval 输出为 JSON 转义文本（断言需 tr -d '"' 或避免 JSON.stringify）+ 截图按守护进程 cwd 解析相对路径（落点在主仓 docs，需移动）

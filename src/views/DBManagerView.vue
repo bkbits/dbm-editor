@@ -23,6 +23,7 @@ import EditorView from '@/views/EditorView.vue'
 import DictView from '@/views/DictView.vue'
 import TemplateView from '@/views/TemplateView.vue'
 import SettingsView from '@/views/SettingsView.vue'
+import AiView from '@/views/AiView.vue'
 
 const props = defineProps<{ api?: ManagerApi }>()
 
@@ -56,6 +57,8 @@ watch(apiRef, (api, old) => {
       s.loaded = false
       s.loading = false
     }
+    state.ai.resetForApiSwitch()
+    state.ai.resetForApiSwitch()
     state.history.clear()
     state.canvas.setSelection([])
     initPage(state.ui.page)
@@ -77,6 +80,8 @@ function initPage(page: string) {
   if (page === 'editor') state.model.init()
   else if (page === 'dict') state.dict.init()
   else if (page === 'template') state.template.init()
+  // AI 设置供 AI 工具页与设置页 AI 区块共用（幂等预载）
+  else if (page === 'ai' || page === 'settings') state.ai.init()
 }
 </script>
 
@@ -89,6 +94,7 @@ function initPage(page: string) {
           <EditorView v-if="state.ui.page === 'editor'" />
           <DictView v-else-if="state.ui.page === 'dict'" />
           <TemplateView v-else-if="state.ui.page === 'template'" />
+          <AiView v-else-if="state.ui.page === 'ai'" />
           <SettingsView v-else-if="state.ui.page === 'settings'" />
         </main>
       </div>

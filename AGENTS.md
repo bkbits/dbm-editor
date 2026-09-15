@@ -33,7 +33,7 @@ release. Add a tool name to select part of the graph. For example, run
 ## 项目概览
 
 - **定位**：Vue 3 组件库 + 演示应用。构建产物为单文件库 `dist/DBManager.js`（ES 模块）与 `dist/DBManager.d.ts`，导出 `DBManagerView` 组件与 `ManagerApi` 契约类型；`vue`、`antdv-next`、`@lucide/vue` 为 peerDependencies（external，宿主项目提供）。
-- **能力**：可视化设计表结构（字段/索引/分类）、表间导航关系连线、数据字典、模板代码生成（Eta）、导入数据库结构、亮暗双主题。
+- **能力**：可视化设计表结构（字段/索引/分类）、表间导航关系连线、数据字典、模板代码生成（Eta）、导入数据库结构、亮暗双主题、AI 工具（openai compatible AGENT 对话式操作）。
 - **技术栈**：Vue 3.5 `<script setup>` + TypeScript + antdv-next + Vite Plus（vp CLI）+ Sass；包管理器 **bun**（`bun install` / `bun run xxx`）。
 - **仓库**：GitHub `bkbits/dbm-editor`（main 分支）。远程 token 已写入本地 `.git/config`，**严禁入库或外泄**。
 
@@ -52,7 +52,7 @@ release. Add a tool name to select part of the graph. For example, run
 
 ### 状态管理（无 Pinia）
 
-- 全部状态为组件实例级：`DBManagerView.vue` 调 `createDBManagerState()` 创建整套仓库（theme/ui/model/canvas/dict/template/settings/history），经 `provide/inject` 注入子树；子组件用 `useXxxStore()` 取用（`src/stores/context.ts` 汇总）。
+- 全部状态为组件实例级：`DBManagerView.vue` 调 `createDBManagerState()` 创建整套仓库（theme/ui/model/canvas/dict/template/settings/history/ai），经 `provide/inject` 注入子树；子组件用 `useXxxStore()` 取用（`src/stores/context.ts` 汇总）。
 - **禁止**引入 Pinia 等应用级全局单例，禁止在模块顶层创建跨实例共享状态（`sharedDemoApi` 演示单例除外）。
 
 ### ManagerApi 数据契约
@@ -109,8 +109,8 @@ src/
 ├─ index.ts              # 库导出入口（DBManagerView + 契约类型）
 ├─ types/model.ts        # ManagerApi 契约（异步签名）
 ├─ api/                  # DemoManagerApi 演示实现 + 注入工具
-├─ stores/               # 全套仓库（context.ts 汇总 provide/inject）
-├─ views/                # DBManagerView + 编辑器/字典/模板/设置四页
+├─ stores/               # 全套仓库（context.ts 汇总 provide/inject，含 ai 仓库）
+├─ views/                # DBManagerView + 编辑器/字典/模板/AI 工具/设置五页
 ├─ components/           # 画布/对话框/大纲/顶栏组件
 ├─ styles/               # variables.scss(基线) / antd-theme.scss(同步) / global / hljs
 ├─ log/                  # Logger 统一日志器
