@@ -1525,6 +1525,62 @@ INSERT INTO sys_menu (menu_name, parent_id, order_num, path, component, menu_typ
   },
 ]
 
+/** 字典分类模板种子（仅一个）：按分类生成 Java 字典常量类（每分类一个文件，含分类下全部字典与值） */
+export const SEED_DICT_CATEGORY_TEMPLATE: CodeTemplate = {
+  id: 'tpl-dict-category',
+  name: 'dict',
+  content: `<%
+  // 分类文件（file）推导产物路径与 Java 包名/类名；模板内可对 fileName/filePath 赋值覆盖
+  const file = String(context.category.file || "").split("\\\\").join("/").replace(/^\\\\//, "");
+  const parts = file.split("/").filter(Boolean);
+  const fileBase = parts.length ? parts[parts.length - 1] : "";
+  const cls = fileBase ? fileBase.replace(/\\.java$/, "") : utils.toCamelCase(context.category.name) + "DictConstants";
+  const dir = parts.slice(0, -1).join("/");
+  let pkg = dir.startsWith("src/main/java/") ? dir.slice("src/main/java/".length).split("/").join(".") : "";
+  if (pkg === "." || !pkg) pkg = "";
+  context.fileName = cls + ".java";
+  context.filePath = (dir ? dir + "/" : "") + context.fileName;
+  context.language = "java";
+  const author = (context.settings.author || "").trim();
+  const since = utils.nowDateTime();
+  const pascal = (s) => utils.toCamelCase(s);
+  // 值键为纯数字时生成 int 常量，否则生成 String 常量；常量名大写蛇形（数字键加 VALUE_ 前缀）
+  const isNumKey = (k) => /^[0-9]+$/.test(String(k));
+  const constName = (k) => isNumKey(k) ? "VALUE_" + k : String(k).replace(/([a-z0-9])([A-Z])/g, "$1_$2").replace(/[^A-Za-z0-9_]/g, "_").toUpperCase();
+%>
+<% if (pkg) { %>package <%= pkg %>;
+<% } %>
+<%# ===== 字典分类常量类（每个字典分类生成一份，含分类下全部字典与值） ===== %>
+/**
+ * <%= context.category.name %> 字典常量
+ *
+<% if (author) { %> * @author <%= author %>
+<% } %> * @since <%= since %>
+ */
+public final class <%= cls %> {
+
+  private <%= cls %>() {
+  }
+<% for (const dict of context.dicts) { %>
+
+  /**
+   * <%= dict.label %><% if (dict.comment) { %>：<%= dict.comment %><% } %>
+   * 字典键：<%= dict.dictKey %>
+   */
+  public static final class <%= pascal(dict.dictKey) %> {
+
+    /** 字典键 */
+    public static final String KEY = "<%= dict.dictKey %>";
+<% for (const v of dict.values) { %>
+    /** <%= v.label %><% if (v.comment) { %>：<%= v.comment %><% } %> */
+    public static final <%= isNumKey(v.valueKey) ? "int" : "String" %> <%= constName(v.valueKey) %> = <% if (isNumKey(v.valueKey)) { %><%= v.valueKey %><% } else { %>"<%= v.valueKey %>"<% } %>;
+<% } %>
+  }
+<% } %>
+}
+`,
+}
+
 /* ============ 模拟真实数据库（importFromDB 用） ============ */
 export const SEED_DB_TABLES: DBTable[] = [
   {

@@ -7,6 +7,7 @@
 import type {
   CodeTemplate,
   Dict,
+  DictCategory,
   OptionSetting,
   Settings,
   Table,
@@ -21,6 +22,8 @@ import {
   SEED_CATEGORIES,
   SEED_COLUMN_OPTIONS,
   SEED_DICTS,
+  SEED_DICT_CATEGORIES,
+  SEED_DICT_CATEGORY_TEMPLATE,
   SEED_HIDDEN_TABLE_NAMES,
   SEED_NAVIGATES,
   SEED_SETTINGS,
@@ -35,12 +38,14 @@ const LEGACY_STORAGE_KEYS = ['gdbme:db:v1']
  * 模板种子版本：种子模板集发生变更时递增（1=通用四件套，2=solon3 七件套，
  * 3=entity 模板 easy-query 规范化，4=八件套：新增 mapper（MapStruct），
  * java 模板全面升级——javadoc/@author/@since、@EntityProxy + ProxyEntityAvailable、
- * swagger2 注解、表/列选项驱动条件生成、import 块与代码间空行）。
+ * swagger2 注解、表/列选项驱动条件生成、import 块与代码间空行，
+ * 5=controller/vue/menuSql 路径与权限码风格升级——/api/模块/功能/操作、
+ * 模块.功能.操作权限码、查询条件三分支（时间 rangeClosed / id 与字典 eq / 字符串 like））。
  * 旧库不含 seedTemplatesVersion 字段（视为 1），读取时低于当前值即整体替换为
  * 最新种子模板集并回写版本号——与「用户是否删过某个种子模板」无关，杜绝形态
  * 嗅探漏判；此后用户对模板的增删改不再被种子覆盖（版本号已是最新）。
  */
-const SEED_TEMPLATES_VERSION = 4
+const SEED_TEMPLATES_VERSION = 5
 
 export interface MockDB {
   version: number
@@ -51,8 +56,12 @@ export interface MockDB {
   columns: TableColumn[]
   indexes: TableIndex[]
   navigates: TableNavigate[]
+  /** 字典分类（v6 新增：旧库读取时补种子并按种子映射迁移字典归属） */
+  dictCategories: DictCategory[]
   dicts: Dict[]
   templates: CodeTemplate[]
+  /** 字典分类模板（仅一个；v6 新增：旧库读取时补种子） */
+  dictCategoryTemplate: CodeTemplate
   settings: Settings
 }
 
@@ -77,8 +86,10 @@ function createSeedDB(): MockDB {
     columns,
     indexes,
     navigates: clone(SEED_NAVIGATES),
+    dictCategories: clone(SEED_DICT_CATEGORIES),
     dicts: clone(SEED_DICTS),
     templates: clone(SEED_TEMPLATES),
+    dictCategoryTemplate: clone(SEED_DICT_CATEGORY_TEMPLATE),
     settings: clone(SEED_SETTINGS),
   }
 }
@@ -202,6 +213,21 @@ function loadDB(): MockDB {
         ) {
           parsed.templates = clone(SEED_TEMPLATES)
           parsed.seedTemplatesVersion = SEED_TEMPLATES_VERSION
+          migrated = true
+        }
+        // v6：字典分类 + 字典分类模板。旧库无 dictCategories/dictCategoryTemplate：
+        // 补种子分类，字典按种子 dictKey 映射补 categoryId（未匹配保持未分类），
+        // 字典分类模板补种子（独立于表模板版本，用户编辑过即保留）
+        if (!Array.isArray(parsed.dictCategories)) {
+          parsed.dictCategories = clone(SEED_DICT_CATEGORIES)
+          const seedCatOf = new Map(SEED_DICTS.map((d) => [d.dictKey, d.categoryId || ''] as const))
+          for (const d of parsed.dicts) {
+            if (!d.categoryId) d.categoryId = seedCatOf.get(d.dictKey) || ''
+          }
+          migrated = true
+        }
+        if (!parsed.dictCategoryTemplate || !parsed.dictCategoryTemplate.content) {
+          parsed.dictCategoryTemplate = clone(SEED_DICT_CATEGORY_TEMPLATE)
           migrated = true
         }
         if (migrated) {
