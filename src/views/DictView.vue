@@ -1,8 +1,17 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { message, Modal } from 'antdv-next'
-import { Plus, Trash2, Search, BookText } from '@lucide/vue'
-import type { Dict, DictValue, DictValueLabelType } from '@/types/model'
+import {
+  Plus,
+  Trash2,
+  Search,
+  BookText,
+  FolderPlus,
+  Pencil,
+  ChevronRight,
+  ChevronDown,
+} from '@lucide/vue'
+import type { Dict, DictCategory, DictValue, DictValueLabelType } from '@/types/model'
 import { useDictStore } from '@/stores/dict'
 import { uid } from '@/utils/id'
 
@@ -27,6 +36,7 @@ const selectedId = computed({
 function newList() {
   draft.value = {
     id: '',
+    categoryId: '',
     dictKey: '',
     label: '',
     comment: '',
@@ -152,6 +162,69 @@ function deleteDict() {
   })
 }
 
+/* ==================== 分类管理 ==================== */
+
+/** 分类编辑弹窗（新增/编辑共用；仅一个字典分类模板，分类不涉模板） */
+const catModal = reactive({
+  open: false,
+  saving: false,
+})
+const catDraft = ref<DictCategory>({ id: '', name: '', file: '' })
+
+function newCategory() {
+  catDraft.value = { id: '', name: '', file: '' }
+  catModal.open = true
+}
+
+function editCategory(category: DictCategory) {
+  catDraft.value = { id: category.id, name: category.name, file: category.file || '' }
+  catModal.open = true
+}
+
+async function saveCategory() {
+  if (!catDraft.value.name.trim()) {
+    message.warning('分类名称不能为空')
+    return
+  }
+  catModal.saving = true
+  try {
+    await dictStore.saveDictCategory({ ...catDraft.value })
+    catModal.open = false
+    message.success(catDraft.value.id ? '字典分类已更新' : '字典分类已创建')
+  } catch {
+    /* store 已提示 */
+  } finally {
+    catModal.saving = false
+  }
+}
+
+function removeCategory(category: DictCategory) {
+  Modal.confirm({
+    title: `删除字典分类「${category.name}」？`,
+    content: '分类下仍有字典时将无法删除（请先移动或删除其下字典）。',
+    okText: '删除',
+    okType: 'danger',
+    cancelText: '取消',
+    onOk: async () => {
+      await dictStore.removeDictCategory(category.id)
+      message.success('字典分类已删除')
+    },
+  })
+}
+
+/** 折叠的分组（分类 id；「未分类」用 __uncat） */
+const collapsedCats = reactive(new Set<string>())
+
+function toggleCat(key: string) {
+  if (collapsedCats.has(key)) collapsedCats.delete(key)
+  else collapsedCats.add(key)
+}
+
+/** 字典表单的分类选项 */
+const categoryOptions = computed(() =>
+  dictStore.categories.map((c) => ({ value: c.id, label: c.name })),
+)
+
 /* 搜索命中高亮 */
 
 /** 当前选中字典被过滤掉时，自动选中首个过滤结果 */
@@ -210,10 +283,17 @@ const isValueHit = (v: DictValue) => {
           <BookText :size="14" />
           数据字典
         </span>
-        <a-button size="small" type="primary" @click="newList">
-          <template #icon><Plus :size="12" /></template>
-          新增
-        </a-button>
+        <div class="head-actions">
+          <a-tooltip title="新增字典分类">
+            <a-button size="small" @click="newCategory">
+              <template #icon><FolderPlus :size="12" /></template>
+            </a-button>
+          </a-tooltip>
+          <a-button size="small" type="primary" @click="newList">
+            <template #icon><Plus :size="12" /></template>
+            新增
+          </a-button>
+        </div>
       </div>
       <div class="list-search">
         <Search :size="13" class="search-icon" />
@@ -225,25 +305,64 @@ const isValueHit = (v: DictValue) => {
         />
       </div>
       <div class="list-body">
-        <div
-          v-for="d in dictStore.filteredDicts"
-          :key="d.id"
-          class="dict-item"
-          :class="{ selected: selectedId === d.id }"
-          @click="selectedId = d.id"
-        >
-          <div class="item-key mono" v-html="hl(d.dictKey)" />
-          <div class="item-label">
-            <span class="item-label-text" v-html="hl(d.label)" />
-            <span class="item-count">{{ d.values.length }} 值</span>
+        <template v-for="group in dictStore.grouped" :key="group.category?.id || '__uncat'">
+          <div class="cat-head">
+            <button
+              class="cat-toggle"
+              type="button"
+              :title="collapsedCats.has(group.category?.id || '__uncat') ? '展开' : '折叠'"
+              @click="toggleCat(group.category?.id || '__uncat')"
+            >
+              <ChevronRight v-if="collapsedCats.has(group.category?.id || '__uncat')" :size="12" />
+              <ChevronDown v-else :size="12" />
+            </button>
+            <span class="cat-name" :title="group.category?.file || ''">
+              {{ group.category?.name || '未分类' }}
+            </span>
+            <span class="cat-count">{{ group.dicts.length }}</span>
+            <template v-if="group.category">
+              <button
+                class="cat-btn"
+                type="button"
+                title="编辑分类（名称 / 分类文件）"
+                @click="editCategory(group.category)"
+              >
+                <Pencil :size="11" />
+              </button>
+              <button
+                class="cat-btn"
+                type="button"
+                title="删除分类（分类下仍有字典时不可删除）"
+                @click="removeCategory(group.category)"
+              >
+                <Trash2 :size="11" />
+              </button>
+            </template>
           </div>
-          <div v-if="d.comment" class="item-comment" v-html="hl(d.comment)" />
-        </div>
+          <template v-if="!collapsedCats.has(group.category?.id || '__uncat')">
+            <div
+              v-for="d in group.dicts"
+              :key="d.id"
+              class="dict-item"
+              :class="{ selected: selectedId === d.id }"
+              @click="selectedId = d.id"
+            >
+              <div class="item-key mono" v-html="hl(d.dictKey)" />
+              <div class="item-label">
+                <span class="item-label-text" v-html="hl(d.label)" />
+                <span class="item-count">{{ d.values.length }} 值</span>
+              </div>
+              <div v-if="d.comment" class="item-comment" v-html="hl(d.comment)" />
+            </div>
+          </template>
+        </template>
         <div v-if="!dictStore.filteredDicts.length" class="list-empty">
           {{ keyword ? '无匹配字典' : '暂无字典，点击右上角新增' }}
         </div>
       </div>
-      <div class="list-foot">{{ dictStore.dicts.length }} 个字典</div>
+      <div class="list-foot">
+        {{ dictStore.categories.length }} 个分类 · {{ dictStore.dicts.length }} 个字典
+      </div>
     </aside>
 
     <section class="dict-detail">
@@ -252,6 +371,17 @@ const isValueHit = (v: DictValue) => {
       >
         <div class="detail-form">
           <div class="form-row">
+            <div class="form-item">
+              <label>所属分类</label>
+              <a-select
+                v-model:value="draft.categoryId"
+                size="small"
+                :options="categoryOptions"
+                placeholder="未分类"
+                allow-clear
+                style="width: 100%"
+              />
+            </div>
             <div class="form-item">
               <label>字典键（dictKey）<span class="req">*</span></label>
               <a-input
@@ -367,6 +497,39 @@ const isValueHit = (v: DictValue) => {
         <p>选择左侧字典进行编辑，或新增字典</p>
       </div>
     </section>
+
+    <!-- 字典分类编辑（新增 / 编辑；属性：分类名称、分类文件——字典代码生成的默认产物路径） -->
+    <a-modal
+      v-model:open="catModal.open"
+      :title="catDraft.id ? '编辑字典分类' : '新增字典分类'"
+      width="min(460px, 94vw)"
+      wrap-class-name="dbm-modal-wrap"
+      :mask-closable="false"
+      @cancel="catModal.open = false"
+    >
+      <template #footer>
+        <a-button @click="catModal.open = false">取消</a-button>
+        <a-button type="primary" :loading="catModal.saving" @click="saveCategory">
+          保存分类
+        </a-button>
+      </template>
+      <div class="cat-form">
+        <div class="cat-form-item">
+          <label>分类名称<span class="req">*</span></label>
+          <a-input v-model:value="catDraft.name" size="small" placeholder="如 系统字典" />
+        </div>
+        <div class="cat-form-item">
+          <label>分类文件</label>
+          <a-input
+            v-model:value="catDraft.file"
+            size="small"
+            class="mono"
+            placeholder="如 src/main/java/com/example/constants/dict/SysDictConstants.java"
+          />
+          <p class="cat-form-tip">字典代码生成的默认产物路径（每个分类生成一份；模板内可覆盖）</p>
+        </div>
+      </div>
+    </a-modal>
   </div>
 </template>
 
@@ -397,6 +560,12 @@ const isValueHit = (v: DictValue) => {
       gap: 6px;
       font-weight: 600;
       color: var(--dbm-text-1);
+    }
+
+    .head-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
     }
   }
 
@@ -441,6 +610,72 @@ const isValueHit = (v: DictValue) => {
     font-size: 10.5px;
     color: var(--dbm-text-3);
     font-family: var(--dbm-font-mono);
+  }
+}
+
+.cat-head {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 6px 4px;
+  margin-bottom: 2px;
+  user-select: none;
+
+  .cat-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--dbm-text-3);
+    cursor: pointer;
+
+    &:hover {
+      background: var(--dbm-bg-hover);
+      color: var(--dbm-text-2);
+    }
+  }
+
+  .cat-name {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--dbm-text-2);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .cat-count {
+    font-size: 10px;
+    color: var(--dbm-text-3);
+    font-family: var(--dbm-font-mono);
+  }
+
+  .cat-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--dbm-text-3);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.12s ease;
+
+    &:hover {
+      background: var(--dbm-bg-hover);
+      color: var(--dbm-text-1);
+    }
+  }
+
+  &:hover .cat-btn {
+    opacity: 1;
   }
 }
 
@@ -712,6 +947,36 @@ const isValueHit = (v: DictValue) => {
 
   .lg-tip {
     margin-left: auto;
+  }
+}
+
+/* ===== 字典分类编辑弹窗表单 ===== */
+.cat-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 4px;
+
+  .cat-form-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+
+    label {
+      font-size: 11.5px;
+      color: var(--dbm-text-2);
+
+      .req {
+        color: var(--dbm-danger);
+      }
+    }
+
+    .cat-form-tip {
+      margin: 0;
+      font-size: 10.5px;
+      color: var(--dbm-text-3);
+      line-height: 1.6;
+    }
   }
 }
 
