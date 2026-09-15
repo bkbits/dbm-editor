@@ -198,11 +198,7 @@ async function onReplaceConfirm(templateNames: string[], dictEnabled: boolean) {
       </a-button>
     </div>
 
-    <TemplateSelectModal
-      v-model:open="selectOpen"
-      :mode="selectMode"
-      @confirm="onSelectConfirm"
-    />
+    <TemplateSelectModal v-model:open="selectOpen" :mode="selectMode" @confirm="onSelectConfirm" />
   </div>
 </template>
 
