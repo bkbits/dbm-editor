@@ -1,28 +1,81 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { message, Modal } from 'antdv-next'
-import { Plus, Trash2, FileCode, Save, ChevronDown, ChevronUp } from '@lucide/vue'
+import { Plus, Trash2, FileCode, Save, ChevronDown, ChevronUp, BookText } from '@lucide/vue'
 import type { CodeTemplate } from '@/types/model'
 import { useTemplateStore } from '@/stores/template'
 import { useModelStore } from '@/stores/model'
+import { useDictStore } from '@/stores/dict'
+import { renderDictCategoryTemplate } from '@/utils/render'
 import { highlightCode, resolveLanguage, highlightTemplateSource } from '@/utils/highlight'
 
 const templateStore = useTemplateStore()
 const model = useModelStore()
+const dictStore = useDictStore()
 
 onMounted(() => {
   templateStore.init()
   model.init()
+  dictStore.init()
 })
 
 /* ==================== 列表与编辑状态 ==================== */
 
+/** 编辑区模式：table = 表模板（多模板 CRUD）；dict = 字典分类模板（仅一个） */
+const activeKind = ref<'table' | 'dict'>('table')
+
 const draft = ref<CodeTemplate>({ id: '', name: '', content: '' })
 const selectedId = ref('')
+
+/* ==================== 字典分类模板（仅一个，无新增/删除） ==================== */
+
+const dictDraft = ref<CodeTemplate>({ id: '', name: 'dict', content: '' })
+const dictSaving = reactive({ loading: false })
+/** 字典模板预览目标分类 */
+const previewCatId = ref('')
+
+function selectDictTemplate() {
+  activeKind.value = 'dict'
+  const t = templateStore.dictCategoryTemplate
+  if (t) dictDraft.value = { id: t.id, name: t.name, content: t.content }
+  if (!previewCatId.value && dictStore.categories.length) {
+    previewCatId.value = dictStore.categories[0].id
+  }
+  schedulePreview()
+}
+
+const categoryOptions = computed(() =>
+  dictStore.categories.map((c) => ({
+    value: c.id,
+    label: `${c.name}（${dictStore.dicts.filter((d) => d.categoryId === c.id).length} 字典）`,
+  })),
+)
+
+async function saveDictTemplate() {
+  if (!dictDraft.value.name.trim()) {
+    message.warning('模板名称不能为空')
+    return
+  }
+  if (!dictDraft.value.content.trim()) {
+    message.warning('模板内容不能为空')
+    return
+  }
+  dictSaving.loading = true
+  try {
+    const saved = await templateStore.saveDictCategoryTemplate({ ...dictDraft.value })
+    dictDraft.value = { ...saved }
+    message.success('字典分类模板已保存')
+  } catch {
+    /* store 已提示 */
+  } finally {
+    dictSaving.loading = false
+  }
+}
 
 function selectTemplate(id: string) {
   const tpl = templateStore.templates.find((t) => t.id === id)
   if (tpl) {
+    activeKind.value = 'table'
     selectedId.value = id
     draft.value = { id: tpl.id, name: tpl.name, content: tpl.content }
     schedulePreview()
@@ -30,6 +83,7 @@ function selectTemplate(id: string) {
 }
 
 function newTemplate() {
+  activeKind.value = 'table'
   const t = templateStore.newTemplateDraft()
   draft.value = { ...t }
   selectedId.value = ''
@@ -75,6 +129,7 @@ function schedulePreview() {
 }
 
 function runPreview() {
+  if (activeKind.value === 'dict') return runDictPreview()
   if (!draft.value.name && !draft.value.content) {
     previewState.output = ''
     previewState.error = ''
@@ -107,6 +162,9 @@ function runPreview() {
 
 watch(() => draft.value.content, schedulePreview)
 watch(() => draft.value.name, schedulePreview)
+watch(() => dictDraft.value.content, schedulePreview)
+watch(() => dictDraft.value.name, schedulePreview)
+watch(previewCatId, schedulePreview)
 /* 切换预览目标表也需重渲染（选项驱动分支/aborted 提示按表变化） */
 watch(previewTableId, schedulePreview)
 
@@ -133,6 +191,45 @@ watch(
   { immediate: true },
 )
 
+/** 字典分类模板实时预览：按目标分类渲染（含分类下全部字典与值） */
+function runDictPreview() {
+  if (!dictDraft.value.name && !dictDraft.value.content) {
+    previewState.output = ''
+    previewState.error = ''
+    previewState.language = ''
+    previewState.aborted = false
+    return
+  }
+  const category = dictStore.categories.find((c) => c.id === previewCatId.value)
+  if (!category) {
+    previewState.output = '请先在「字典管理」中创建字典分类。'
+    previewState.error = ''
+    previewState.language = ''
+    previewState.aborted = false
+    return
+  }
+  const dicts = dictStore.dicts.filter((d) => d.categoryId === category.id)
+  if (!dicts.length) {
+    previewState.output = `分类「${category.name}」下暂无字典，生成产物将为空壳。`
+    previewState.error = ''
+    previewState.language = ''
+    previewState.aborted = false
+    return
+  }
+  const out = renderDictCategoryTemplate(
+    dictDraft.value.name,
+    dictDraft.value.content,
+    category,
+    dicts,
+  )
+  previewState.output = out.result || ''
+  previewState.fileName = out.fileName
+  previewState.filePath = out.filePath
+  previewState.error = out.error || ''
+  previewState.language = out.language || ''
+  previewState.aborted = Boolean(out.aborted)
+}
+
 const highlighted = computed(() =>
   highlightCode(previewState.output, resolveLanguage(previewState.fileName, previewState.language)),
 )
@@ -149,9 +246,25 @@ const overlayRef = ref<HTMLElement>()
 
 /** 编辑器源码高亮（highlights-eta 插件：<% %> 逻辑 / <%= %> 输出 / <%# %> 注释区分着色）
  *  尾行补偿：内容以换行结尾时补一个换行，保证覆盖层与 textarea 的滚动高度一致 */
+/** 当前模式的内容（编辑器与高亮层共用） */
+const activeContent = computed(() =>
+  activeKind.value === 'dict' ? dictDraft.value.content : draft.value.content,
+)
+
+function onEditorInput(e: Event) {
+  const v = (e.target as HTMLTextAreaElement).value
+  if (activeKind.value === 'dict') dictDraft.value.content = v
+  else draft.value.content = v
+}
+
+const tablePlaceholder =
+  "<% context.fileName = 'demo.txt' %>&#10;Hello <%= context.table.tableName %>!"
+const dictPlaceholder =
+  '<%# 每个字典分类渲染一次 %>&#10;// <%= context.category.name %> 共 <%= context.dicts.length %> 个字典'
+
 const highlightedSource = computed(() => {
-  const html = highlightTemplateSource(draft.value.content)
-  return draft.value.content.endsWith('\n') ? `${html}\n` : html
+  const html = highlightTemplateSource(activeContent.value)
+  return activeContent.value.endsWith('\n') ? `${html}\n` : html
 })
 
 /** 覆盖层滚动位置与 textarea 同步（输入/滚动时保持逐行对齐） */
@@ -241,7 +354,7 @@ const isEdit = computed(() => Boolean(draft.value.id))
       <div class="list-head">
         <span class="list-title">
           <FileCode :size="14" />
-          代码模板
+          模板管理
         </span>
         <a-button size="small" type="primary" @click="newTemplate">
           <template #icon><Plus :size="12" /></template>
@@ -249,26 +362,51 @@ const isEdit = computed(() => Boolean(draft.value.id))
         </a-button>
       </div>
       <div class="list-body">
+        <div class="list-group-title">表模板（每表渲染一次）</div>
         <div
           v-for="t in templateStore.templates"
           :key="t.id"
           class="tpl-item"
-          :class="{ selected: selectedId === t.id }"
+          :class="{ selected: activeKind === 'table' && selectedId === t.id }"
           @click="selectTemplate(t.id)"
         >
           <span class="tpl-name mono">{{ t.name }}</span>
           <span class="tpl-size">{{ (t.content.length / 1024).toFixed(1) }}k</span>
         </div>
-        <div v-if="!templateStore.templates.length" class="list-empty">暂无模板</div>
+        <div v-if="!templateStore.templates.length" class="list-empty">暂无表模板</div>
+        <div class="list-group-title">字典分类模板（每分类渲染一次）</div>
+        <div
+          class="tpl-item"
+          :class="{ selected: activeKind === 'dict' }"
+          @click="selectDictTemplate"
+        >
+          <span class="tpl-name mono">
+            <BookText :size="12" class="tpl-icon" />
+            {{ templateStore.dictCategoryTemplate?.name || 'dict' }}
+          </span>
+          <span class="tpl-size">
+            {{ ((templateStore.dictCategoryTemplate?.content.length || 0) / 1024).toFixed(1) }}k
+          </span>
+        </div>
       </div>
-      <div class="list-foot">{{ templateStore.templates.length }} 个模板</div>
+      <div class="list-foot">{{ templateStore.templates.length }} 个表模板 · 1 个字典分类模板</div>
     </aside>
 
     <section class="tpl-main">
       <div class="tpl-head">
+        <!-- 表模板 / 字典分类模板 共用编辑区：按模式绑定不同草稿与保存动作 -->
         <div class="tpl-name-input">
-          <label>模板名称</label>
+          <label>{{ activeKind === 'dict' ? '字典分类模板名称' : '模板名称' }}</label>
           <a-input
+            v-if="activeKind === 'dict'"
+            v-model:value="dictDraft.name"
+            size="small"
+            class="mono"
+            placeholder="如 dict"
+            style="width: 220px"
+          />
+          <a-input
+            v-else
             v-model:value="draft.name"
             size="small"
             class="mono"
@@ -277,21 +415,35 @@ const isEdit = computed(() => Boolean(draft.value.id))
           />
         </div>
         <div class="tpl-actions">
-          <a-popconfirm
-            title="删除该模板？"
-            ok-text="删除"
-            cancel-text="取消"
-            @confirm="deleteTemplate"
-          >
-            <a-button size="small" danger>
-              <template #icon><Trash2 :size="12" /></template>
-              删除
+          <template v-if="activeKind === 'dict'">
+            <span class="dict-only-tip">仅一个，无新增 / 删除</span>
+            <a-button
+              size="small"
+              type="primary"
+              :loading="dictSaving.loading"
+              @click="saveDictTemplate"
+            >
+              <template #icon><Save :size="12" /></template>
+              保存模板
             </a-button>
-          </a-popconfirm>
-          <a-button size="small" type="primary" :loading="saving.loading" @click="saveTemplate">
-            <template #icon><Save :size="12" /></template>
-            保存模板
-          </a-button>
+          </template>
+          <template v-else>
+            <a-popconfirm
+              title="删除该模板？"
+              ok-text="删除"
+              cancel-text="取消"
+              @confirm="deleteTemplate"
+            >
+              <a-button size="small" danger>
+                <template #icon><Trash2 :size="12" /></template>
+                删除
+              </a-button>
+            </a-popconfirm>
+            <a-button size="small" type="primary" :loading="saving.loading" @click="saveTemplate">
+              <template #icon><Save :size="12" /></template>
+              保存模板
+            </a-button>
+          </template>
         </div>
       </div>
 
@@ -309,11 +461,12 @@ const isEdit = computed(() => Boolean(draft.value.id))
             ><code class="hljs" v-html="highlightedSource"></code></pre>
             <textarea
               ref="editorRef"
-              v-model="draft.content"
+              :value="activeKind === 'dict' ? dictDraft.content : draft.content"
               class="tpl-textarea mono"
               spellcheck="false"
               wrap="off"
-              placeholder="<% context.fileName = 'demo.txt' %>&#10;Hello <%= context.table.tableName %>!"
+              :placeholder="activeKind === 'dict' ? dictPlaceholder : tablePlaceholder"
+              @input="onEditorInput"
               @scroll="syncScroll"
             ></textarea>
           </div>
@@ -330,6 +483,15 @@ const isEdit = computed(() => Boolean(draft.value.id))
               {{ effectiveLanguage }}
             </span>
             <a-select
+              v-if="activeKind === 'dict'"
+              v-model:value="previewCatId"
+              :options="categoryOptions"
+              size="small"
+              style="width: 220px"
+              placeholder="选择目标字典分类"
+            />
+            <a-select
+              v-else
               v-model:value="previewTableId"
               :options="tableOptions"
               size="small"
@@ -356,6 +518,7 @@ const isEdit = computed(() => Boolean(draft.value.id))
       <div class="tpl-help">
         <div class="help-title">
           <span>模板上下文变量（context）与工具（utils）</span>
+          <!-- 字典分类模板：category / dicts 上下文 -->
           <button
             class="help-toggle"
             type="button"
@@ -377,7 +540,15 @@ const isEdit = computed(() => Boolean(draft.value.id))
               <code>context.language</code> 显式指定预览高亮语言，如
               <code>&lt;% context.language = 'java' %&gt;</code>（未设置时按文件后缀自动识别）
             </p>
-            <p><code>context.table.tableName / className / comment</code> 表信息</p>
+            <p><code>context.table.tableName / className / comment</code> 表信息（表模板）</p>
+            <p>
+              <code>context.category.name / file</code> 字典分类信息（字典分类模板；file
+              为分类文件——默认产物路径）
+            </p>
+            <p>
+              <code>context.dicts</code>
+              该分类下全部字典（dictKey/label/comment/values：valueKey/label/labelType）（字典分类模板）
+            </p>
             <p>
               <code>context.table.columns</code>
               字段数组（columnName/propertyName/type/javaType/comment/notNull/primaryKey/dict）
@@ -455,6 +626,13 @@ const isEdit = computed(() => Boolean(draft.value.id))
   }
 
   .list-body {
+    .list-group-title {
+      padding: 8px 10px 4px;
+      font-size: 10.5px;
+      font-weight: 600;
+      color: var(--dbm-text-3);
+      letter-spacing: 0.02em;
+    }
     flex: 1;
     overflow-y: auto;
     padding: 0 8px;
@@ -484,6 +662,12 @@ const isEdit = computed(() => Boolean(draft.value.id))
 
   &.selected {
     background: var(--dbm-primary-weak);
+  }
+
+  .tpl-icon {
+    vertical-align: -1.5px;
+    margin-right: 2px;
+    color: var(--dbm-text-3);
   }
 
   .tpl-name {
@@ -534,6 +718,11 @@ const isEdit = computed(() => Boolean(draft.value.id))
       font-size: 11.5px;
       color: var(--dbm-text-2);
     }
+  }
+
+  .dict-only-tip {
+    font-size: 10.5px;
+    color: var(--dbm-text-3);
   }
 
   .tpl-actions {
