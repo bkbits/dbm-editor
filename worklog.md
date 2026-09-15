@@ -819,3 +819,24 @@ Stage Summary:
 - origin/pages 已建立：孤儿分支仅含 README.md 与 pages/{.nojekyll, index.html, favicon.svg, assets/}——演示应用构建产物（内置 DemoManagerApi 演示数据，无后端依赖，独立可用）
 - 关键决策：① 库模式与 Pages 需求冲突 → 独立应用模式配置而非改动库构建（源码分支零改动）；② base './' 相对路径使产物可托管于任意子路径（项目页 /<仓库名>/ 直接可用）；③ 孤儿分支 + 产物仅存于 pages/ 目录，满足「该目录仅存在于 pages 分支」
 - 服务配置提示：GitHub Pages 经典「Deploy from a branch」仅支持分支根目录或 /docs；内容位于 pages/ 子目录时需经 GitHub Actions 部署，或调整目录结构（如改放分支根/docs 后重推）
+
+
+---
+Task ID: 27
+Agent: main (Super Z)
+Task: 删除 pages 部署分支（本地+远程）改用 GitHub Actions 自动发布；适配官方模板配置发布工作流并完成首次线上发布
+
+Work Log:
+- 分支整理：git push origin --delete pages + git branch -D pages（远程 9a49977 确认删除）；主工作区 git switch devel（.wt/devel 沙箱已清理，prune 后直接切换）
+- 工作流落地（fc4e5f5 提交至 devel）：vite.pages.config.ts 转为仓库跟踪文件（CI 可复现构建配置）；package.json 新增 build:pages 脚本；.github/workflows/deploy-pages.yml 参考官方静态站点模板两段式 build+deploy——触发 push devel / workflow_dispatch；permissions contents:read+pages:write+id-token:write；concurrency group pages 不取消进行中；build 作业 oven-sh/setup-bun@v2（pin 1.3.14 本地实证版本）→ bun install --frozen-lockfile → bun run build:pages → configure-pages@v5 → upload-pages-artifact@v3（path dist，自动附 .nojekyll）；deploy 作业 deploy-pages@v5；Jekyll 模板不适用（Vite SPA 非 Jekyll 站点）
+- 本地预检：devel 源码 bun run build:pages 产物 index-DAPvsDKz.js/index-BmVd9h5S.css 与 CI 产物哈希一致；check-readme 31 标题、typecheck、vp check（63 格式+53 lint）全绿；子路径托管冒烟 9/9（scripts/verify-pages-build.sh）
+- 首次发布排障（三次失败→成功，run 34918841900）：用户此前在 UI 以「Deploy from a branch: pages」启用过 Pages → github-pages environment 被自动加上分支部署策略（允许 main/pages，不含 devel）→ deploy 作业 0 步骤启动失败、deployment waiting→failure；修复① DELETE+POST 重建 Pages 站点（build_type=workflow，清掉指向已删分支的 source 残留）；修复② POST deployment-branch-policies 加 devel + DELETE pages 旧策略（允许列表收敛 devel/main；PUT 关闭 custom_branch_policies 因「不能与 protected_branches 同为 false」422 不可行）；attempt 4 全绿上线
+- 线上验证：https://bkbits.github.io/dbm-editor/ HTTP 200、标题正确、JS 资源 200；agent-browser 端到端——6 张演示表卡片、0 页面错误、0 控制台 error；截图 scripts/inspect/pages-live.png
+- README：命令速查表加 build:pages 行 + 「GitHub Pages 自动发布」小节（触发/站点地址/构建配置/部署来源）；scripts/deploy-pages.sh（pages 分支手动方案）删除废弃
+- 沙箱新坑：会话期间沙箱多次把主工作区 HEAD 回滚到 main（磁盘文件修改保留、HEAD 引用回退）→ 「切分支+改文件+校验+提交+推送」必须单次 Bash 调用原子完成（scripts/recover-push-workflow.sh 模式）
+
+Stage Summary:
+- 发布链路切换为 GitHub Actions：push devel 即自动构建发布；pages 部署分支及其手动流程移除
+- 站点上线：https://bkbits.github.io/dbm-editor/（run https://github.com/bkbits/dbm-editor/actions/runs/34918841900）
+- 关键决策：① 触发分支取 devel（当前主线；main 落后 30+ 提交，纳入会发布旧代码）；② 环境分支策略为 legacy 残留，收敛为 devel/main；③ 构建配置入库保证 CI 可复现
+- 遗留提示：workflow_dispatch 手动触发需工作流文件存在于默认分支（当前默认 main）——若需 UI 手动触发，可后续将默认分支切为 devel 或把工作流合入 main
