@@ -6,6 +6,7 @@ import type {
   CodeTemplate,
   DBTable,
   Dict,
+  DictCategory,
   OptionSetting,
   Settings,
   TableColumn,
@@ -533,9 +534,24 @@ export const SEED_NAVIGATES: TableNavigate[] = [
 ]
 
 /* ============ 字典 ============ */
+/** 字典分类：与表分类同构（分类名称 + 分类文件——字典代码生成的默认产物路径） */
+export const SEED_DICT_CATEGORIES: DictCategory[] = [
+  {
+    id: 'dictcat-system',
+    name: '系统字典',
+    file: 'src/main/java/com/example/constants/dict/SysDictConstants.java',
+  },
+  {
+    id: 'dictcat-business',
+    name: '业务字典',
+    file: 'src/main/java/com/example/constants/dict/BizDictConstants.java',
+  },
+]
+
 export const SEED_DICTS: Dict[] = [
   {
     id: 'dict-sys-status',
+    categoryId: 'dictcat-system',
     dictKey: 'sys_status',
     label: '系统状态',
     comment: '通用的启用/禁用状态',
@@ -568,6 +584,7 @@ export const SEED_DICTS: Dict[] = [
   },
   {
     id: 'dict-user-type',
+    categoryId: 'dictcat-system',
     dictKey: 'user_type',
     label: '用户类型',
     comment: '用户账号类型',
@@ -586,6 +603,7 @@ export const SEED_DICTS: Dict[] = [
   },
   {
     id: 'dict-article-status',
+    categoryId: 'dictcat-business',
     dictKey: 'article_status',
     label: '文章状态',
     values: [
@@ -621,6 +639,7 @@ export const SEED_DICTS: Dict[] = [
   },
   {
     id: 'dict-order-status',
+    categoryId: 'dictcat-business',
     dictKey: 'order_status',
     label: '订单状态',
     values: [
@@ -665,6 +684,7 @@ export const SEED_DICTS: Dict[] = [
   },
   {
     id: 'dict-mall-status',
+    categoryId: 'dictcat-business',
     dictKey: 'mall_status',
     label: '商品状态',
     values: [
@@ -1059,6 +1079,13 @@ public class <%= cls %>ServiceImpl implements <%= cls %>Service {
   const since = utils.nowDateTime();
   const mod = utils.toCamelCase(cls, true);
   const route = mod.replace(/([A-Z])/g, "-$1").toLowerCase();
+  // 路径与权限码风格：表名按首下划线拆为「模块/功能」——sys_user → sys/user；
+  // 无下划线时模块与功能同段（如 article → article）
+  const nameParts = String(context.table.tableName).split("_").filter(Boolean);
+  const module = (nameParts[0] || route).toLowerCase();
+  const func = (nameParts.length > 1 ? nameParts.slice(1).join("_") : module).toLowerCase();
+  // 权限码前缀：模块.功能（操作在后，如 sys.user.add）
+  const perms = module + "." + func;
   const queryOn = utils.optionEnabled(context.table.options, "query");
   const addOn = utils.optionEnabled(context.table.options, "add");
   const updOn = utils.optionEnabled(context.table.options, "update");
@@ -1075,21 +1102,54 @@ public class <%= cls %>ServiceImpl implements <%= cls %>Service {
     ? context.table.columns.filter((c) => !c.primaryKey && utils.optionEnabled(c.options, "query"))
     : [];
   const isStrType = (jt) => jt === "String" || jt === "Character";
-  const paramDecls = queryCols.map((c) => {
+  // 时间类型（查询条件默认 rangeClosed 闭区间，拆起止双参数）
+  const isTimeType = (jt) => /^(LocalDate|LocalDateTime|LocalTime|Timestamp)$/.test(jt);
+  // id 类（外键 _id 结尾）或关联字典的列：eq 精准匹配（主键已被 queryCols 排除）
+  const isIdOrDict = (c) => /_id$/.test(String(c.columnName)) || !utils.isBlank(c.dict);
+  // 查询参数声明：时间列拆 <prop>Begin/<prop>End 双参数，其余单参数
+  const paramDecls = [];
+  for (const c of queryCols) {
     const p = propOfCol(c);
-    return "@Param(value = \\"" + p + "\\", required = false) " + utils.getJavaType(c) + " " + p;
-  });
+    const jt = utils.getJavaType(c);
+    if (isTimeType(jt)) {
+      paramDecls.push("@Param(value = \\"Begin" + p + "\\"Begin");
+      paramDecls.push("@Param(value = \\"End" + p + "\\"End");
+    } else {
+      paramDecls.push("@Param(value = \\"" + p + "\\"");
+    }
+  }
   const listSignature = paramDecls.length === 0
     ? "public List<" + cls + "> list() {"
     : paramDecls.length === 1
       ? "public List<" + cls + "> list(" + paramDecls[0] + ") {"
       : "public List<" + cls + "> list(\\n            " + paramDecls.join(",\\n            ") + ") {";
+  // 查询条件构建：时间 → rangeClosed（起止双参数）；id/字典 → eq；字符串 → like；其余数值 → eq
   const condLine = (c) => {
     const p = propOfCol(c);
-    return isStrType(utils.getJavaType(c))
-      ? "o." + p + "().like(" + p + " != null && !" + p + ".isEmpty(), " + p + ");"
-      : "o." + p + "().eq(" + p + " != null, " + p + ");";
+    const jt = utils.getJavaType(c);
+    if (isTimeType(jt)) {
+      return "o." + p + "().rangeClosed(" + p + "Begin != null && " + p + "End != null, " + p + "Begin, " + p + "End);";
+    }
+    if (isIdOrDict(c)) {
+      return "o." + p + "().eq(" + p + " != null, " + p + ");";
+    }
+    if (isStrType(jt)) {
+      return "o." + p + "().like(" + p + " != null && !" + p + ".isEmpty(), " + p + ");";
+    }
+    return "o." + p + "().eq(" + p + " != null, " + p + ");";
   };
+  // javadoc @param 行：时间列起止双参数，其余单参数
+  const docParams = [];
+  for (const c of queryCols) {
+    const p = propOfCol(c);
+    const jt = utils.getJavaType(c);
+    if (isTimeType(jt)) {
+      docParams.push({ p: p + "Begin", d: (c.comment || p) + "起始（可选）" });
+      docParams.push({ p: p + "End", d: (c.comment || p) + "截止（可选，与起始构成闭区间）" });
+    } else {
+      docParams.push({ p, d: (c.comment || p) + "（可选）" });
+    }
+  }
 %>
 package <%= pkg %>controller;
 
@@ -1108,7 +1168,7 @@ import <%= pkg %>entity.<%= cls %>;
 <% if (svcAvailable) { %>import <%= pkg %>service.<%= cls %>Service;
 <% } %>
 
-<%# ===== 接口层（solon3 MVC + satoken 注解鉴权）：端点按表选项生成，列表查询条件按列选项（query）生成 ===== %>
+<%# ===== 接口层（solon3 MVC + satoken 注解鉴权）：路径 /api/模块/功能/操作、权限码 模块.功能.操作；端点按表选项生成，查询条件按列选项（时间 rangeClosed / id 与字典 eq / 字符串 like） ===== %>
 /**
  * <%= comment %> 管理接口
  *
@@ -1116,7 +1176,7 @@ import <%= pkg %>entity.<%= cls %>;
 <% } %> * @since <%= since %>
  */
 @Controller
-@Mapping("/api/<%= route %>")
+@Mapping("/api/<%= module %>/<%= func %>")
 public class <%= cls %>Controller {
 
 <% if (svcAvailable) { %>  @Inject
@@ -1132,7 +1192,7 @@ public class <%= cls %>Controller {
    * @param id 主键
    * @return 实体详情；不存在时为 null
    */
-  @SaCheckPermission("<%= mod %>:info")
+  @SaCheckPermission("<%= perms %>.info")
   @Get
   @Mapping("info")
   public <%= cls %> info(@Param("id") Long id) {
@@ -1141,12 +1201,12 @@ public class <%= cls %>Controller {
 <% } %>  }
 
   /**
-   * 查询列表<% if (queryCols.length) { %>（支持可选条件过滤）<% } %>
+   * 查询列表<% if (queryCols.length) { %>（支持可选条件过滤：时间区间闭合匹配、id 与字典精准匹配、字符串模糊匹配）<% } %>
    *
-<% for (const c of queryCols) { %>   * @param <%= propOfCol(c) %> <%= c.comment || propOfCol(c) %>（可选）
+<% for (const dp of docParams) { %>   * @param <%= dp.p %> <%= dp.d %>
 <% } %>   * @return 实体列表
    */
-  @SaCheckPermission("<%= mod %>:list")
+  @SaCheckPermission("<%= perms %>.list")
   @Get
   @Mapping("list")
   <%= listSignature %>
@@ -1164,7 +1224,7 @@ public class <%= cls %>Controller {
    *
    * @param entity 实体对象
    */
-  @SaCheckPermission("<%= mod %>:add")
+  @SaCheckPermission("<%= perms %>.add")
   @Post
   @Mapping("add")
   public void add(@Body <%= cls %> entity) {
@@ -1177,7 +1237,7 @@ public class <%= cls %>Controller {
    *
    * @param entity 实体对象
    */
-  @SaCheckPermission("<%= mod %>:edit")
+  @SaCheckPermission("<%= perms %>.edit")
   @Post
   @Mapping("edit")
   public void edit(@Body <%= cls %> entity) {
@@ -1190,7 +1250,7 @@ public class <%= cls %>Controller {
    *
    * @param id 主键
    */
-  @SaCheckPermission("<%= mod %>:del")
+  @SaCheckPermission("<%= perms %>.del")
   @Post
   @Mapping("del")
   public void del(@Param("id") Long id) {
@@ -1202,7 +1262,7 @@ public class <%= cls %>Controller {
    *
    * @param ids 主键集合
    */
-  @SaCheckPermission("<%= mod %>:del")
+  @SaCheckPermission("<%= perms %>.del")
   @Post
   @Mapping("batchDel")
   public void batchDel(@Param("ids") List<Long> ids) {
@@ -1224,6 +1284,10 @@ public class <%= cls %>Controller {
   const pkProp = pk ? (pk.propertyName || utils.toCamelCase(pk.columnName, true)) : "id";
   const mod = utils.toCamelCase(cls, true);
   const route = mod.replace(/([A-Z])/g, "-$1").toLowerCase();
+  // 接口前缀与 Controller 模板对齐：/api/模块/功能（表名按首下划线拆分）
+  const nameParts = String(context.table.tableName).split("_").filter(Boolean);
+  const module = (nameParts[0] || route).toLowerCase();
+  const func = (nameParts.length > 1 ? nameParts.slice(1).join("_") : module).toLowerCase();
   const addOn = utils.optionEnabled(context.table.options, "add");
   const updOn = utils.optionEnabled(context.table.options, "update");
   const rmOn = utils.optionEnabled(context.table.options, "remove");
@@ -1302,7 +1366,7 @@ interface <%= cls %> {
 <% } %>}
 
 /** 后端接口前缀（solon Controller @Mapping） */
-const API_BASE = '/api/<%= route %>'
+const API_BASE = '/api/<%= module %>/<%= func %>'
 
 const loading = ref(false)
 const saving = ref(false)
@@ -1429,6 +1493,11 @@ CREATE TABLE \`<%= context.table.tableName %>\` (
   context.filePath = "sql/" + context.fileName;
   const mod = utils.toCamelCase(context.table.className, true);
   const route = mod.replace(/([A-Z])/g, "-$1").toLowerCase();
+  // 权限码与 Controller 模板一一对应：模块.功能.操作（表名按首下划线拆分）
+  const nameParts = String(context.table.tableName).split("_").filter(Boolean);
+  const module = (nameParts[0] || route).toLowerCase();
+  const func = (nameParts.length > 1 ? nameParts.slice(1).join("_") : module).toLowerCase();
+  const perms = module + "." + func;
   const sq = (s) => "'" + String(s).split("'").join("''") + "'";
   const menuName = context.table.comment || context.table.className;
   const queryOn = utils.optionEnabled(context.table.options, "query");
@@ -1436,16 +1505,16 @@ CREATE TABLE \`<%= context.table.tableName %>\` (
   const updOn = utils.optionEnabled(context.table.options, "update");
   const rmOn = utils.optionEnabled(context.table.options, "remove");
   const btns = [];
-  if (queryOn) btns.push({ name: "查询", perms: mod + ":info" });
-  if (queryOn) btns.push({ name: "列表", perms: mod + ":list" });
-  if (addOn) btns.push({ name: "新增", perms: mod + ":add" });
-  if (updOn) btns.push({ name: "编辑", perms: mod + ":edit" });
-  if (rmOn) btns.push({ name: "删除", perms: mod + ":del" });
+  if (queryOn) btns.push({ name: "查询", perms: perms + ".info" });
+  if (queryOn) btns.push({ name: "列表", perms: perms + ".list" });
+  if (addOn) btns.push({ name: "新增", perms: perms + ".add" });
+  if (updOn) btns.push({ name: "编辑", perms: perms + ".edit" });
+  if (rmOn) btns.push({ name: "删除", perms: perms + ".del" });
 %>
 <%# ===== MySQL 菜单与按钮权限初始化（sys_menu 为常见 RBAC 结构；按钮权限与 Controller 模板 @SaCheckPermission 按表选项一一对应） ===== %>
 -- 一级菜单（parent_id = 0 为根目录，挂载位置按实际系统调整）
 INSERT INTO sys_menu (menu_name, parent_id, order_num, path, component, menu_type, visible, status, perms, icon, create_time)
-VALUES (<%= sq(menuName) %>, 0, 1, '<%= route %>', 'views/<%= route %>/<%= context.table.className %>', 'C', '0', '0', '<%= mod %>:list', 'list', NOW());
+VALUES (<%= sq(menuName) %>, 0, 1, '<%= route %>', 'views/<%= route %>/<%= context.table.className %>', 'C', '0', '0', '<%= perms %>.list', 'list', NOW());
 <% if (btns.length) { %>
 -- 按钮权限（父菜单取上面新插入的记录；权限码与 Controller 模板的 @SaCheckPermission 一一对应，按表选项选择性生成）
 SET @menuId = LAST_INSERT_ID();

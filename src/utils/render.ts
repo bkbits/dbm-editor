@@ -8,7 +8,14 @@
  * - 后处理保证：最后一条 import 与后续代码之间恰好空一行
  */
 import { Eta } from 'eta'
-import type { Settings, TableVO, TemplateContext } from '@/types/model'
+import type {
+  Dict,
+  DictCategory,
+  DictCategoryTemplateContext,
+  Settings,
+  TableVO,
+  TableTemplateContext,
+} from '@/types/model'
 import {
   toCamelCase,
   toSnakeCase,
@@ -108,7 +115,12 @@ function ensureBlankLineAfterImports(text: string): string {
   return lines.join('\n')
 }
 
-export interface RenderOutput extends TemplateContext {
+export interface RenderOutput extends TableTemplateContext {
+  error?: string // 渲染异常信息
+}
+
+/** 字典分类模板渲染输出 */
+export interface DictCategoryRenderOutput extends DictCategoryTemplateContext {
   error?: string // 渲染异常信息
 }
 
@@ -127,7 +139,7 @@ export function renderTemplate(
   basePackage: string,
   settings?: Settings,
 ): RenderOutput {
-  const context: TemplateContext = {
+  const context: TableTemplateContext = {
     templateName,
     templateContent,
     result: '',
@@ -162,6 +174,61 @@ export function renderTemplate(
     context.filePath = pkgPath ? `${pkgPath}/${context.fileName}` : context.fileName
   }
   // 格式保证：import 块与后续代码之间空一行（aborted 丢弃场景无产物，无需处理）
+  if (!context.aborted && !failed) {
+    context.result = ensureBlankLineAfterImports(context.result)
+  }
+  return { ...context }
+}
+
+/**
+ * 渲染字典分类模板（每个字典分类执行一次，产物包含分类下全部字典与值）
+ * @param templateName 模板名称
+ * @param templateContent 模板内容（Eta 语法）
+ * @param category 字典分类
+ * @param dicts 该分类下的全部字典（含值）
+ * @param settings 应用设置（缺省使用空设置兑底）
+ */
+export function renderDictCategoryTemplate(
+  templateName: string,
+  templateContent: string,
+  category: DictCategory,
+  dicts: Dict[],
+  settings?: Settings,
+): DictCategoryRenderOutput {
+  const context: DictCategoryTemplateContext = {
+    templateName,
+    templateContent,
+    result: '',
+    fileName: '',
+    filePath: '',
+    language: '',
+    category,
+    dicts,
+    settings: settings || FALLBACK_SETTINGS,
+    aborted: false,
+  }
+  let failed = false
+  try {
+    const cleaned = stripEtaComments(templateContent)
+    const raw = eta.renderString(cleaned, { context, utils: templateUtils })
+    context.result = postProcess(raw)
+  } catch (err: unknown) {
+    failed = true
+    const msg = err instanceof Error ? `${err.name}: ${err.message}` : String(err)
+    context.result = `⚠ 模板渲染失败：${msg}`
+    return { ...context, error: msg }
+  }
+  // 默认产物路径：分类文件（file）优先；模板内可对 fileName/filePath 赋值覆盖
+  const file = String(category.file || '')
+    .replace(/\\/g, '/')
+    .replace(/^\/+/, '')
+    .trim()
+  if (!context.fileName) {
+    context.fileName = file ? file.split('/').pop() || '' : `${category.name}DictConstants.java`
+  }
+  if (!context.filePath) {
+    context.filePath = file || context.fileName
+  }
   if (!context.aborted && !failed) {
     context.result = ensureBlankLineAfterImports(context.result)
   }

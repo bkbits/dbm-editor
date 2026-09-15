@@ -139,8 +139,8 @@ export interface ColumnOption {
   value?: boolean | string | number // 选项值
 }
 
-/** 模板渲染上下文 */
-export interface TemplateContext {
+/** 表模板渲染上下文（每表渲染一次） */
+export interface TableTemplateContext {
   templateName: string // 模板名称
   templateContent: string // 模板内容
   result?: string // 生成结果
@@ -158,6 +158,23 @@ export interface TemplateContext {
   hasColumn(columnName: string): boolean
   /** 获取指定列（按数据库列名精确匹配），不存在时返回 undefined */
   getColumn(columnName: string): TableColumn | undefined
+}
+
+/** 字典分类模板渲染上下文（每个字典分类渲染一次，生成分类下的全部字典代码） */
+export interface DictCategoryTemplateContext {
+  templateName: string // 模板名称
+  templateContent: string // 模板内容
+  result?: string // 生成结果
+  fileName: string // 文件名
+  filePath: string // 文件路径
+  /** 显式指定 highlight.js 高亮语言；未设置时按文件名后缀自动识别 */
+  language?: string
+  category: DictCategory // 字典分类信息
+  dicts: Dict[] // 所属分类下的全部字典（含字典值信息）
+  /** 应用设置（与表模板一致，供模板生成 javadoc 等） */
+  settings: Settings
+  /** 是否丢弃本次生成：默认 false；模板内置为 true 时，该产物不打包进 zip */
+  aborted: boolean
 }
 
 /** 表更新请求载荷（mock 扩展：rawNavigates 为该表参与的全部原始导航，替换语义） */
@@ -191,6 +208,14 @@ export interface UpdateTablePosDTO {
 
 /* ==================== 字典 ==================== */
 
+/** 字典分类（与表分类同构的管理形态，用于字典的分组与字典代码生成） */
+export interface DictCategory {
+  id: string // 分类ID
+  name: string // 分类名称(唯一)
+  /** 分类文件：字典代码生成的默认产物路径（每分类生成一份，模板内可覆盖） */
+  file?: string
+}
+
 /** 字典值标签类型：I=Info S=Success W=Warning D=Danger */
 export type DictValueLabelType = 'I' | 'S' | 'W' | 'D'
 
@@ -208,6 +233,8 @@ export interface DictValue {
 /** 字典 */
 export interface Dict {
   id: string // 字典ID
+  /** 所属字典分类ID（空 = 未分类；旧数据读取时按种子映射迁移补齐） */
+  categoryId?: string
   dictKey: string // 字典键(唯一)
   label: string // 字典标签
   comment?: string // 字典注释
@@ -405,7 +432,21 @@ export interface ManagerApi {
   /** 删除导航关系 */
   removeNavigate(navigateId: string): Promise<void>
 
-  /** 获取全部字典 */
+  /* ---------- 字典分类 ---------- */
+
+  /** 获取全部字典分类 */
+  getDictCategories(): Promise<DictCategory[]>
+
+  /** 新增字典分类 */
+  addDictCategory(category: DictCategory): Promise<void>
+
+  /** 更新字典分类 */
+  updateDictCategory(category: DictCategory): Promise<void>
+
+  /** 删除字典分类（分类下仍有字典时拒绝） */
+  removeDictCategory(categoryId: string): Promise<void>
+
+  /** 获取字典 */
   getDicts(): Promise<Dict[]>
 
   /** 新增字典 */
@@ -417,16 +458,24 @@ export interface ManagerApi {
   /** 删除字典 */
   removeDict(dictId: string): Promise<void>
 
-  /** 获取全部代码模板 */
+  /* ---------- 字典分类模板 ---------- */
+
+  /** 获取字典分类模板（仅一个，用于按分类生成字典代码） */
+  getDictCategoryTemplate(): Promise<Template>
+
+  /** 更新字典分类模板 */
+  updateDictCategoryTemplate(template: Template): Promise<void>
+
+  /** 获取全部表模板 */
   getTemplates(): Promise<Template[]>
 
-  /** 新增代码模板 */
+  /** 新增表模板 */
   addTemplate(template: Template): Promise<void>
 
-  /** 更新代码模板 */
+  /** 更新表模板 */
   updateTemplate(template: Template): Promise<void>
 
-  /** 删除代码模板 */
+  /** 删除表模板 */
   removeTemplate(templateId: string): Promise<void>
 
   /** 上传 zip 产物代码，直接替换对应源码文件 */
