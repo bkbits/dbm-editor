@@ -412,7 +412,9 @@ defineExpose({ rootRef })
   position: absolute;
   z-index: 5;
   border: 1px solid var(--dbm-primary);
-  background: var(--dbm-primary-weak);
+  /* 专用令牌而非 --dbm-primary-weak：框选需保持半透明以透出框住的卡片与网格，
+     而 antd 主题层的 primary-weak 映射为不透明的 colorPrimaryBg 实色 */
+  background: var(--dbm-select-fill);
   pointer-events: none;
 }
 

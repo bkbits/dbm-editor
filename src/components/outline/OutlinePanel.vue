@@ -23,6 +23,9 @@ import { useHistoryStore } from '@/stores/history'
 const model = useModelStore()
 const canvas = useCanvasStore()
 const ui = useUiStore()
+// 必须在 setup 顶层获取（context 注入体系下，回调里调 useHistoryStore()
+// 会因 inject() 脱离 setup 上下文而失败，导致重置弹窗 onOk 拒绝、Modal 卡住不关）
+const history = useHistoryStore()
 
 const keyword = ref('')
 const expanded = reactive(new Set<string>())
@@ -135,7 +138,7 @@ async function resetDemo() {
     cancelText: '取消',
     onOk: async () => {
       await model.resetDemoData()
-      useHistoryStore().clear()
+      history.clear()
       canvas.setSelection([])
       canvas.fitAll(true)
       message.success('已重置为演示数据')

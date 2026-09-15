@@ -13,9 +13,14 @@
  *
  * 未映射令牌（沿用 variables.scss 静态值）：画布网格线（--dbm-grid-*，画布绘制
  * 经 documentElement 读取静态值）、代码高亮配色（--dbm-code-keyword 等）、
- * 分类色板（--dbm-cat-*）、布局尺寸（header 高度/大纲宽度）、滚动条轨道、
- * 以及内部引用型令牌（--dbm-card-border-selected / --dbm-edge-hover 引用
- * --dbm-primary，var() 引用在元素作用域解析，自动跟随本层的重定义）。
+ * 分类色板（--dbm-cat-*）、布局尺寸（header 高度/大纲宽度）、滚动条轨道。
+ *
+ * ⚠ 引用型令牌必须在本层显式重映射：variables.scss 中存在值引用其它令牌的
+ * 变量（如 --dbm-edge-hover: var(--dbm-primary)），CSS 自定义属性的 var() 引用
+ * 在「声明处」完成代换并以计算值继承（早绑定，经真实浏览器验证），并不会在使用
+ * 处重新解析 —— 这类令牌不会自动跟随本层对 --dbm-primary 的重定义，若不显式
+ * 映射将永远停留在静态基线色（曾导致 antd 主题下导航线悬停色、选中卡片描边
+ * 仍为静态青绿色，与选中态的 antd 主色蓝不一致）。
  */
 .app-provider,
 [class*='css-var-'] {
@@ -66,12 +71,16 @@
   --dbm-info: var(--ant-color-info);
   --dbm-info-weak: var(--ant-color-info-bg);
 
-  /* 画布底色（网格线走静态基线，见文件头说明） */
+  /* 画布底色（网格线走静态基线，见文件头说明）；
+     框选填充：color-mix 保持半透明（透出框住的卡片与网格）——
+     antd 无主色半透明填充令牌（colorPrimaryBg 为不透明实色），故从主色派生 */
   --dbm-canvas-bg: var(--ant-color-bg-container);
+  --dbm-select-fill: color-mix(in srgb, var(--ant-color-primary) 12%, transparent);
 
   /* 表卡片 */
   --dbm-card-bg: var(--ant-color-bg-container);
   --dbm-card-border: var(--ant-color-border-secondary);
+  --dbm-card-border-selected: var(--ant-color-primary);
   --dbm-card-head-bg: var(--ant-color-fill-alter);
   --dbm-card-head-text: var(--ant-color-text);
   --dbm-card-row-hover: var(--ant-color-fill-tertiary);
@@ -79,8 +88,10 @@
   --dbm-card-shadow: var(--ant-box-shadow-card);
   --dbm-card-shadow-hover: var(--ant-box-shadow);
 
-  /* 导航线 */
+  /* 导航线（悬停色与选中色同为主色相，仅以透明度/线宽/光晕递进区分，
+     与静态基线的设计一致） */
   --dbm-edge: var(--ant-color-icon);
+  --dbm-edge-hover: var(--ant-color-primary);
   --dbm-edge-select-glow: color-mix(in srgb, var(--ant-color-primary) 40%, transparent);
   --dbm-edge-label-bg: var(--ant-color-bg-elevated);
   --dbm-edge-label-text: var(--ant-color-text-secondary);

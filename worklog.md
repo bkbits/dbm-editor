@@ -882,3 +882,28 @@ Work Log:
 Stage Summary:
 - 审计字段默认命名对齐数据库列名规范（蛇形）；Java 侧属性名经既有小驼峰转换链路自动得到 createBy 等，模板生成无需感知
 - 旧库兼容：恰好存旧驼峰默认名的设置读取时自动升级；用户显式自定义的名称保持不动
+
+---
+Task ID: 30
+Agent: main (Super Z)
+Task: 框选矩形改半透明 + 修复 antdv-next 主题下导航线悬停色与激活色不一致（连带修复选中卡片描边未跟随 antd 主色 + 重置演示数据弹窗卡死回归）
+
+Work Log:
+- 根因定位（先实证后动手）：test/var-binding-test.html 复刻「:root 静态基线 + .app-provider antd 重定义」令牌级联，agent-browser 实测 getComputedStyle 四元素——CSS 自定义属性内的 var() 引用在「声明处」完成代换并以计算值继承（早绑定），并不会在使用处重新解析。antd-theme.scss 头注释原「引用型令牌自动跟随本层重定义」认知是错的
+- 三个表象、一个根因：① 导航线悬停描边 = 静态青绿 rgb(13,148,136)（--dbm-edge-hover: var(--dbm-primary) 在 :root 早绑定为基线色），激活描边 = antd 蓝 rgb(22,119,255)（--dbm-primary 使用处解析）→ 同一根线悬停/激活色相迥异；② 选中卡片描边同因停留青绿（--dbm-card-border-selected 引用型令牌）；③ 框选矩形背景 --dbm-primary-weak 在 antd 层映射为 colorPrimaryBg 不透明实色（rgb(230,244,255)），完全遮挡框住的卡片与网格
+- 修复（src/styles/antd-theme.scss）：显式重映射三个引用型令牌——--dbm-edge-hover: var(--ant-color-primary)（悬停与激活同为 antd 主色相，仅以 stroke-opacity 0.85/线宽 2.8 vs 1.0/3.4+光晕递进，与静态基线设计一致）；--dbm-card-border-selected: var(--ant-color-primary)；新增 --dbm-select-fill: color-mix(in srgb, var(--ant-color-primary) 12%, transparent)（antd 无主色半透明填充令牌，从主色派生）；文件头注释改为「⚠ 引用型令牌必须在本层显式重映射」并记录早绑定结论
+- 修复（src/styles/variables.scss）：静态基线新增 --dbm-select-fill（亮 rgba(13,148,136,0.12) / 暗 rgba(45,212,191,0.16)——与原 primary-weak 数值相同，静态主题视觉零回归）
+- 修复（src/components/canvas/ModelCanvas.vue）：.selection-rect 背景由 var(--dbm-primary-weak) 改 var(--dbm-select-fill)（附注释说明为何不能用 primary-weak）
+- 连带修复（src/components/outline/OutlinePanel.vue 回归）：resetDemo 的 Modal.confirm onOk 回调内调 useHistoryStore() —— context 注入体系下 inject() 脱离 setup 上下文返回 undefined → .clear() 抛错 → onOk 拒绝 → Modal 卡死不关（遮罩拦截后续所有交互）；改为 setup 顶层 const history = useHistoryStore() 捕获（与 model/canvas/ui 同模式）。全库 grep 复查 useXxxStore() 调用点：其余全部在 setup 顶层，仅此一处违规
+- 验证（agent-browser 1920×1080，先在真实应用复现三处现状留证再验修复）：
+  * 亮色：悬停描边 rgb(22,119,255)@0.85/2.8px；选中描边 rgb(22,119,255)@1.0/3.4px+光晕（同色相平滑递进）；选中卡片描边 rgb(22,119,255)（原青绿）；框选填充 color(srgb 0.086 0.467 1 / 0.12) 半透明（原不透明 rgb(230,244,255)）
+  * 暗色：悬停/选中同为 rgb(22,104,220)（antd dark 主色）；框选填充 rgba(22,104,220,0.12) 半透明
+  * 重置演示数据全流程：确认弹窗正常自动关闭（原卡死）、10 卡片/10 导航线恢复种子、控制台 inject() 警告消失、0 页面错误
+  * 截图留档：docs/screenshots/task30-edge-hover-light/selected-light.png、task30-marquee-light/dark.png、task30-edge-hover-dark.png
+  * 命中探测方法论：贝塞尔曲线包围盒中心不在曲线上，取曲线上点用 path.getPointAtLength + getScreenCTM 换算屏幕坐标；NN 边中点被自身胶囊（pointer-events:all）遮挡需避开或选非 NN 边
+- bun run typecheck 通过；vp check 64 文件格式 + 54 文件 lint 零告警
+
+Stage Summary:
+- 两项 UI 修复完成：框选矩形半透明（透出框住内容，亮暗主题均为 12% 主色填充）；导航线悬停色与激活色同为 antd 主色相、仅透明度/线宽/光晕递进——「差别大」问题消除
+- 关键决策：① 早绑定是浏览器实测行为而非猜测——微测试页四元素取证后才动手；② 不改动 --dbm-primary-weak 的 antd 映射（colorPrimaryBg 实色适合按钮/徽标等小面积弱底），框选单建 --dbm-select-fill 令牌；③ 同根因的选中卡片描边一并修复并在 antd-theme.scss 头注释沉淀早绑定结论，防止后续再犯
+- 连带交付：重置演示数据 Modal 卡死回归修复（setup 顶层捕获 history store）；worklog 记录 var() 早绑定陷阱与曲线取点方法论

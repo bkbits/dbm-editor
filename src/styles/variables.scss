@@ -66,6 +66,9 @@
   --dbm-canvas-bg: #fbfcfd;
   --dbm-grid-minor: rgba(28, 33, 40, 0.055);
   --dbm-grid-major: rgba(28, 33, 40, 0.12);
+  /* 框选矩形填充：必须半透明（透出框住的卡片与网格）；antd 层的
+     --dbm-primary-weak 映射为不透明的 colorPrimaryBg，不适合此场景，故用专用令牌 */
+  --dbm-select-fill: rgba(13, 148, 136, 0.12);
 
   /* 表卡片 */
   --dbm-card-bg: #ffffff;
@@ -138,6 +141,7 @@
   --dbm-canvas-bg: #161b21;
   --dbm-grid-minor: rgba(230, 233, 237, 0.05);
   --dbm-grid-major: rgba(230, 233, 237, 0.11);
+  --dbm-select-fill: rgba(45, 212, 191, 0.16);
 
   --dbm-card-bg: #20262e;
   --dbm-card-border: #39424d;
