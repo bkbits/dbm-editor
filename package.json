@@ -19,6 +19,7 @@
   "scripts": {
     "dev": "vp dev",
     "build": "vp build && node scripts/inline-lib-css.mjs",
+    "build:pages": "vp build --config vite.pages.config.ts",
     "preview": "vp preview",
     "typecheck": "vue-tsc --noEmit",
     "prepare": "vp config"

@@ -74,6 +74,7 @@ bun run dev
 | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | `bun run dev`（= `vp dev`）       | 启动开发服务器（localhost:3000，热更新）                                                                                        |
 | `bun run build`（= `vp build`）   | 库构建：产出 `dist/DBManager.js` + `dist/DBManager.d.ts` 两个文件（CSS 已内联进 JS，详见[库构建与宿主接入](#库构建与宿主接入)） |
+| `bun run build:pages`             | Pages 演示站构建：应用模式产出 `dist/`（index.html + assets，相对路径 base，见[GitHub Pages 自动发布](#github-pages-自动发布)） |
 | `bun run preview`                 | 本地预览生产构建                                                                                                                |
 | `bun run typecheck`               | 全量类型检查（`vue-tsc --noEmit`）                                                                                              |
 | `vp check`                        | Vite+ 内置：格式 + lint + 类型检查（staged 提交时自动执行）                                                                     |
@@ -122,6 +123,17 @@ createApp(() => h(DBManagerView, { api: myApi }))
 ```
 
 > 库模式构建后 `dist` 不含演示页 HTML——演示应用通过 `vp dev`（入口 `index.html` → `src/main.ts`）访问；仓库内 `test/host-smoke.html` 为宿主接入冒烟页（直接加载 `dist/DBManager.js` 验证外部依赖解析与样式内联），`test/` 目录已 gitignore。
+
+### GitHub Pages 自动发布
+
+仓库内置 GitHub Actions 工作流（`.github/workflows/deploy-pages.yml`），将演示应用自动发布为 GitHub Pages 站点。工作流参考官方静态站点部署模板（两段式 build + deploy），构建步骤换为本仓库工具链：检出代码 → `oven-sh/setup-bun` 安装 bun → `bun install --frozen-lockfile` → `bun run build:pages` 应用模式构建 → `actions/upload-pages-artifact` 上传 `dist` 产物 → `actions/deploy-pages` 部署。
+
+- **触发**：推送到 `devel` 分支自动触发；亦可在 Actions 页面手动运行（workflow_dispatch）
+- **站点地址**：<https://bkbits.github.io/dbm-editor/>（内置 DemoManagerApi 演示数据，无后端依赖，独立可访问）
+- **构建配置**：`vite.pages.config.ts`（应用模式，与库模式 `vite.config.ts` 互不影响）；`base: './'` 相对路径使产物可托管于项目页子路径
+- **部署来源**：仓库 Pages 需以「GitHub Actions」为构建来源（Settings → Pages → Build and deployment → Source: GitHub Actions）
+
+> 上传动作会自动附带 `.nojekyll`，`assets/` 等资源目录按原样发布；部署队列由 `concurrency: pages` 串行化，进行中的部署不会被新推送打断（排队而非取消）。
 
 ## 功能总览
 
