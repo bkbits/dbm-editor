@@ -542,12 +542,14 @@ const isEdit = computed(() => Boolean(draft.value.id))
             </p>
             <p><code>context.table.tableName / className / comment</code> 表信息（表模板）</p>
             <p>
-              <code>context.category.name / file</code> 字典分类信息（字典分类模板；file
-              为分类文件——默认产物路径）
+              <code>context.category.name / basePackage / className</code>
+              字典分类信息（字典分类模板；basePackage 基础包路径、className 大驼峰类名——
+              产物路径推导依据）
             </p>
             <p>
               <code>context.dicts</code>
-              该分类下全部字典（dictKey/label/comment/values：valueKey/label/labelType）（字典分类模板）
+              该分类下全部字典（dictKey/label/comment/values：valueKey/propertyName/label/labelType，propertyName
+              为常量属性名）（字典分类模板）
             </p>
             <p>
               <code>context.table.columns</code>

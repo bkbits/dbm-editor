@@ -931,3 +931,35 @@ Stage Summary:
 - 字典分类模板：仅一个（默认 dict 种子生成 Java 常量类），DictCategoryTemplateContext（分类+全部字典含值），每分类渲染一次，代码生成/替换可选（默认生成，106↔104 断言）
 - controller 新风格：/api/模块/功能/操作 路径 + 模块.功能.操作 权限码（表名首下划线拆分）+ 查询条件三分支（时间 rangeClosed 起止双参 / id 与字典 eq / 字符串 like），vue/menuSql 同步对齐
 - 关键决策：① 字典 categoryId 可选+运行时归一（兼容存量数据，未分类组兜底）；② 字典分类模板独立于表模板版本迁移（用户编辑过即保留）；③ 生成开关放模板选择框（两流程共用）而非全局设置；④ 沙箱极端回滚下以 git 对象库为唯一权威（plumbing 提交 + 干净副本验证）
+
+---
+Task ID: 32
+Agent: main (Super Z)
+Task: 小地图视口矩形半透明（原不透明实色遮挡表矩形）+ dict 默认模板常量值统一 String 类型 + 字典值新增常量属性名 propertyName（全大写，小写自动转）+ 字典分类属性改 basePackage/className（删除 file，类名强制大驼峰）
+
+Work Log:
+- 类型层：DictValue 增 propertyName?: string（常量属性名，全大写）；DictCategory 删 file、增 basePackage?（基础包路径）+ className?（大驼峰类名）
+- 小地图（Minimap.vue）：视口矩形填充由 --dbm-primary-weak（antd 层为不透明实色 #e6f4ff，完全遮住视口内表矩形——Task 30 早绑定结论的同类问题）改用 --dbm-select-fill（antd 层 color-mix 12% 透明主色）；调整为先填充后描边
+- 种子层：SEED_DICT_CATEGORIES 改 basePackage/className（com.example.constants.dict + SysDictConstants/BizDictConstants）；5 个种子字典全部值补有语义英文名 propertyName（ENABLED/DISABLED/LOCKED/NORMAL/MEMBER/ADMIN/DRAFT/PUBLISHED/REVIEWING/OFF_SHELF/UNPAID/PAID/SHIPPED/COMPLETED/CANCELLED/ON_SHELF）；字典分类模板种子改造——头部由 category.file 推导改为 basePackage 包名 + className 类名直取（产物路径 src/main/java/<包路径>/<类名>.java）、常量值统一 String（删除数字值键 int 分型）、常量名 propertyName 优先（nameOf），值键推导大写蛇形仅作缺省兜底（数字键 VALUE_ 前缀）
+- 持久层（db.ts v7 迁移三件）：① dictCategories 的 file → basePackage/className（目录去 src/main/java/ 前缀点化、文件名去 .java；名称推导兜底仅结果合法大驼峰时落库——中文分类名推导不合法时置空，渲染层同公式兜底，不持久化非法类名）；② 字典值 propertyName === undefined 时按种子（dictKey,valueKey）映射回填、非种子置空串（用户主动清空 '' 不被覆盖）；③ DICT_TEMPLATE_SEED_VERSION 1→2 版本驱动替换字典分类模板种子（独立于表模板版本）；createSeedDB 写入版本号
+- API 层（demo-manager-api.ts）：addDictCategory/updateDictCategory 改 basePackage/className，normalizeDictCategory 归一（包路径去空白/压缩连续点/去首尾点；className 非空必须 /^[A-Z][A-Za-z0-9]*$/ 大驼峰否则抛中文错误）；normalizeDictValue 增 propertyName 归一（trim + toUpperCase 数据层兜底）
+- UI 层（DictView.vue）：值表格增「常量属性名」列（七列网格 90/130/180/110/120/1fr/30px，移动端双列卡片 nth-child 5/6→6/7）——:value + @update:value 方法绑定（$event 传参），输入即时 toUpperCase；validate() 增常量属性名非空查重（同名常量生成冲突拦截）；分类弹窗 file 字段 → basePackage + className 两字段（className @blur toCamelCase 归一大驼峰，sys_dict → SysDict；保存前正则校验）；分组头悬停提示改 catFileHint（展示推导产物完整路径）
+- 渲染层（render.ts）：renderDictCategoryTemplate 默认产物路径由 category.file 改为 basePackage/className 推导（src/main/java/<包路径>/<类名>.java，类名缺省 toCamelCase(分类名)+DictConstants 兜底）
+- 帮助面板（TemplateView.vue）：context.category.name/file → name/basePackage/className；dicts values 说明补 propertyName
+- store（dict.ts）：newValueDraft 补 propertyName: ''
+- README 同步：字典分类属性（基础包路径+类名称+大驼峰自动转换）、字典值常量属性名（全大写自动转换）、字典分类模板（String 常量/propertyName/产物路径推导）
+- 验证（dev server 3100 + agent-browser 1920×1080，亮暗双主题）：
+  * 全新库：分组头/值表格七列含常量属性名；propertyName 输入 locked_test 即时变 LOCKED_TEST；className 输入 my_dict_constants 失焦变 MyDictConstants；弹窗三字段（名称/基础包路径/类名称）回显正确
+  * v6→v7 迁移（旧形态降级重载）：分类 file→basePackage/className 且 file 字段移除；种子值 propertyName 回填（order_status 五值 UNPAID..CANCELLED）；模板替换为 v2 + dictTemplateSeedVersion=2；边缘——中文无 file 分类 className 置空（不落非法值）、非种子字典值置空串（模板兜底 VALUE_5/YES）
+  * 模板预览：filePath=src/main/java/com/example/constants/dict/SysDictConstants.java、package 行、SysStatus/UserType 内部类、public static final String DISABLED = "0" 全 String 常量
+  * 代码生成 zip：含两个字典产物于正确包路径、自建分类回退 扩展字典DictConstants.java（名称兜底）；替换清单 107 文件（13 表×8 模板+3 字典产物）
+  * 小地图：--dbm-select-fill 解析为 color-mix 12%（对照 --dbm-primary-weak 为不透明 #e6f4ff）；像素级分析视口矩形内部 12298 像素 20 种量化色、top1 仅 70%（表矩形颜色透出 30%），判定半透明；亮暗双主题截图 docs/screenshots/task32-minimap-{light,dark}.png
+  * 校验闭环：常量属性名重复 →「常量属性名重复：OFF_SHELF」拦截；类名称中文 →「类名称必须为大驼峰结构」拦截；合法保存闭环（分类/字典均持久化 propertyName/basePackage/className）
+  * 全新浏览器会话 0 页面错误、10 卡片正常（此前 6 张为小视口裁剪非回归）；会话中两条 error 为 db.ts 热更新窗口 HMR 产物（AppHeader 重挂脱离子树致 inject 失败），重载即消失
+- bun run typecheck 通过；vp check 64 文件格式 + 54 文件 lint 零告警；check-readme.py 通过（31 标题）
+- 沙箱对策（本任务新发现）：工作树保持脏（worklog.md 有未提交修改且 main/devel 内容不同）时，沙箱的 checkout main 因拒绝覆盖本地修改而失败 → HEAD 留在 devel、全部修改保留——以「脏树 pin」替代 Task 31 的 plumbing 提交链，全程常规 Edit 工具开发；另以 .task32-bak/（未跟踪目录）留档 wip.patch 双保险
+
+Stage Summary:
+- 四项需求全部完成并经真实浏览器验证：小地图视口矩形半透明（复用 Task 30 的 --dbm-select-fill 令牌）、dict 模板常量统一 String、字典值常量属性名 propertyName（UI 即时大写 + API 归一 + 重复校验 + 种子回填迁移）、字典分类 basePackage/className（大驼峰失焦自动转换 + 保存/API 双层校验 + file 迁移推导）
+- 关键决策：① propertyName 可选 + 模板兜底（值键推导大写蛇形）——旧数据/未填值不阻塞生成；② 迁移兜底类名不合法时置空而非持久化非法值；③ 字典分类模板种子升级走独立版本号（DICT_TEMPLATE_SEED_VERSION），与表模板版本互不干扰；④ 常量属性名/类名的大小写转换在 UI 与 API 双层实施（防御纵深）
+- 沙箱工作流沉淀：脏树 pin（worklog 未提交修改钉住 devel 分支）+ 未跟踪目录 patch 备份，验证通过后单次原子提交推送

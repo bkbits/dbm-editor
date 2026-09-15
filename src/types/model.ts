@@ -212,8 +212,10 @@ export interface UpdateTablePosDTO {
 export interface DictCategory {
   id: string // 分类ID
   name: string // 分类名称(唯一)
-  /** 分类文件：字典代码生成的默认产物路径（每分类生成一份，模板内可覆盖） */
-  file?: string
+  /** 基础包路径（如 com.example.constants.dict）：字典代码生成的包名与产物目录依据 */
+  basePackage?: string
+  /** 类名称（大驼峰，如 SysDictConstants）：字典代码生成的常量类名 */
+  className?: string
 }
 
 /** 字典值标签类型：I=Info S=Success W=Warning D=Danger */
@@ -224,6 +226,8 @@ export interface DictValue {
   id: string // 值ID
   dictId: string // 所属字典ID
   valueKey: string // 值键(唯一)
+  /** 常量属性名（全大写，如 ENABLED）：字典代码生成时的常量名；输入小写自动转大写 */
+  propertyName?: string
   label: string // 值标签
   labelType: DictValueLabelType // 值类型
   comment?: string // 值注释

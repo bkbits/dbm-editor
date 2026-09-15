@@ -13,6 +13,7 @@ import {
 } from '@lucide/vue'
 import type { Dict, DictCategory, DictValue, DictValueLabelType } from '@/types/model'
 import { useDictStore } from '@/stores/dict'
+import { toCamelCase } from '@/utils/string'
 import { uid } from '@/utils/id'
 
 const dictStore = useDictStore()
@@ -102,11 +103,17 @@ function addValue() {
     id: uid('dv-'),
     dictId: draft.value.id,
     valueKey: '',
+    propertyName: '',
     label: '',
     labelType: 'I',
     comment: '',
     color: '',
   })
+}
+
+/** 常量属性名输入即转大写（仅允许全大写，小写输入自动变为大写） */
+function onPropertyNameInput(v: DictValue, val: string) {
+  v.propertyName = String(val || '').toUpperCase()
 }
 
 function removeValue(idx: number) {
@@ -117,10 +124,17 @@ function validate(): string | null {
   if (!draft.value.dictKey.trim()) return '字典键不能为空'
   if (!draft.value.label.trim()) return '字典标签不能为空'
   const keys = new Set<string>()
+  const propNames = new Set<string>()
   for (const v of draft.value.values) {
     if (!v.valueKey.trim()) return '存在空值键'
     if (keys.has(v.valueKey)) return `值键重复：${v.valueKey}`
     keys.add(v.valueKey)
+    // 常量属性名非空时查重（同名常量在生成代码中会冲突）
+    const pn = (v.propertyName || '').trim()
+    if (pn) {
+      if (propNames.has(pn)) return `常量属性名重复：${pn}`
+      propNames.add(pn)
+    }
   }
   return null
 }
@@ -169,21 +183,45 @@ const catModal = reactive({
   open: false,
   saving: false,
 })
-const catDraft = ref<DictCategory>({ id: '', name: '', file: '' })
+const catDraft = ref<DictCategory>({ id: '', name: '', basePackage: '', className: '' })
 
 function newCategory() {
-  catDraft.value = { id: '', name: '', file: '' }
+  catDraft.value = { id: '', name: '', basePackage: '', className: '' }
   catModal.open = true
 }
 
 function editCategory(category: DictCategory) {
-  catDraft.value = { id: category.id, name: category.name, file: category.file || '' }
+  catDraft.value = {
+    id: category.id,
+    name: category.name,
+    basePackage: category.basePackage || '',
+    className: category.className || '',
+  }
   catModal.open = true
+}
+
+/** 类名称失活时归一为大驼峰（小驼峰/下划线/中划线自动转换，如 sys_dict → SysDict） */
+function normalizeClassNameDraft() {
+  const raw = (catDraft.value.className || '').trim()
+  catDraft.value.className = raw ? toCamelCase(raw) : ''
+}
+
+/** 分类分组头悬停提示：字典代码默认产物路径 */
+function catFileHint(c: DictCategory): string {
+  const pkg = (c.basePackage || '').trim()
+  const cls = (c.className || '').trim() || `${toCamelCase(c.name)}DictConstants`
+  const pkgPath = pkg ? pkg.replace(/\./g, '/') : ''
+  return `字典代码默认产物：${(pkgPath ? `src/main/java/${pkgPath}/` : '') + cls}.java`
 }
 
 async function saveCategory() {
   if (!catDraft.value.name.trim()) {
     message.warning('分类名称不能为空')
+    return
+  }
+  const cls = (catDraft.value.className || '').trim()
+  if (cls && !/^[A-Z][A-Za-z0-9]*$/.test(cls)) {
+    message.warning('类名称必须为大驼峰结构（如 SysDictConstants）')
     return
   }
   catModal.saving = true
@@ -316,7 +354,10 @@ const isValueHit = (v: DictValue) => {
               <ChevronRight v-if="collapsedCats.has(group.category?.id || '__uncat')" :size="12" />
               <ChevronDown v-else :size="12" />
             </button>
-            <span class="cat-name" :title="group.category?.file || ''">
+            <span
+              class="cat-name"
+              :title="group.category ? catFileHint(group.category) : '未分类字典不参与字典代码生成'"
+            >
               {{ group.category?.name || '未分类' }}
             </span>
             <span class="cat-count">{{ group.dicts.length }}</span>
@@ -324,7 +365,7 @@ const isValueHit = (v: DictValue) => {
               <button
                 class="cat-btn"
                 type="button"
-                title="编辑分类（名称 / 分类文件）"
+                title="编辑分类（名称 / 基础包路径 / 类名称）"
                 @click="editCategory(group.category)"
               >
                 <Pencil :size="11" />
@@ -433,6 +474,7 @@ const isValueHit = (v: DictValue) => {
           <div class="values-table">
             <div class="v-head v-grid">
               <span>值键<span class="req">*</span></span>
+              <span>常量属性名</span>
               <span>值标签<span class="req">*</span></span>
               <span>值类型</span>
               <span>自定义颜色</span>
@@ -447,6 +489,14 @@ const isValueHit = (v: DictValue) => {
                 :class="{ hit: isValueHit(v) }"
               >
                 <a-input v-model:value="v.valueKey" size="small" class="mono" placeholder="如 1" />
+                <a-input
+                  :value="v.propertyName"
+                  size="small"
+                  class="mono"
+                  placeholder="如 ENABLED"
+                  title="字典代码生成的常量名（仅全大写，小写自动转大写；留空则由值键推导）"
+                  @update:value="onPropertyNameInput(v, $event)"
+                />
                 <div class="v-label-cell">
                   <span class="v-label-dot" :style="typeStyle(v)" />
                   <a-input v-model:value="v.label" size="small" placeholder="如 启用" />
@@ -498,7 +548,8 @@ const isValueHit = (v: DictValue) => {
       </div>
     </section>
 
-    <!-- 字典分类编辑（新增 / 编辑；属性：分类名称、分类文件——字典代码生成的默认产物路径） -->
+    <!-- 字典分类编辑（新增 / 编辑；属性：分类名称、基础包路径、类名称——大驼峰，
+      字典代码生成的包名/类名依据） -->
     <a-modal
       v-model:open="catModal.open"
       :title="catDraft.id ? '编辑字典分类' : '新增字典分类'"
@@ -519,14 +570,27 @@ const isValueHit = (v: DictValue) => {
           <a-input v-model:value="catDraft.name" size="small" placeholder="如 系统字典" />
         </div>
         <div class="cat-form-item">
-          <label>分类文件</label>
+          <label>基础包路径（basePackage）</label>
           <a-input
-            v-model:value="catDraft.file"
+            v-model:value="catDraft.basePackage"
             size="small"
             class="mono"
-            placeholder="如 src/main/java/com/example/constants/dict/SysDictConstants.java"
+            placeholder="如 com.example.constants.dict"
           />
-          <p class="cat-form-tip">字典代码生成的默认产物路径（每个分类生成一份；模板内可覆盖）</p>
+          <p class="cat-form-tip">字典常量类的 Java 包名与产物目录依据（留空则产物不带目录）</p>
+        </div>
+        <div class="cat-form-item">
+          <label>类名称（className）</label>
+          <a-input
+            v-model:value="catDraft.className"
+            size="small"
+            class="mono"
+            placeholder="如 SysDictConstants"
+            @blur="normalizeClassNameDraft"
+          />
+          <p class="cat-form-tip">
+            必须为大驼峰结构；输入小驼峰/下划线风格将在失焦时自动转换（如 sys_dict → SysDict）
+          </p>
         </div>
       </div>
     </a-modal>
@@ -824,7 +888,7 @@ const isValueHit = (v: DictValue) => {
 
 .v-grid {
   display: grid;
-  grid-template-columns: 140px 200px 130px 130px 1fr 30px;
+  grid-template-columns: 90px 130px 180px 110px 120px 1fr 30px;
   gap: 8px;
   align-items: center;
 }
@@ -1000,7 +1064,7 @@ const isValueHit = (v: DictValue) => {
     padding: 12px 12px 20px;
   }
 
-  /* 六列（值键/标签/类型/颜色/注释/删除）→ 双列卡片：注释独占一行，删除按钮靠右 */
+  /* 七列（值键/常量属性名/标签/类型/颜色/注释/删除）→ 双列卡片：注释独占一行，删除按钮靠右 */
   .v-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 6px 8px;
@@ -1010,11 +1074,11 @@ const isValueHit = (v: DictValue) => {
     display: none; /* 卡片化后表头语义不再成立，输入框自带占位提示 */
   }
 
-  .v-grid > :nth-child(5) {
+  .v-grid > :nth-child(6) {
     grid-column: 1 / -1; /* 值注释整行 */
   }
 
-  .v-grid > :nth-child(6) {
+  .v-grid > :nth-child(7) {
     justify-self: end; /* 删除按钮靠右 */
   }
 

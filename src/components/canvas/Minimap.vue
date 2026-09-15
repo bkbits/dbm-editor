@@ -94,13 +94,15 @@ function draw() {
   }
   ctx.globalAlpha = 1
 
-  // 视口矩形
+  // 视口矩形：填充必须用半透明令牌（--dbm-select-fill，Task 30 引入，antd 层为
+  // color-mix 12% 透明主色）——不可用 --dbm-primary-weak（antd 层映射为不透明实色，
+  // 会完全遮住视口内的表矩形）；先填充后描边，保证描边不被填充覆盖
   const vr = canvas.viewportWorldRect
+  ctx.fillStyle = styles.getPropertyValue('--dbm-select-fill').trim()
+  ctx.fillRect(vr.x * scale + offX, vr.y * scale + offY, vr.w * scale, vr.h * scale)
   ctx.strokeStyle = styles.getPropertyValue('--dbm-primary').trim()
   ctx.lineWidth = 1.5
   ctx.strokeRect(vr.x * scale + offX, vr.y * scale + offY, vr.w * scale, vr.h * scale)
-  ctx.fillStyle = styles.getPropertyValue('--dbm-primary-weak').trim()
-  ctx.fillRect(vr.x * scale + offX, vr.y * scale + offY, vr.w * scale, vr.h * scale)
 
   ctx.strokeStyle = border
   ctx.lineWidth = 1

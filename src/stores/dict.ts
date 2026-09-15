@@ -166,6 +166,7 @@ export function createDictStore(deps: DictDeps) {
         id: uid('dv-'),
         dictId,
         valueKey: '',
+        propertyName: '',
         label: '',
         labelType: 'I' as const,
         comment: '',

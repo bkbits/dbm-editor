@@ -421,10 +421,12 @@ export class DemoManagerApi implements ManagerApi {
     if (db.dictCategories.some((c) => c.name === name))
       throw new Error(`字典分类名称已存在: ${name}`)
     if (!category.id) throw new Error('新增字典分类必须提供 id')
+    const { basePackage, className } = normalizeDictCategory(category)
     db.dictCategories.push({
       id: category.id,
       name,
-      file: String(category?.file || '').trim(),
+      basePackage,
+      className,
     })
     persistDB()
   }
@@ -437,8 +439,10 @@ export class DemoManagerApi implements ManagerApi {
     const name = requireStr(category?.name, 'name', '分类名称')
     if (db.dictCategories.some((c) => c.name === name && c.id !== id))
       throw new Error(`字典分类名称已存在: ${name}`)
+    const { basePackage, className } = normalizeDictCategory(category)
     target.name = name
-    target.file = String(category?.file || '').trim()
+    target.basePackage = basePackage
+    target.className = className
     persistDB()
   }
 
@@ -622,7 +626,7 @@ function normalizeNavigate(input: TableNavigate): TableNavigate {
   return nav
 }
 
-/** 字典值归一：空值键拦截、标签回退、类型/颜色兜底 */
+/** 字典值归一：空值键拦截、标签回退、类型/颜色兜底；常量属性名统一转大写 */
 function normalizeDictValue(v: Partial<DictValue>, dictKey: string): DictValue {
   const valueKey = String(v?.valueKey ?? '').trim()
   if (!valueKey) throw new Error(`字典 ${dictKey} 存在空值键`)
@@ -633,11 +637,33 @@ function normalizeDictValue(v: Partial<DictValue>, dictKey: string): DictValue {
     id: v?.id || uid('dv-'),
     dictId: String(v?.dictId || ''),
     valueKey,
+    // 常量属性名仅允许全大写：小写输入自动转大写（数据层兜底，UI 层同步转换）
+    propertyName: String(v?.propertyName ?? '')
+      .trim()
+      .toUpperCase(),
     label: String(v?.label ?? '').trim() || valueKey,
     labelType,
     comment: String(v?.comment || ''),
     color: String(v?.color || '').trim() || undefined,
   }
+}
+
+/**
+ * 字典分类属性归一：basePackage 基础包路径（仅去空白与首尾点、压缩连续点）+
+ * className 类名（非空时必须为大驼峰结构——首字母大写且仅字母数字，如 SysDictConstants）
+ */
+function normalizeDictCategory(category: DictCategory): {
+  basePackage: string
+  className: string
+} {
+  const basePackage = String(category?.basePackage || '')
+    .trim()
+    .replace(/\.{2,}/g, '.')
+    .replace(/^\.+|\.+$/g, '')
+  const className = String(category?.className || '').trim()
+  if (className && !/^[A-Z][A-Za-z0-9]*$/.test(className))
+    throw new Error(`类名称必须为大驼峰结构（如 SysDictConstants）: ${className}`)
+  return { basePackage, className }
 }
 
 function normalizeDict(dict: Partial<Dict>, dictKey: string): Dict {

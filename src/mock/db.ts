@@ -18,6 +18,7 @@ import type {
   TypeMapping,
 } from '@/types/model'
 import { normalizeFieldConventions } from '@/utils/fieldConvention'
+import { toCamelCase } from '@/utils/string'
 import {
   SEED_CATEGORIES,
   SEED_COLUMN_OPTIONS,
@@ -46,11 +47,20 @@ const LEGACY_STORAGE_KEYS = ['gdbme:db:v1']
  * 嗅探漏判；此后用户对模板的增删改不再被种子覆盖（版本号已是最新）。
  */
 const SEED_TEMPLATES_VERSION = 5
+/**
+ * 字典分类模板种子版本（独立于表模板版本）：1=Task31 初版（分类文件 file 推导
+ * 产物路径、数字值键 int 常量），2=常量值统一 String 类型、常量名取字典值
+ * 的常量属性名（propertyName）、产物路径按 basePackage/className 推导。
+ * 旧库无此字段（视为 1）：低于当前值时整体替换为最新种子并回写版本号。
+ */
+const DICT_TEMPLATE_SEED_VERSION = 2
 
 export interface MockDB {
   version: number
   /** 模板种子版本（旧库无此字段 = 1）：低于当前值时读取时升级模板种子 */
   seedTemplatesVersion?: number
+  /** 字典分类模板种子版本（旧库无此字段 = 1）：低于当前值时读取时替换字典分类模板 */
+  dictTemplateSeedVersion?: number
   categories: TableCategory[]
   tables: Table[]
   columns: TableColumn[]
@@ -81,6 +91,7 @@ function createSeedDB(): MockDB {
   return {
     version: 2,
     seedTemplatesVersion: SEED_TEMPLATES_VERSION,
+    dictTemplateSeedVersion: DICT_TEMPLATE_SEED_VERSION,
     categories: clone(SEED_CATEGORIES),
     tables,
     columns,
@@ -228,6 +239,65 @@ function loadDB(): MockDB {
         }
         if (!parsed.dictCategoryTemplate || !parsed.dictCategoryTemplate.content) {
           parsed.dictCategoryTemplate = clone(SEED_DICT_CATEGORY_TEMPLATE)
+          migrated = true
+        }
+        // v7：字典分类属性升级——file 分类文件 → basePackage 基础包路径 +
+        // className 大驼峰类名。旧分类按 file 推导（目录去 src/main/java/ 前缀
+        // 后点化为包名、文件名去 .java 后缀为类名；无 file 时由分类名推导兜底——
+        // 兜底仅在其结果为合法大驼峰时落库，中文分类名等推导不合法时置空，
+        // 渲染层会以相同公式兜底，行为不变且不持久化非法类名）
+        if (
+          !parsed.dictCategories.every(
+            (c) => c.basePackage !== undefined && c.className !== undefined,
+          )
+        ) {
+          parsed.dictCategories = parsed.dictCategories.map((c) => {
+            if (c.basePackage !== undefined && c.className !== undefined) return c
+            const legacy = c as DictCategory & { file?: string }
+            const file = String(legacy.file || '')
+              .replace(/\\/g, '/')
+              .replace(/^\/+/, '')
+              .trim()
+            const parts = file.split('/').filter(Boolean)
+            const fileBase = parts.length ? parts[parts.length - 1] : ''
+            let dir = parts.slice(0, -1).join('/')
+            if (dir.startsWith('src/main/java/')) dir = dir.slice('src/main/java/'.length)
+            const { file: _file, ...rest } = legacy
+            const nameFallback = `${toCamelCase(c.name)}DictConstants`
+            return {
+              ...rest,
+              basePackage: dir ? dir.split('/').filter(Boolean).join('.') : '',
+              className:
+                fileBase.replace(/\.java$/, '') ||
+                (/^[A-Z][A-Za-z0-9]*$/.test(nameFallback) ? nameFallback : ''),
+            }
+          })
+          migrated = true
+        }
+        // v7：字典值补常量属性名（propertyName）。仅回填缺失（undefined）的值：
+        // 种子字典按（dictKey, valueKey）映射回填有语义英文名；非种子字典置空串
+        // （模板渲染时由值键推导兜底）——用户主动清空（''）不会被覆盖
+        if (parsed.dicts.some((d) => d.values.some((v) => v.propertyName === undefined))) {
+          const seedProps = new Map(
+            SEED_DICTS.flatMap((d) =>
+              d.values.map(
+                (v) => [`${d.dictKey}\u0000${v.valueKey}`, v.propertyName || ''] as const,
+              ),
+            ),
+          )
+          for (const d of parsed.dicts) {
+            for (const v of d.values) {
+              if (v.propertyName === undefined)
+                v.propertyName = seedProps.get(`${d.dictKey}\u0000${v.valueKey}`) ?? ''
+            }
+          }
+          migrated = true
+        }
+        // v7：字典分类模板种子升级（常量统一 String、常量名取 propertyName、
+        // 包名/类名推导产物路径）——版本号驱动替换，与表模板迁移策略一致
+        if ((parsed.dictTemplateSeedVersion ?? 1) < DICT_TEMPLATE_SEED_VERSION) {
+          parsed.dictCategoryTemplate = clone(SEED_DICT_CATEGORY_TEMPLATE)
+          parsed.dictTemplateSeedVersion = DICT_TEMPLATE_SEED_VERSION
           migrated = true
         }
         if (migrated) {

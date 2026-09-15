@@ -218,16 +218,21 @@ export function renderDictCategoryTemplate(
     context.result = `⚠ 模板渲染失败：${msg}`
     return { ...context, error: msg }
   }
-  // 默认产物路径：分类文件（file）优先；模板内可对 fileName/filePath 赋值覆盖
-  const file = String(category.file || '')
-    .replace(/\\/g, '/')
-    .replace(/^\/+/, '')
-    .trim()
+  // 默认产物路径：由分类属性推导（basePackage 基础包路径 → src/main/java/<包路径>/，
+  // className 大驼峰类名 → <类名>.java；类名缺省由分类名推导兜底）；
+  // 模板内可对 fileName/filePath 赋值覆盖
   if (!context.fileName) {
-    context.fileName = file ? file.split('/').pop() || '' : `${category.name}DictConstants.java`
+    const cls =
+      String(category.className || '').trim() || `${toCamelCase(category.name)}DictConstants`
+    context.fileName = `${cls}.java`
   }
   if (!context.filePath) {
-    context.filePath = file || context.fileName
+    const pkgPath = String(category.basePackage || '')
+      .trim()
+      .replace(/\\/g, '/')
+      .replace(/\./g, '/')
+      .replace(/^\/+|\/+$/g, '')
+    context.filePath = pkgPath ? `src/main/java/${pkgPath}/${context.fileName}` : context.fileName
   }
   if (!context.aborted && !failed) {
     context.result = ensureBlankLineAfterImports(context.result)

@@ -534,17 +534,19 @@ export const SEED_NAVIGATES: TableNavigate[] = [
 ]
 
 /* ============ 字典 ============ */
-/** 字典分类：与表分类同构（分类名称 + 分类文件——字典代码生成的默认产物路径） */
+/** 字典分类：与表分类同构（分类名称 + 基础包路径 + 大驼峰类名——字典代码生成的包名/类名依据） */
 export const SEED_DICT_CATEGORIES: DictCategory[] = [
   {
     id: 'dictcat-system',
     name: '系统字典',
-    file: 'src/main/java/com/example/constants/dict/SysDictConstants.java',
+    basePackage: 'com.example.constants.dict',
+    className: 'SysDictConstants',
   },
   {
     id: 'dictcat-business',
     name: '业务字典',
-    file: 'src/main/java/com/example/constants/dict/BizDictConstants.java',
+    basePackage: 'com.example.constants.dict',
+    className: 'BizDictConstants',
   },
 ]
 
@@ -560,6 +562,7 @@ export const SEED_DICTS: Dict[] = [
         id: 'dv-ss-0',
         dictId: 'dict-sys-status',
         valueKey: '0',
+        propertyName: 'DISABLED',
         label: '禁用',
         labelType: 'D',
         comment: '不可用',
@@ -568,6 +571,7 @@ export const SEED_DICTS: Dict[] = [
         id: 'dv-ss-1',
         dictId: 'dict-sys-status',
         valueKey: '1',
+        propertyName: 'ENABLED',
         label: '启用',
         labelType: 'S',
         comment: '正常',
@@ -576,6 +580,7 @@ export const SEED_DICTS: Dict[] = [
         id: 'dv-ss-2',
         dictId: 'dict-sys-status',
         valueKey: '2',
+        propertyName: 'LOCKED',
         label: '锁定',
         labelType: 'W',
         comment: '临时锁定',
@@ -589,12 +594,27 @@ export const SEED_DICTS: Dict[] = [
     label: '用户类型',
     comment: '用户账号类型',
     values: [
-      { id: 'dv-ut-0', dictId: 'dict-user-type', valueKey: '0', label: '普通用户', labelType: 'I' },
-      { id: 'dv-ut-1', dictId: 'dict-user-type', valueKey: '1', label: '会员', labelType: 'S' },
+      {
+        id: 'dv-ut-0',
+        dictId: 'dict-user-type',
+        valueKey: '0',
+        propertyName: 'NORMAL',
+        label: '普通用户',
+        labelType: 'I',
+      },
+      {
+        id: 'dv-ut-1',
+        dictId: 'dict-user-type',
+        valueKey: '1',
+        propertyName: 'MEMBER',
+        label: '会员',
+        labelType: 'S',
+      },
       {
         id: 'dv-ut-9',
         dictId: 'dict-user-type',
         valueKey: '9',
+        propertyName: 'ADMIN',
         label: '管理员',
         labelType: 'W',
         comment: '后台管理员',
@@ -611,6 +631,7 @@ export const SEED_DICTS: Dict[] = [
         id: 'dv-as-0',
         dictId: 'dict-article-status',
         valueKey: '0',
+        propertyName: 'DRAFT',
         label: '草稿',
         labelType: 'I',
       },
@@ -618,6 +639,7 @@ export const SEED_DICTS: Dict[] = [
         id: 'dv-as-1',
         dictId: 'dict-article-status',
         valueKey: '1',
+        propertyName: 'PUBLISHED',
         label: '已发布',
         labelType: 'S',
       },
@@ -625,6 +647,7 @@ export const SEED_DICTS: Dict[] = [
         id: 'dv-as-2',
         dictId: 'dict-article-status',
         valueKey: '2',
+        propertyName: 'REVIEWING',
         label: '审核中',
         labelType: 'W',
       },
@@ -632,6 +655,7 @@ export const SEED_DICTS: Dict[] = [
         id: 'dv-as-3',
         dictId: 'dict-article-status',
         valueKey: '3',
+        propertyName: 'OFF_SHELF',
         label: '已下架',
         labelType: 'D',
       },
@@ -647,6 +671,7 @@ export const SEED_DICTS: Dict[] = [
         id: 'dv-os-0',
         dictId: 'dict-order-status',
         valueKey: '0',
+        propertyName: 'UNPAID',
         label: '待支付',
         labelType: 'I',
       },
@@ -654,6 +679,7 @@ export const SEED_DICTS: Dict[] = [
         id: 'dv-os-1',
         dictId: 'dict-order-status',
         valueKey: '1',
+        propertyName: 'PAID',
         label: '已支付',
         labelType: 'S',
       },
@@ -661,6 +687,7 @@ export const SEED_DICTS: Dict[] = [
         id: 'dv-os-2',
         dictId: 'dict-order-status',
         valueKey: '2',
+        propertyName: 'SHIPPED',
         label: '已发货',
         labelType: 'W',
       },
@@ -668,6 +695,7 @@ export const SEED_DICTS: Dict[] = [
         id: 'dv-os-3',
         dictId: 'dict-order-status',
         valueKey: '3',
+        propertyName: 'COMPLETED',
         label: '已完成',
         labelType: 'S',
       },
@@ -675,6 +703,7 @@ export const SEED_DICTS: Dict[] = [
         id: 'dv-os-4',
         dictId: 'dict-order-status',
         valueKey: '4',
+        propertyName: 'CANCELLED',
         label: '已取消',
         labelType: 'D',
         comment: '自定义颜色示例',
@@ -688,8 +717,22 @@ export const SEED_DICTS: Dict[] = [
     dictKey: 'mall_status',
     label: '商品状态',
     values: [
-      { id: 'dv-ms-0', dictId: 'dict-mall-status', valueKey: '0', label: '下架', labelType: 'D' },
-      { id: 'dv-ms-1', dictId: 'dict-mall-status', valueKey: '1', label: '上架', labelType: 'S' },
+      {
+        id: 'dv-ms-0',
+        dictId: 'dict-mall-status',
+        valueKey: '0',
+        propertyName: 'OFF_SHELF',
+        label: '下架',
+        labelType: 'D',
+      },
+      {
+        id: 'dv-ms-1',
+        dictId: 'dict-mall-status',
+        valueKey: '1',
+        propertyName: 'ON_SHELF',
+        label: '上架',
+        labelType: 'S',
+      },
     ],
   },
 ]
@@ -1530,23 +1573,19 @@ export const SEED_DICT_CATEGORY_TEMPLATE: CodeTemplate = {
   id: 'tpl-dict-category',
   name: 'dict',
   content: `<%
-  // 分类文件（file）推导产物路径与 Java 包名/类名；模板内可对 fileName/filePath 赋值覆盖
-  const file = String(context.category.file || "").split("\\\\").join("/").replace(/^\\\\/, "");
-  const parts = file.split("/").filter(Boolean);
-  const fileBase = parts.length ? parts[parts.length - 1] : "";
-  const cls = fileBase ? fileBase.replace(/\\.java$/, "") : utils.toCamelCase(context.category.name) + "DictConstants";
-  const dir = parts.slice(0, -1).join("/");
-  let pkg = dir.startsWith("src/main/java/") ? dir.slice("src/main/java/".length).split("/").join(".") : "";
-  if (pkg === "." || !pkg) pkg = "";
+  // 分类属性推导产物路径与 Java 包名/类名：basePackage 基础包路径 + className 大驼峰类名；模板内可对 fileName/filePath 赋值覆盖
+  const pkg = String(context.category.basePackage || "").trim();
+  const cls = String(context.category.className || "").trim() || utils.toCamelCase(context.category.name) + "DictConstants";
+  const pkgPath = pkg ? pkg.split(".").filter(Boolean).join("/") : "";
   context.fileName = cls + ".java";
-  context.filePath = (dir ? dir + "/" : "") + context.fileName;
+  context.filePath = (pkgPath ? "src/main/java/" + pkgPath + "/" : "") + context.fileName;
   context.language = "java";
   const author = (context.settings.author || "").trim();
   const since = utils.nowDateTime();
   const pascal = (s) => utils.toCamelCase(s);
-  // 值键为纯数字时生成 int 常量，否则生成 String 常量；常量名大写蛇形（数字键加 VALUE_ 前缀）
-  const isNumKey = (k) => /^[0-9]+$/.test(String(k));
-  const constName = (k) => isNumKey(k) ? "VALUE_" + k : String(k).replace(/([a-z0-9])([A-Z])/g, "$1_$2").replace(/[^A-Za-z0-9_]/g, "_").toUpperCase();
+  // 常量名：字典值的常量属性名（propertyName，全大写）优先；缺省时由值键推导大写蛇形（数字键加 VALUE_ 前缀）。常量值统一为 String 类型
+  const constName = (k) => /^[0-9]+$/.test(String(k)) ? "VALUE_" + k : String(k).replace(/([a-z0-9])([A-Z])/g, "$1_$2").replace(/[^A-Za-z0-9_]/g, "_").toUpperCase();
+  const nameOf = (v) => String(v.propertyName || "").trim() || constName(v.valueKey);
 %>
 <% if (pkg) { %>package <%= pkg %>;
 <% } %>
@@ -1573,7 +1612,7 @@ public final class <%= cls %> {
     public static final String KEY = "<%= dict.dictKey %>";
 <% for (const v of dict.values) { %>
     /** <%= v.label %><% if (v.comment) { %>：<%= v.comment %><% } %> */
-    public static final <%= isNumKey(v.valueKey) ? "int" : "String" %> <%= constName(v.valueKey) %> = <% if (isNumKey(v.valueKey)) { %><%= v.valueKey %><% } else { %>"<%= v.valueKey %>"<% } %>;
+    public static final String <%= nameOf(v) %> = "<%= v.valueKey %>";
 <% } %>
   }
 <% } %>

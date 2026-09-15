@@ -186,8 +186,8 @@ createApp(() => h(DBManagerView, { api: myApi }))
 
 ### 字典管理
 
-- **字典分类**（与表分类同构）：分类属性为「分类名称 + 分类文件」（分类文件即字典代码生成的默认产物路径，每分类一份）；列表按分类分组展示（组头可折叠，悬停显示编辑/删除按钮），未分类字典归入末尾「未分类」组；分类下仍有字典时拒绝删除
-- 字典（键/标签/注释/所属分类）与字典值（值键/标签/类型/注释/自定义颜色）完整 CRUD
+- **字典分类**（与表分类同构）：分类属性为「分类名称 + 基础包路径 basePackage + 类名称 className」（后两者即字典代码生成的包名/类名依据，类名称强制大驼峰，小驼峰/下划线输入失焦自动转换）；列表按分类分组展示（组头可折叠，悬停显示编辑/删除按钮与默认产物路径），未分类字典归入末尾「未分类」组；分类下仍有字典时拒绝删除
+- 字典（键/标签/注释/所属分类）与字典值（值键/常量属性名/标签/类型/注释/自定义颜色）完整 CRUD；常量属性名（propertyName）为字典代码生成时的常量名，仅允许全大写，小写输入即时自动转大写
 - 值类型 `I/S/W/D` 对应 Info/Success/Warning/Danger 风格色，自定义颜色优先
 - 模糊搜索覆盖字典键、标签、注释及值的键、标签、注释，命中自动跳转并高亮
 - 切换页面后返回时保留选中字典与编辑内容（页面 v-if 卸载重挂后自动恢复）
@@ -196,7 +196,7 @@ createApp(() => h(DBManagerView, { api: myApi }))
 ### 模板管理与代码生成
 
 - **表模板**（每表渲染一次）：模板列表 + 实时编辑预览：左侧模板脚本（Eta 语法高亮编辑器，`<% %> / <%= %> / <%~ %>` 标签与 `<%# %>` 注释区分着色，输入实时同步）、右侧选择目标表实时渲染
-- **字典分类模板**（仅一个，每分类渲染一次）：左侧列表独立分组展示，选中后编辑区切换为字典模板模式（无新增/删除），右侧预览目标改为字典分类（产物含该分类下全部字典与值）；默认种子 `dict` 模板按分类文件生成 Java 字典常量类（`SysDictConstants.java` 等，数字值键生成 `int` 常量、其余生成 `String` 常量）
+- **字典分类模板**（仅一个，每分类渲染一次）：左侧列表独立分组展示，选中后编辑区切换为字典模板模式（无增删），右侧预览目标改为字典分类（产物含该分类下全部字典与值）；默认种子 `dict` 模板按分类属性生成 Java 字典常量类（产物路径 `src/main/java/<基础包路径>/<类名>.java`，如 `SysDictConstants.java`；常量值统一为 `String` 类型，常量名取字典值的常量属性名 propertyName，缺省由值键推导大写蛇形）
 - **代码预览**：选中单表 → 切换模板标签页查看生成代码（highlight.js 高亮、可复制；模板标记丢弃时显示 aborted 提示）
 - **代码生成**：选中分类 / 选中表 / 不选中（全部）→ 弹出模板选择框（默认全选，可勾选本次参与的模板；附「生成字典分类模板代码」开关，默认开启——开启时每个字典分类追加渲染一份字典产物）→ 触发下载 zip（JSZip 按模板内 `filePath` 建目录；表级「启用模板」与模板 `aborted` 一并生效）
 - **代码替换**：同上范围与开关 → 弹出模板选择框 → 确认（含文件清单）→ 经 `ManagerApi.replace(zip)` 上传 zip（结果反馈由 api 实现自行处理）
@@ -204,7 +204,8 @@ createApp(() => h(DBManagerView, { api: myApi }))
 模板内置变量与工具：
 
 ```ts
-interface TableTemplateContext { // 表模板渲染上下文（每表渲染一次）
+interface TableTemplateContext {
+  // 表模板渲染上下文（每表渲染一次）
   templateName: string // 模板名称
   templateContent: string // 模板内容
   result?: string // 生成结果
@@ -243,7 +244,7 @@ Eta 语法：`<% %>` 逻辑、`<%= %>` 输出、`<%# %>` 自定义注释标签�
 | `mapper`      | `mapper/XxxMapper.java`（MapStruct `@Mapper` + 静态单例 `INSTANCE`，`toEntity(XxxAddDTO)` / `toEntity(XxxUpdateDTO)` 按 add/update 选项生成）                                                                                                                                                                                                                                                                      | map-struct            |
 | `service`     | `service/XxxService.java`（接口：`getById`/`add`/`update`/`remove`/`batchRemove` 按表选项生成，`@Nullable`/`@NotNull` 注解）                                                                                                                                                                                                                                                                                       | solon3 + easy-query   |
 | `serviceImpl` | `service/impl/XxxServiceImpl.java`（`@Component` + `@Inject` `EasyQuery`）                                                                                                                                                                                                                                                                                                                                         | solon3 + easy-query   |
-| `controller`  | `controller/XxxController.java`（`@Controller` + `@Mapping("/api/模块/功能")` + `@SaCheckPermission("模块.功能.操作")`——表名按首下划线拆分（`sys_user` → `sys/user`、`sys.user.add`）；`info`/`list`/`add`/`edit`/`del`/`batchDel` 按表选项生成，`list` 查询条件按列选项（`query`）与类型生成——时间列 `rangeClosed`（起止双参数闭区间）、id/关联字典列 `eq` 精准匹配、字符串列 `like` 模糊匹配、其余数值 `eq`）                                                                                                                                                                                      | solon3 + satoken      |
+| `controller`  | `controller/XxxController.java`（`@Controller` + `@Mapping("/api/模块/功能")` + `@SaCheckPermission("模块.功能.操作")`——表名按首下划线拆分（`sys_user` → `sys/user`、`sys.user.add`）；`info`/`list`/`add`/`edit`/`del`/`batchDel` 按表选项生成，`list` 查询条件按列选项（`query`）与类型生成——时间列 `rangeClosed`（起止双参数闭区间）、id/关联字典列 `eq` 精准匹配、字符串列 `like` 模糊匹配、其余数值 `eq`）    | solon3 + satoken      |
 | `vue`         | `views/xxx/Xxx.vue`（`a-table` 列表 + `a-modal` 表单；列表列按列选项 `show`、表单字段按 `add`/`update`、按钮按表选项生成）                                                                                                                                                                                                                                                                                         | antdv-next            |
 | `sql`         | `sql/表名.sql`（utf8mb4 建表 DDL，含索引与主键）                                                                                                                                                                                                                                                                                                                                                                   | MySQL                 |
 | `menuSql`     | `sql/表名_menu.sql`（`sys_menu` 菜单 + 按钮权限按表选项生成，权限码与 Controller 一致）                                                                                                                                                                                                                                                                                                                            | MySQL                 |
@@ -314,20 +315,20 @@ const myApi: ManagerApi = {
 
 全部方法均为**异步契约**（返回 `Promise`，校验失败 reject 中文业务提示），UI 侧统一 `await` 消费，对接真实后端（HTTP / IPC / 文件 IO）时无需再调整调用链路：
 
-| 方法                                                                  | 说明                                                                                                                                                     |
-| --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `getSettings() / saveSettings(settings)`                              | 应用设置读写（索引类型列表 + 列类型映射规则 + 代码生成配置：作者 / 表选项 / 列选项元定义）                                                               |
-| `importFromDB()`                                                      | 从真实数据库读取表结构（含字段与索引，用于导入建模）                                                                                                     |
-| `load()`                                                              | 加载完整模型（分类/表/导航），初次进入与点击「刷新」按钮时使用                                                                                           |
-| `save()`                                                              | 全量保存模型，点击「保存所有」按钮或按 `Ctrl+S` 时调用                                                                                                   |
-| `getCategories() / addCategory / updateCategory / removeCategory`     | 分类 CRUD                                                                                                                                                |
-| `getTables() / addTable / updateTable / removeTable / updateTablePos` | 表 CRUD（含字段与索引；删除表一并删除其字段、索引与关联导航；拖动表卡片结束时用 `updateTablePos` 批量保存位置——`UpdateTablePosDTO`，多表同动仅一次调用） |
-| `getNavigates() / addNavigate / updateNavigate / removeNavigate`      | 导航关系 CRUD                                                                                                                                            |
-| `getDictCategories() / addDictCategory / updateDictCategory / removeDictCategory` | 字典分类 CRUD（分类下仍有字典时删除被拒） |
-| `getDictCategoryTemplate() / updateDictCategoryTemplate`              | 字典分类模板读写（仅一个，每分类渲染一次） |
-| `getDicts() / addDict / updateDict / removeDict`                      | 字典 CRUD（含所属分类 categoryId）                                                                                                                                                |
-| `getTemplates() / addTemplate / updateTemplate / removeTemplate`      | 表模板 CRUD（每表渲染一次）                                                                                                                                            |
-| `replace(zipFile)`                                                    | 上传 zip 产物代码，直接替换对应源码文件（zip 解析为真实异步，失败 reject 由调用方捕获）                                                                  |
+| 方法                                                                              | 说明                                                                                                                                                     |
+| --------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `getSettings() / saveSettings(settings)`                                          | 应用设置读写（索引类型列表 + 列类型映射规则 + 代码生成配置：作者 / 表选项 / 列选项元定义）                                                               |
+| `importFromDB()`                                                                  | 从真实数据库读取表结构（含字段与索引，用于导入建模）                                                                                                     |
+| `load()`                                                                          | 加载完整模型（分类/表/导航），初次进入与点击「刷新」按钮时使用                                                                                           |
+| `save()`                                                                          | 全量保存模型，点击「保存所有」按钮或按 `Ctrl+S` 时调用                                                                                                   |
+| `getCategories() / addCategory / updateCategory / removeCategory`                 | 分类 CRUD                                                                                                                                                |
+| `getTables() / addTable / updateTable / removeTable / updateTablePos`             | 表 CRUD（含字段与索引；删除表一并删除其字段、索引与关联导航；拖动表卡片结束时用 `updateTablePos` 批量保存位置——`UpdateTablePosDTO`，多表同动仅一次调用） |
+| `getNavigates() / addNavigate / updateNavigate / removeNavigate`                  | 导航关系 CRUD                                                                                                                                            |
+| `getDictCategories() / addDictCategory / updateDictCategory / removeDictCategory` | 字典分类 CRUD（分类下仍有字典时删除被拒）                                                                                                                |
+| `getDictCategoryTemplate() / updateDictCategoryTemplate`                          | 字典分类模板读写（仅一个，每分类渲染一次）                                                                                                               |
+| `getDicts() / addDict / updateDict / removeDict`                                  | 字典 CRUD（含所属分类 categoryId）                                                                                                                       |
+| `getTemplates() / addTemplate / updateTemplate / removeTemplate`                  | 表模板 CRUD（每表渲染一次）                                                                                                                              |
+| `replace(zipFile)`                                                                | 上传 zip 产物代码，直接替换对应源码文件（zip 解析为真实异步，失败 reject 由调用方捕获）                                                                  |
 
 > 调用时机约定：应用视图启动即幂等预载 `getSettings()`（设置是编辑器/导入共用的全局配置）与 `load()`；此后各操作按细粒度契约即时调用对应方法。`DBColumn.notNull` 为 demo 扩展字段（真实实现可不提供，缺省视为可空）；`Table.hidden` 随模型数据持久化（隐藏态在刷新/重开后保持）；`resetDemo()` 为 DemoManagerApi 的扩展方法（重置为内置演示数据），正式实现无需提供。
 
