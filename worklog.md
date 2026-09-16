@@ -1036,3 +1036,23 @@ Stage Summary:
 - 11 项需求全链路落地并以 32 项浏览器断言 + VLM 视觉复核闭环；顺带修复「设置页加载即 dirty」历史 bug 与发送/停止图标同色隐形问题
 - 关键决策：① 图标前景专用令牌 --dbm-on-*（主色上文字/图标配色与 primary-text 语义分离）② AI 设置保持独立契约但保存动作统一驱动（defineExpose 暴露草稿态）③ zip 缓存按 callId 索引挂在记录上（会话清理统一 revoke）④ 替换确认经 Promise 挂起融入 AGENT 循环（用户取消作为工具错误回填模型，模型可感知并调整）⑤ markstream 根类与业务类同元素，变量覆盖需复合选择器
 - 沙箱对策沿用 dbm-work 隔离克隆（主仓工作区仍被周期性重置）；bun 安装后需校验 node_modules 完整性（antdv-next 目录缺失致 vite 依赖优化崩溃）
+
+---
+Task ID: 38
+Agent: main (Super Z)
+Task: 丢弃 antdv-next 组件替换任务（还原全部未提交修改）+ 字段表重构为多 table 同步滚动架构（按用户结构说明与九步逻辑流程，评审调整后实现）
+
+Work Log:
+- **任务丢弃**：dbm-work 隔离克隆 `git restore .` 还原 10 个文件的 antdv-next 替换改动（AppHeader segmented/OutlinePanel a-tree/AiView collapse 等全部回滚），回到 6fd399d 干净基线
+- **方案评审**（用户流程九步，8 步合理、2 处调整）：① 单块全覆盖滚动层（inset:0 + z-index 最高）存在致命缺陷——字段表全是输入框/复选框/拖拽手柄，全覆盖层 pointer-events:auto 挡住全部交互、pointer-events:none 则原生滑块不可拖拽 → 调整为两条定向滚动条（横向通栏 + 纵向右侧竖条），仍不承载内容、sizer 公式保留（横条宽=tableWidth、纵条高=内容高）；② sizer 高度用实测表体 scrollHeight 替代 行数×rowH（行高一致时等价、对行高漂移稳健）；③ 窄固定列（32/48px）在列定义显式声明 minWidth，避免默认 80px 下限抬升
+- **新组件 src/components/common/SyncTable.vue**（~430 行）：表头三壳 + 表体三壳六张 table（table-layout:fixed + colgroup 按计算宽度）；.st-scrollbar-h/.st-scrollbar-v 两条专用滚动源（display 按 hBar/vBar 标志切换，纵条绝对定位于表体 padding-right 预留带，横条 margin-right 让位形成原生滚动条角落）；syncScroll 滚动事件统一写入全部壳（表头壳仅横向、表体壳横纵皆同步）+ window scroll 事件广播（antd 弹层不感知 overflow:hidden 壳的程序化滚动）；recalc：ResizeObserver + columns/rowCount watch 触发，读 rootWidth/computed maxHeight/headerH/实测 contentH+padY，横纵滚动条空间互挤以 ≤3 轮迭代收敛 hBar/vBar，distribute 列宽分配（显式宽直接采用且不低于 minWidth、弹性列 minWidth 下限、剩余均分除不尽前几列各多 1px、汇总 leftW/centerW/rightW/tableW 驱动 sizer 与壳宽），nextTick 重发滚动量清理越界 scrollLeft；壳内容 wheel 转发两条滚动条（边界滚不动不 preventDefault 保持冒泡链）；行悬停 hoverIdx 跨三表同步（mouseleave 仅在等于当前 idx 时清除，防相邻触发顺序问题）；dragstart/dragover/drop/dragend 挂三壳行（拖拽目标覆盖整行宽度）；sbW 挂载实测（全局 9px webkit-scrollbar）
+- **TableEditDialog 接入**：fieldColumns 计算列定义（sort/name 左固定、del 右固定、propertyName/type/javaType/notNull/primaryKey/logicDelete/dict/comment 中间 + opt: 前缀动态选项列 + 弹性列 name/propertyName/comment 不指定宽度）；#cell 插槽按 col.key v-if 链分发（draft.columns[idx] 直取行数据）；fieldRowClass/fieldDraggable 桥接 columnDrag（rowClass 按 idx 跨三表一致、draggable 三壳同行一并置位）；删除 colsGridStyle/columnOptionDefs；样式清理：移除 .cols-grid、全部 .columns-head.cols-grid sticky 规则、.cell-pin 系列（含半透明叠层与 7px 遮缝伪元素）、.center-cell，新增 .fields-table :deep(tr.pk-row>td) 与 th.opt-head、移动端 --st-max-h: calc(44vh+36px)；索引/导航 tab 保持原 grid+sticky-header 机制不动
+- **E2E**：task37 重写为 31 断言（六表结构/左壳两列右壳一列/sizer 撑宽/显式列宽 136 精确/弹性列≥minWidth/三区总和=sizer 宽/三表体行高 32 一致/表头表体同列等宽/三壳首行 y 对齐/横向同步（表头+表体 scrollLeft=滚动条、左右壳几何恒定）/elementFromPoint 采样（字段名输入框命中左壳、删除按钮命中右壳）/越界钳制/滚轮转发/添加 8 行后纵向条出现且三体壳 scrollTop 同步表头恒不滚/删除逻辑字段行为链 8 项）全绿；task36 适配新 DOM（.st-head-center th/.st-body-left .st-c-name input/勾选序按左壳行索引对位中间表行）26 断言全绿（多表结构下新增「左右壳不产生横向滚动」）；37b 采样并入 task37 后删除脚本；修复一处断言缺陷（.st-body-center td 拍平所有行致列数比较恒 false → tr:first-child 限定）
+- **验证**：typecheck 通过；vp check --fix 后 69 文件格式与 lint 全绿；bun run build 通过；VLM 视觉复核四截图（桌面亮/暗、窄视口滚动中途、纵向滚动）——列对齐/固定列完整/边界无穿出/配色正常逐条确认
+- **文档**：README 命令表补 task37 行并更新 task36 描述、表编辑机制描述改为多表同步滚动结构、截图小节标题与表头更新、项目结构补 common/SyncTable；check-readme 32 标题通过
+- **提交**：709d071 推送 origin devel（13 files，+1180/-1090）
+
+Stage Summary:
+- 产出：SyncTable.vue（通用多表同步滚动表格组件：columns/rowCount/rowKey/rowClass/draggable props + #cell/#head 插槽 + row-drag* 事件，可复用于其他固定列场景）、TableEditDialog.vue 字段表接入、e2e-task37.sh 重写（31 断言）、e2e-task36.sh 适配（26 断言）、task38-shots.sh 截图脚本、五张新截图
+- 关键决策：① 两条定向滚动条替代单块全覆盖滚动层（交互与拖拽兼得，sizer 公式与「唯一滚动源」意图保留）② 纵条放表体内仅跨表体高（sizer=内容高严格等价，表头本就不纵滚）③ 横条 margin-right 让位纵条同时保证滚动比例与中间壳一致（可视宽同减一条带宽）④ sizer 高度实测而非行数×rowH ⑤ 行级状态（悬停/拖拽/主键）按 idx 跨三表统一驱动 ⑥ 索引表维持原机制（无固定列、改动无收益）
+- 架构收益：固定列与滚动内容分属不同 DOM 树，Task36（sticky 吸附）/37（cell-pin 铺满）/37-b（不透明叠层+遮缝）三轮像素级 hack 的根因类别（透出/透底/高度不齐）从结构上不可能再发生；E2E 以「左右壳 scrollLeft===0 + 几何恒定 + elementFromPoint 采样」直接锁死
