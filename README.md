@@ -19,19 +19,20 @@
 
 ## 技术栈
 
-| 分类      | 选型                                                                                                                               |
-| --------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| 包管理器  | [bun](https://bun.sh)                                                                                                              |
-| 工具链    | [Vite+](https://viteplus.dev)（`vp` 统一 CLI：dev / build / lint / fmt，`vite-plus` 本地包 + `@voidzero-dev/vite-plus-core` 别名） |
-| 前端框架  | Vue 3（Composition API + `<script setup>`）                                                                                        |
-| UI 组件库 | antdv-next                                                                                                                         |
-| 图标库    | @lucide/vue                                                                                                                        |
-| 状态管理  | 组件级状态注入（Vue `reactive` + `provide`/`inject`，无 Pinia 依赖）                                                               |
-| 模板引擎  | Eta（代码生成）                                                                                                                    |
-| 样式      | Sass（scss 标准）                                                                                                                  |
-| 数据能力  | ManagerApi 接口体系（内置 DemoManagerApi 演示实现，可注入自定义实现）                                                              |
-| 代码高亮  | highlight.js + highlights-eta（Eta 模板语法）                                                                                      |
-| 打包下载  | JSZip                                                                                                                              |
+| 分类      | 选型                                                                                                                                                              |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 包管理器  | [bun](https://bun.sh)                                                                                                                                             |
+| 工具链    | [Vite+](https://viteplus.dev)（`vp` 统一 CLI：dev / build / lint / fmt，`vite-plus` 本地包 + `@voidzero-dev/vite-plus-core` 别名）                                |
+| 前端框架  | Vue 3（Composition API + `<script setup>`）                                                                                                                       |
+| UI 组件库 | antdv-next                                                                                                                                                        |
+| 图标库    | @lucide/vue                                                                                                                                                       |
+| 状态管理  | 组件级状态注入（Vue `reactive` + `provide`/`inject`，无 Pinia 依赖）                                                                                              |
+| 模板引擎  | Eta（代码生成）                                                                                                                                                   |
+| 样式      | Sass（scss 标准）                                                                                                                                                 |
+| 数据能力  | ManagerApi 接口体系（内置 DemoManagerApi 演示实现，可注入自定义实现）                                                                                             |
+| AI 内核   | [@earendil-works/pi-agent-core](https://github.com/earendil-works/pi) Agent 运行循环（注入式 StreamFn 复用内置 openai compatible SSE 客户端，浏览器零 Node 依赖） |
+| 代码高亮  | highlight.js + highlights-eta（Eta 模板语法）                                                                                                                     |
+| 打包下载  | JSZip                                                                                                                                                             |
 
 > 页面切换不使用 `vue-router`，通过 `v-if` 状态管理（见 `src/stores/ui.ts`）。
 
@@ -70,40 +71,42 @@ bun run dev
 
 ### 常用命令速查
 
-| 命令                              | 说明                                                                                                                                             |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `bun run dev`（= `vp dev`）       | 启动开发服务器（localhost:3000，热更新）                                                                                                         |
-| `bun run build`（= `vp build`）   | 库构建：产出 `dist/DBManager.js` + `dist/DBManager.d.ts` 两个文件（CSS 已内联进 JS，详见[库构建与宿主接入](#库构建与宿主接入)）                  |
-| `bun run build:pages`             | Pages 演示站构建：应用模式产出 `dist/`（index.html + assets，相对路径 base，见[GitHub Pages 自动发布](#github-pages-自动发布)）                  |
-| `bun run preview`                 | 本地预览生产构建                                                                                                                                 |
-| `bun run typecheck`               | 全量类型检查（`vue-tsc --noEmit`）                                                                                                               |
-| `vp check`                        | Vite+ 内置：格式 + lint + 类型检查（staged 提交时自动执行）                                                                                      |
-| `vp install`                      | 安装依赖                                                                                                                                         |
-| `bun scripts/eta-smoke.mjs`       | Eta 模板引擎 API 冒烟测试（模板功能改动前的快速回归）                                                                                            |
-| `node scripts/ai-sse-mock.mjs`    | AI E2E 模拟服务（openai compatible SSE，脚本化三轮 AGENT 对话：代码生成 → 代码替换 → Markdown 总结；配合 `AI_MOCK_PROXY=1 vp dev` 同源代理使用） |
-| `bash scripts/e2e-task35.sh`      | AI 工具与设置页全流程 E2E（32 项断言：设置导航/统一保存、AGENT 三轮对话、zip 下载、替换确认、markstream 渲染、双主题）                           |
-| `bash scripts/e2e-task36.sh`      | 字段约定与表编辑 E2E（26 项断言：逻辑删除约定设置/持久化、一键添加、勾选互斥转移、左右固定列同步滚动）                                           |
-| `bash scripts/e2e-task37.sh`      | 字段表多表同步滚动架构 E2E（31 项断言：六表结构/列宽分配/行高与列宽对齐约束/横纵滚动同步/滚轮转发/elementFromPoint 采样/删除逻辑字段）           |
-| `bash scripts/e2e-task39.sh`      | 思考块滚动跟随 E2E（12 项断言：贴底自动跟随/上翻停跟/回底恢复/完成收起/重开贴底）                                                                |
-| `bash scripts/e2e-task40.sh`      | token 用量统计与能力记录 E2E（20 项断言：上下文占用/问答花费/实时速度/refresh 能力/记录清空）                                                    |
-| `bash scripts/e2e-task41.sh`      | AI 工具八项增强 E2E（32 项断言：选中样式/85% 自动压缩/轮数上限/思考块铺满与高频贴底/技能加载/任务清单四态与暂停注入/建议列表）                   |
-| `bash scripts/e2e-task42.sh`      | 全局规则默认文本 E2E（13 项断言：新库默认/清空恢复默认/保存持久化/旧库空值不被覆盖/默认规则流入系统提示）                                        |
-| `python3 scripts/check-readme.py` | README 链接 / 锚点 / 表格自检                                                                                                                    |
-| `bash scripts/package.sh`         | 打包源码为交付 zip（`download/graph-db-model-editor.zip`，含 skills/DBManager 技能文档）                                                         |
+| 命令                              | 说明                                                                                                                                               |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bun run dev`（= `vp dev`）       | 启动开发服务器（localhost:3000，热更新）                                                                                                           |
+| `bun run build`（= `vp build`）   | 库构建：产出 `dist/DBManager.js` + `dist/DBManager.d.ts` 两个文件（CSS 已内联进 JS，详见[库构建与宿主接入](#库构建与宿主接入)）                    |
+| `bun run build:pages`             | Pages 演示站构建：应用模式产出 `dist/`（index.html + assets，相对路径 base，见[GitHub Pages 自动发布](#github-pages-自动发布)）                    |
+| `bun run preview`                 | 本地预览生产构建                                                                                                                                   |
+| `bun run typecheck`               | 全量类型检查（`vue-tsc --noEmit`）                                                                                                                 |
+| `vp check`                        | Vite+ 内置：格式 + lint + 类型检查（staged 提交时自动执行）                                                                                        |
+| `vp install`                      | 安装依赖                                                                                                                                           |
+| `bun scripts/eta-smoke.mjs`       | Eta 模板引擎 API 冒烟测试（模板功能改动前的快速回归）                                                                                              |
+| `node scripts/ai-sse-mock.mjs`    | AI E2E 模拟服务（openai compatible SSE，脚本化三轮 AGENT 对话：代码生成 → 代码替换 → Markdown 总结；配合 `AI_MOCK_PROXY=1 vp dev` 同源代理使用）   |
+| `bash scripts/e2e-task35.sh`      | AI 工具与设置页全流程 E2E（32 项断言：设置导航/统一保存、AGENT 三轮对话、zip 下载、替换确认、markstream 渲染、双主题）                             |
+| `bash scripts/e2e-task36.sh`      | 字段约定与表编辑 E2E（26 项断言：逻辑删除约定设置/持久化、一键添加、勾选互斥转移、左右固定列同步滚动）                                             |
+| `bash scripts/e2e-task37.sh`      | 字段表多表同步滚动架构 E2E（31 项断言：六表结构/列宽分配/行高与列宽对齐约束/横纵滚动同步/滚轮转发/elementFromPoint 采样/删除逻辑字段）             |
+| `bash scripts/e2e-task39.sh`      | 思考块滚动跟随 E2E（12 项断言：贴底自动跟随/上翻停跟/回底恢复/完成收起/重开贴底）                                                                  |
+| `bash scripts/e2e-task40.sh`      | token 用量统计与能力记录 E2E（20 项断言：上下文占用/问答花费/实时速度/refresh 能力/记录清空）                                                      |
+| `bash scripts/e2e-task41.sh`      | AI 工具八项增强 E2E（32 项断言：选中样式/85% 自动压缩/轮数上限/思考块铺满与高频贴底/技能加载/任务清单四态与暂停注入/建议列表）                     |
+| `bash scripts/e2e-task42.sh`      | 全局规则默认文本 E2E（13 项断言：新库默认/清空恢复默认/保存持久化/旧库空值不被覆盖/默认规则流入系统提示）                                          |
+| `bash scripts/e2e-task43.sh`      | pi-agent-core 内核专项 E2E（21 项断言：系统提示与 37 工具流入/历史回放种子/typebox 参数校验失败重试/api 中文错误前缀回填/同轮双工具串行/会话统计） |
+| `python3 scripts/check-readme.py` | README 链接 / 锚点 / 表格自检                                                                                                                      |
+| `bash scripts/package.sh`         | 打包源码为交付 zip（`download/graph-db-model-editor.zip`，含 skills/DBManager 技能文档）                                                           |
 
 ## 库构建与宿主接入
 
 本项目既是可运行的演示应用（`vp dev`），也是一个**可发布的组件库**：`bun run build` 执行库模式构建，最终产物仅两个文件——
 
-| 产物                  | 内容                                                                                                        |
-| --------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `dist/DBManager.js`   | ES 模块单文件（约 420 KB）：DBManagerView 组件 + 全部状态/工具/演示实现，CSS 已内联（运行时注入 `<style>`） |
-| `dist/DBManager.d.ts` | 滚动合并的类型声明：`DBManagerView` 组件类型 + `ManagerApi` 接口与全部 DTO/VO 类型                          |
+| 产物                  | 内容                                                                                                                                               |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dist/DBManager.js`   | ES 模块单文件（约 2.1 MB，gzip 约 575 KB）：DBManagerView 组件 + 全部状态/工具/演示实现 + pi-agent-core 运行时，CSS 已内联（运行时注入 `<style>`） |
+| `dist/DBManager.d.ts` | 滚动合并的类型声明：`DBManagerView` 组件类型 + `ManagerApi` 接口与全部 DTO/VO 类型                                                                 |
 
 构建配置要点（`vite.config.ts`）：
 
 - **外部依赖**（peerDependencies，由宿主项目提供，不打包进产物）：`vue` / `antdv-next` / `@lucide/vue`
-- 其余依赖（eta / highlight.js / jszip / markstream-vue 等）与全部应用代码、组件 scoped 样式、全局样式一并打进 `DBManager.js`
+- 其余依赖（eta / highlight.js / jszip / markstream-vue / pi-agent-core 及其运行时等）与全部应用代码、组件 scoped 样式、全局样式一并打进 `DBManager.js`
+- **动态 import 内联**（`output.inlineDynamicImports`）：markstream-vue 的可选能力（katex / mermaid / mhchem / d2）经 `defineAsyncComponent` 懒加载，不内联会被拆成额外 chunk、与「仅两个交付文件」的库契约冲突（白名单清理会误删被引用 chunk 导致产物损坏）
 - 类型经 `vite-plugin-dts`（`bundleTypes`，底层 api-extractor）由 `src/index.ts` 滚动合并为单一声明文件
 - CSS 内联由 `scripts/inline-lib-css.mjs` 在 `vp build` 后完成（rolldown 底座下 `vite-plugin-lib-inject-css` 不生效，脚本等效替代并做产物白名单清理）
 
@@ -275,7 +278,8 @@ Eta 语法：`<% %>` 逻辑、`<%= %>` 输出、`<%# %>` 自定义注释标签�
 
 顶栏「AI 工具」进入 AGENT 对话界面，用自然语言直接操作模型数据与代码生成：
 
-- **能力装载**：自动将 ManagerApi 全部能力（去除 AI 设置与 chatComplete 两项；`replace` 为 zip 二进制参数不可 JSON 化，由「代码替换」工具承担）+ 代码生成 + 代码替换 + 技能加载（`loadSkill`）注册为可调用工具（openai function calling 标准），按「流式输出 → 工具调用 → 结果回填 → 继续生成」循环直至最终回答（轮数上限为 AI 设置项，默认 50，范围 1-500，防失控）
+- **能力装载**：自动将 ManagerApi 全部能力（去除 AI 设置与 chatComplete 两项；`replace` 为 zip 二进制参数不可 JSON 化，由「代码替换」工具承担）+ 代码生成 + 代码替换 + 技能加载（`loadSkill`）注册为可调用工具，按「流式输出 → 工具调用 → 结果回填 → 继续生成」循环直至最终回答（轮数上限为 AI 设置项，默认 50，范围 1-500，防失控）
+- **AGENT 运行内核（pi-agent-core）**：「模型流式 → 工具调用 → 结果回填 → 继续生成」循环由 [`@earendil-works/pi-agent-core`](https://github.com/earendil-works/pi) 的 `Agent` 驱动（`src/ai/pi-agent.ts` 适配层）：网络层注入自定义 `StreamFn`——把既有 openai compatible SSE 客户端（鉴权、CORS、错误文案不变）翻译为 pi AssistantMessageEvent 事件协议，pi 自带的 openai/anthropic/google SDK 为 Node 端懒加载实现、浏览器不可用，注入式 StreamFn 是官方推荐的接入方式；工具注册表经 typebox `Type.Unsafe` 零改造包原始 JSON Schema（入参先经 pi 校验与类型矫正，缺必填参数转英文 `Validation failed` 错误结果回填重试，执行失败加「工具执行失败：」前缀回填）；会话历史（含 compact 边界）每次发送重建为 pi transcript 种子，事件流（message_update / tool_execution / turn_end）镜像到界面会话态；同轮多工具串行执行；agent-core 主入口静态闭包 103 文件零 Node 依赖、零 provider SDK，浏览器打包零 stub 直接可用
 - **默认规则**：系统提示内置任务执行流程（① 读取最新设置与数据作为任务上下文参考，修改任何元素前先读取其当前值，避免给予脏数据执行任务；② 有不明确之处先提供可选项让用户选择；③ 复杂任务先创建分步任务计划并按模板汇报，涉及特定领域先加载对应技能；④ 按计划执行；⑤ 按需校验执行结果）与必须遵守的规则（树形表不自关联导航而用 `parentIdColumn`；每表开头必须主键 id 字段；按需添加审计字段/逻辑删除字段（每表至多一个）/索引；字段尽量非空；按需关联字典；字典值键不用数字而用代表含义的首字母大写）
 - **全局规则**：AI 设置中的全局规则非空时附加在系统提示中（优先级最高）；新库默认带任务流程约定文本（`src/ai/defaults.ts`，设置页可一键恢复默认，旧库已保存值含主动清空不受影响）
 - **内置技能库**：六个领域技能（`table-design` 表结构设计 / `navigate` 导航关系 / `dict` 字典设计 / `codegen` 代码生成与替换 / `import-db` 数据库导入 / `canvas-layout` 画布布局），按「部分」组织（如主键与约定字段、级联策略选择）；模型通过 `loadSkill(skill, parts?)` 工具按需加载（单独占用一轮工具调用，只加载相关部分可节省上下文）；聊天区与右侧记录以独立蓝色书本样式展示加载了哪个技能的哪些部分
@@ -429,6 +433,7 @@ Logger.setLevel('INFO') // 或 Logger.level = 'INFO' / Logger.getLevel()
    ├─ composables/         # useDragSort 行拖拽排序（字段/设置规则共用）
    ├─ log/                 # 统一日志器 Logger（级别过滤：DEBUG/INFO/WARN/ERROR/FATAL/DISABLED）
    ├─ mock/                # 种子数据 + demo 内存数据库（localStorage 持久化）
+   ├─ ai/                  # AI 内核：pi-agent.ts（pi-agent-core 适配层：StreamFn/工具转换/种子重建）+ defaults.ts（默认全局规则）+ skills.ts（内置技能库）
    ├─ stores/              # 状态注入体系：context（工厂+provide/inject）+ model / canvas / dict / template / theme / ui / history / settings / ai 九个 reactive 仓库
    ├─ types/               # 数据模型类型（含 ManagerApi 契约，与规格说明书一致）
    ├─ utils/               # 字符串 / Java 类型映射 / 导航推导 / 几何 / 力导向布局 / Eta 渲染 / 高亮
@@ -546,6 +551,12 @@ AI 工具（AGENT 对话 + 调用记录，markstream 流式 Markdown；右下角
 | ------------------------------------------------------ |
 | ![AI 工具暗](docs/screenshots/task35-ai-chat-dark.png) |
 
+pi-agent-core 内核专项验证（参数校验失败重试 / api 错误前缀回填 / 同轮双工具串行执行，见 `scripts/e2e-task43.sh`）：
+
+| AI 工具 · pi 内核专项（校验失败重试与错误回填）       |
+| ----------------------------------------------------- |
+| ![pi 内核](docs/screenshots/task43-pi-agent-core.png) |
+
 AI 供应商与模型列表配置（系统设置页「AI（openai compatible）」区块，随底部「保存设置」统一保存；左侧分区导航平滑滚动定位）：
 
 | 设置页 · 分区导航与固定保存条                         | 系统设置 · AI（供应商 / 模型列表 / 全局规则）       |
@@ -557,6 +568,12 @@ AI 供应商与模型列表配置（系统设置页「AI（openai compatible）�
 | 库产物直连宿主加载                               |
 | ------------------------------------------------ |
 | ![宿主冒烟](docs/screenshots/host-smoke-lib.png) |
+
+接入 pi-agent-core 内核后的库产物宿主冒烟（单文件内嵌 Agent 运行时，`test/host-pi-smoke.html`）：
+
+| 库产物（含 AI 内核）宿主加载                              |
+| --------------------------------------------------------- |
+| ![宿主冒烟 pi](docs/screenshots/host-pi-bundle-smoke.png) |
 
 对照：同一组件在演示应用中的完整形态——
 

@@ -25,6 +25,7 @@
     "prepare": "vp config"
   },
   "dependencies": {
+    "@earendil-works/pi-agent-core": "0.85.1",
     "eta": "^4.6.0",
     "highlight.js": "^11.12.0",
     "highlightjs-eta": "^0.1.0",

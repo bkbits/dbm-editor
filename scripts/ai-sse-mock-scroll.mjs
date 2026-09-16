@@ -120,20 +120,34 @@ const server = http.createServer((req, res) => {
       return
     }
 
-    /* ---------- 压缩后的主请求（最后一条 user 为压缩标记消息——仅紧随压缩的续聊轮次） ---------- */
-    if (lastUserText.includes('【上下文压缩】')) {
-      sse(
-        res,
-        [
-          delta({ role: 'assistant' }),
-          delta({ content: '已基于压缩摘要继续任务，全部完成。' }),
-          finish('stop'),
-          usageChunk(420, 40, 460),
-        ],
-        40,
-        () => console.log('ock-scroll] after-compact final done'),
-      )
-      return
+    /* ---------- 压缩后的主请求（仅紧随压缩的轮次命中；后续请求历史里始终带摘要，不能误判）。
+    旧内核压缩重建会吞掉当轮新用户消息（请求仅 [system, 摘要]）；pi-agent-core 内核
+    在摘要基座之上保留当轮新问题（[system, 摘要, 新问题]），模型可同时看到两者 ---------- */
+    if (parsed.messages) {
+      const msgs = parsed.messages
+      const lastMsg = msgs[msgs.length - 1]
+      const isCompactSummary = (m) =>
+        !!m && m.role === 'user' && String(m.content || '').includes('【上下文压缩】')
+      // 末条为新问题且其前一条为摘要 → 发送前压缩后的首请求
+      // 末条即摘要且紧随 system → 轮边界压缩后的续聊轮请求
+      const isAfterCompact =
+        lastMsg && lastMsg.role === 'user'
+          ? isCompactSummary(msgs[msgs.length - 2])
+          : msgs.length === 2 && msgs[0]?.role === 'system' && isCompactSummary(msgs[1])
+      if (isAfterCompact) {
+        sse(
+          res,
+          [
+            delta({ role: 'assistant' }),
+            delta({ content: '已基于压缩摘要继续任务，全部完成。' }),
+            finish('stop'),
+            usageChunk(420, 40, 460),
+          ],
+          40,
+          () => console.log('ock-scroll] after-compact final done'),
+        )
+        return
+      }
     }
 
     const wantsRefresh = userBase.includes('刷新')

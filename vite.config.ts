@@ -83,6 +83,13 @@ export default defineConfig({
     },
     rollupOptions: {
       external: (id: string) => EXTERNAL_RE.test(id),
+      // 动态 import 一并内联进单文件产物：markstream-vue 的可选能力
+      // （katex / mermaid / mhchem / d2）经 defineAsyncComponent 懒加载，
+      // 不内联会被拆成额外 chunk，与「仅 DBManager.js + .d.ts 两个交付文件」
+      // 的库契约冲突（白名单清理会误删被引用 chunk 导致产物损坏）
+      output: {
+        inlineDynamicImports: true,
+      },
     },
     chunkSizeWarningLimit: 1500,
     // 库产物不拷贝 public 目录（favicon 等属于演示应用资源）

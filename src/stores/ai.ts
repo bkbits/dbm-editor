@@ -1,13 +1,16 @@
 /**
  * AI 仓库：AI 设置（openai compatible 供应商 / 模型列表 / 全局规则）加载保存
- * + AI 工具（AGENT 模式）会话状态与运行循环
+ * + AI 工具（AGENT 模式）会话状态与运行编排
  * （reactive 对象工厂形态，由 DBManagerView 经上下文注入，不依赖 Pinia）
  *
- * AGENT 运行方式：自动将 ManagerApi 全部能力（去除 AI 设置与 chatComplete 两项）
- * + 代码生成 + 代码替换注册为可调用工具（openai function calling 标准），
- * 全局规则非空时附加在系统提示中；按「模型流式输出 → 工具调用 → 结果回填 →
- * 继续生成」循环直至产出最终回答（轮数上限防失控）。工具对模型仓库等数据的
- * 改动在会话结束后按域同步刷新，保证画布 / 字典 / 模板 / 设置页与数据一致。
+ * AGENT 运行内核：接入 @earendil-works/pi-agent-core 的 Agent 运行循环
+ * （src/ai/pi-agent.ts 适配层：StreamFn 流式协议翻译 + 工具注册表转换 +
+ * 会话历史种子重建）。自动将 ManagerApi 全部能力（去除 AI 设置与 chatComplete
+ * 两项）+ 代码生成 + 代码替换注册为可调用工具，全局规则非空时附加在系统提示
+ * 中；「模型流式输出 → 工具调用 → 结果回填 → 继续生成」循环由 Agent 驱动，
+ * 经 subscribe 事件镜像到界面会话态（消息流式/工具记录/任务清单/token 统计），
+ * 轮数上限防失控。工具对模型仓库等数据的改动在会话结束后按域同步刷新，
+ * 保证画布 / 字典 / 模板 / 设置页与数据一致。
  */
 import { reactive } from 'vue'
 import { message } from 'antdv-next'
@@ -15,8 +18,6 @@ import { useDBManagerContext } from './context'
 import type {
   AiModelConfig,
   AiSettings,
-  ChatMessage,
-  ChatToolCall,
   ChatToolSpec,
   ManagerApi,
   UpdateTablePosDTO,
@@ -24,6 +25,20 @@ import type {
 import { errorMessageOf } from '@/api/manager-api'
 import { DEFAULT_MAX_TOOL_ROUNDS } from '@/api/demo-manager-api'
 import { SKILLS, findSkill, skillNames } from '@/ai/skills'
+import {
+  Agent,
+  createChatStreamFn,
+  piModelOf,
+  piThinkingLevelOf,
+  seedMessagesOf,
+  serializeMessagesForCompact,
+  textOf,
+  thinkingOf,
+  toPiTools,
+  toolCallsOf,
+} from '@/ai/pi-agent'
+import type { AgentEvent } from '@/ai/pi-agent'
+import type { Message } from '@earendil-works/pi-ai'
 import { uid } from '@/utils/id'
 import type { DictStore } from './dict'
 import type { ModelStore } from './model'
@@ -514,9 +529,6 @@ ${rules}`
 
 /* ==================== 结果文本辅助 ==================== */
 
-/** 工具结果回填模型的上限（超限截断，避免撑爆上下文） */
-const MODEL_RESULT_CAP = 48000
-
 function prettyJson(value: unknown): string {
   if (value === undefined) return '(void)'
   try {
@@ -526,34 +538,12 @@ function prettyJson(value: unknown): string {
   }
 }
 
-function capForModel(text: string): string {
-  return text.length > MODEL_RESULT_CAP
-    ? `${text.slice(0, MODEL_RESULT_CAP)}\n…（结果过长已截断，共 ${text.length} 字符）`
-    : text
-}
-
-/** JSON 解析（空文本回退空对象；非法 JSON 抛错） */
-function safeParseJson(text: string): Record<string, unknown> {
-  const raw = String(text ?? '').trim()
-  if (!raw) return {}
-  const parsed = JSON.parse(raw) as unknown
-  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed))
-    return { value: parsed }
-  return parsed as Record<string, unknown>
-}
-
 /* ==================== 上下文自动压缩（compact） ==================== */
 
 /** 触发阈值：已用上下文占模型输入上下文长度的比例 */
 const COMPACT_RATIO = 0.85
 /** 压缩后至少新增 N 条消息才允许再次压缩（防止对摘要反复压缩） */
 const COMPACT_MIN_NEW_MSGS = 4
-/** 压缩请求中单条消息的序列化上限（字符） */
-const COMPACT_MSG_CAP = 4000
-/** 压缩请求中工具结果的上限（字符，比普通消息短） */
-const COMPACT_TOOL_CAP = 1200
-/** 压缩请求序列化总上限（字符，超出从中间截断保留头尾） */
-const COMPACT_TOTAL_CAP = 36000
 
 /** 压缩请求的系统提示 */
 const COMPACT_SYSTEM_PROMPT = `你是「图形数据库模型编辑工具」AI 助手的上下文压缩器。请将下面的任务对话历史压缩为一份结构化摘要，必须保留：
@@ -563,44 +553,6 @@ const COMPACT_SYSTEM_PROMPT = `你是「图形数据库模型编辑工具」AI �
 4. 工具调用中有价值的信息（查询到的关键数据、错误与修正过程）
 5. 任务清单的最新状态（各任务及状态）与未完成的事项、下一步计划
 输出摘要正文（简洁的条目式 markdown），不要输出任何解释或前后缀。`
-
-/** 压缩后回填给模型的用户消息（作为后续对话的上下文基座） */
-function compactUserContent(summary: string): string {
-  return `【上下文压缩】此前对话已自动压缩为以下摘要，请基于摘要继续完成当前任务（无需向用户复述摘要）：\n\n${summary}`
-}
-
-/** 截断到指定字符数（超限截断并标注总长） */
-function capCompact(text: string, cap: number): string {
-  const t = String(text ?? '')
-  return t.length > cap ? `${t.slice(0, cap)}\n…（过长已截断，共 ${t.length} 字符）` : t
-}
-
-/** 将模型消息序列序列列化为压缩请求的输入文本（跳过系统提示） */
-function serializeForCompact(msgs: ChatMessage[]): string {
-  const parts: string[] = []
-  for (const m of msgs) {
-    if (m.role === 'system') continue
-    if (m.role === 'user') {
-      parts.push(`【用户】\n${capCompact(m.content || '', COMPACT_MSG_CAP)}`)
-    } else if (m.role === 'assistant') {
-      const names = m.toolCalls?.length
-        ? `\n（调用工具：${m.toolCalls.map((t) => t.function.name).join('、')}）`
-        : ''
-      parts.push(`【助手】\n${capCompact(m.content || '（无正文）', COMPACT_MSG_CAP)}${names}`)
-    } else if (m.role === 'tool') {
-      parts.push(
-        `【工具结果 ${m.toolCallId ?? ''}】\n${capCompact(m.content || '', COMPACT_TOOL_CAP)}`,
-      )
-    }
-  }
-  let joined = parts.join('\n\n')
-  if (joined.length > COMPACT_TOTAL_CAP) {
-    const head = Math.floor(COMPACT_TOTAL_CAP * 0.25)
-    const tail = COMPACT_TOTAL_CAP - head
-    joined = `${joined.slice(0, head)}\n\n…（中间部分省略）\n\n${joined.slice(-tail)}`
-  }
-  return joined
-}
 
 /**
  * 构建 AGENT 工具注册表：ManagerApi 全部能力（去除 AI 设置与 chatComplete；
@@ -1084,6 +1036,8 @@ function buildAgentTools(deps: AiDeps, hooks: AgentHooks): AgentTool[] {
 export function createAiStore(deps: AiDeps) {
   /** 在途加载 Promise：并发调用方共享同一次加载；失败可重试 */
   let initInFlight: Promise<void> | null = null
+  /** 当前运行中的 pi Agent 实例（闭包持有，不进 reactive——避免深度代理其内部状态） */
+  let activeAgent: InstanceType<typeof Agent> | null = null
   return reactive({
     loaded: false,
     loading: false,
@@ -1187,10 +1141,11 @@ export function createAiStore(deps: AiDeps) {
 
     /* ---------- 会话操作 ---------- */
 
-    /** 中止当前生成（流式请求 abort，消息标记为已中止；待确认的替换一并取消） */
+    /** 中止当前生成（Agent 循环与流式请求一并 abort，消息标记为已中止；待确认的替换一并取消） */
     stop() {
       this.resolveReplace(false)
       this.abortController?.abort()
+      activeAgent?.abort()
     },
 
     /** 开启新会话（清空消息、调用记录与任务清单，释放 zip 缓存；不影响模型选择） */
@@ -1342,81 +1297,47 @@ export function createAiStore(deps: AiDeps) {
       this.currentSpeedTokSec = 0
       /** 粗略 token 估算（中文 ~2 字符/token；仅流式期间的瞬时展示，轮末以真实 usage 覆盖） */
       const estTokens = (chars: number) => Math.max(1, Math.round(chars / 2))
-      let roundFirstDeltaAt = 0 // 本轮首个增量到达时刻（0 = 尚无输出）
-      let roundDeltaChars = 0 // 本轮增量字符数（正文 + 思考）
-      let roundBaseTotal = this.contextUsed // 本轮开始时的上下文基准（流式期间估算叠加）
+      let turnFirstDeltaAt = 0 // 本轮首个增量到达时刻（0 = 尚无输出）
+      let turnDeltaChars = 0 // 本轮增量字符数（正文 + 思考）
+      let turnBaseTotal = this.contextUsed // 本轮开始时的上下文基准（流式期间估算叠加）
+      let turnStartAt = Date.now() // 本轮请求发起时刻（速度兜底基准）
       const speedTicker = window.setInterval(() => {
-        if (!roundFirstDeltaAt) return
-        const elapsed = (Date.now() - roundFirstDeltaAt) / 1000
-        if (elapsed > 0) this.currentSpeedTokSec = estTokens(roundDeltaChars) / elapsed
+        if (!turnFirstDeltaAt) return
+        const elapsed = (Date.now() - turnFirstDeltaAt) / 1000
+        if (elapsed > 0) this.currentSpeedTokSec = estTokens(turnDeltaChars) / elapsed
       }, 500)
 
       const sysPrompt = buildSystemPrompt(this.aiSettings.globalRules || '')
+      const piModel = piModelOf(model)
 
-      /**
-       * 重建 openai 形态消息序列：系统提示 + 会话历史（跳过失败/中止消息）。
-       * compact 标记消息为界：之前的消息已被压缩为摘要，序列重置为 [系统, 摘要] 再继续累积。
-       * 返回上次压缩后累积的消息数（compact 再触发频率下限）。
-       */
-      const rebuildChatMsgs = (): number => {
-        const msgs: ChatMessage[] = [{ role: 'system', content: sysPrompt }]
-        let sinceCompact = 0
+      /* ---------- 上下文自动压缩（compact）---------- */
+
+      /** 界面历史自最近 compact 标记起累积的消息数（compact 再触发频率下限） */
+      const countSinceCompact = (): number => {
+        let since = 0
         for (const m of this.messages) {
           if (m.compact) {
-            // 压缩边界：丢弃之前累积，以摘要用户消息为基座
-            msgs.length = 1
-            msgs.push({ role: 'user', content: compactUserContent(m.compact.summary) })
-            sinceCompact = 0
+            since = 0
             continue
           }
-          if (m.role === 'user') {
-            msgs.push({ role: 'user', content: m.modelContent || m.content })
-            sinceCompact += 1
-          } else if (
+          if (m.role === 'user') since += 1
+          else if (
             m.role === 'assistant' &&
             m.status === 'done' &&
             (m.content || m.toolCalls?.length)
-          ) {
-            msgs.push({
-              role: 'assistant',
-              content: m.content || null,
-              ...(m.toolCalls?.length
-                ? {
-                    toolCalls: m.toolCalls.map((t) => ({
-                      id: t.id,
-                      type: 'function' as const,
-                      function: { name: t.name, arguments: t.args || '{}' },
-                    })),
-                  }
-                : {}),
-            })
-            sinceCompact += 1
-            for (const tc of m.toolCalls || []) {
-              const rec = this.toolRecords.find((r) => r.callId === tc.id)
-              msgs.push({
-                role: 'tool',
-                toolCallId: tc.id,
-                content: rec
-                  ? rec.status === 'error'
-                    ? `工具执行失败：${rec.resultText}`
-                    : capForModel(rec.resultText)
-                  : '（无执行记录）',
-              })
-              sinceCompact += 1
-            }
-          }
+          )
+            since += 1 + (m.toolCalls?.length ?? 0)
         }
-        chatMsgs.length = 0
-        chatMsgs.push(...msgs)
-        return sinceCompact
+        return since
       }
-      const chatMsgs: ChatMessage[] = []
-      let msgsSinceCompact = rebuildChatMsgs()
+      let msgsSinceCompact = countSinceCompact()
 
-      /** 上下文自动压缩：序列化历史 → 压缩请求 → compact 标记消息 + 重建序列 */
-      const runCompact = async (): Promise<void> => {
-        const serialized = serializeForCompact(chatMsgs)
-        if (!serialized) return
+      /** 压缩执行：序列化消息 → 压缩请求 → compact 标记消息入界面历史（事实源同步） */
+      const runCompact = async (
+        messages: ReadonlyArray<Message | { role: string }>,
+      ): Promise<boolean> => {
+        const serialized = serializeMessagesForCompact(messages)
+        if (!serialized) return false
         const res = await deps.getApi().chatComplete({
           model: model.id,
           messages: [
@@ -1426,7 +1347,7 @@ export function createAiStore(deps: AiDeps) {
           signal: controller.signal,
         })
         const summary = String(res.content || '').trim()
-        if (!summary) return
+        if (!summary) return false
         this.messages.push(
           reactive({
             id: uid('ai-'),
@@ -1437,160 +1358,223 @@ export function createAiStore(deps: AiDeps) {
             compact: { summary },
           }),
         )
-        msgsSinceCompact = rebuildChatMsgs()
+        msgsSinceCompact = 0
+        return true
       }
 
-      /** 轮边界压缩触发：占用 ≥ 85% 且压缩后已有足够新消息（防对摘要反复压缩） */
-      const maybeCompact = async (): Promise<void> => {
-        const limit = model.inputContextLength ?? 0
-        if (limit <= 0 || this.contextUsed <= 0) return
-        if (this.contextUsed / limit < COMPACT_RATIO) return
-        if (msgsSinceCompact < COMPACT_MIN_NEW_MSGS) return
-        try {
-          await runCompact()
-        } catch (e) {
-          if (controller.signal.aborted || (e as Error)?.name === 'AbortError') throw e
-          // 压缩失败不阻断会话：继续用完整历史
-          console.warn('[ai] 上下文自动压缩失败', e)
-        }
+      /** 压缩触发条件：占用 ≥ 85% 且距上次压缩有足够新消息（防对摘要反复压缩） */
+      const shouldCompact = (): boolean =>
+        piModel.contextWindow > 0 &&
+        this.contextUsed > 0 &&
+        this.contextUsed / piModel.contextWindow >= COMPACT_RATIO &&
+        msgsSinceCompact >= COMPACT_MIN_NEW_MSGS
+
+      /* ---------- 事件镜像运行态 ---------- */
+      let reachedFinal = false // 得到无工具调用的最终回答（自然收敛）
+      let endedAbnormally: 'aborted' | 'error' | null = null // 流式/循环异常终止形态
+      let lastErrorText = ''
+      let turnCount = 0 // 已完成轮数（轮数上限）
+      let currentAsst: AiChatMessage | null = null // 流式中的助手消息
+      const recordStarts = new Map<string, { record: AiToolRecord; at: number }>()
+      const bumpDelta = (len: number) => {
+        if (!turnFirstDeltaAt) turnFirstDeltaAt = Date.now()
+        turnDeltaChars += len
+        // 上下文实时估算：基准 + 当轮已输出（usage 到达后被真实值覆盖）
+        this.contextUsed = turnBaseTotal + estTokens(turnDeltaChars)
       }
+
+      /** pi 工具注册表（执行成功上报脏域；subscribe 镜像共享本仓库实例态） */
+      const piTools = toPiTools(tools, (domains) => {
+        for (const d of domains) dirtyDomains.add(d)
+      })
+
+      let agent: InstanceType<typeof Agent> | null = null
+      let unsubscribe: (() => void) | null = null
 
       try {
-        let reachedFinal = false
-        for (let round = 0; round < maxRounds; round++) {
-          // 轮边界：占用达阈值先压缩再请求（首轮也检查——跨任务累积的占用）
-          await maybeCompact()
-          // 轮级 token 采集重置（速度按单轮计算，避免工具执行间隙拉低均值）
-          roundFirstDeltaAt = 0
-          roundDeltaChars = 0
-          roundBaseTotal = this.contextUsed
-          const roundRequestedAt = Date.now()
-          // reactive 包裹：流式增量经代理变更触发视图更新（原始对象直改不触发）
-          const asst: AiChatMessage = reactive({
-            id: uid('ai-'),
-            role: 'assistant',
-            content: '',
-            reasoning: '',
-            reasoningOpen: false,
-            status: 'streaming',
-            createdAt: Date.now(),
-          })
-          this.messages.push(asst)
-          const result = await deps.getApi().chatComplete(
-            {
-              model: model.id,
-              messages: chatMsgs,
-              tools: tools.map((t) => t.spec),
-              reasoningEffort: model.supportsThinking ? model.thinkingIntensity : undefined,
-              signal: controller.signal,
-            },
-            (delta) => {
-              if (delta.usage) {
-                // usage 分片（末尾一次）：真实速度 + 上下文占用（估算法不再接管）
-                const outTok = delta.usage.completionTokens
-                const span = (Date.now() - (roundFirstDeltaAt || roundRequestedAt)) / 1000
-                if (outTok > 0 && span > 0) {
-                  this.currentSpeedTokSec = outTok / span
-                  this.lastSpeedTokSec = this.currentSpeedTokSec
-                  asst.speedTokSec = Math.round(outTok / span)
+        /* 首轮边界压缩（跨任务累积的占用；运行中的轮边界压缩由 prepareNextTurn 承接） */
+        // 种子源排除本轮 userMsg（prompt() 会作为新消息追加，避免重复）；
+        // 压缩标记消息按引用过滤不受插入位置影响
+        const seedSource = () => this.messages.filter((m) => m !== userMsg)
+        let seed: Message[] = seedMessagesOf(seedSource(), this.toolRecords)
+        if (shouldCompact()) {
+          try {
+            if (await runCompact(seed)) seed = seedMessagesOf(seedSource(), this.toolRecords)
+          } catch (e) {
+            if (controller.signal.aborted || (e as Error)?.name === 'AbortError') throw e
+            console.warn('[ai] 上下文自动压缩失败', e)
+          }
+        }
+
+        agent = new Agent({
+          streamFn: createChatStreamFn(() => deps.getApi()),
+          initialState: {
+            systemPrompt: sysPrompt,
+            model: piModel,
+            thinkingLevel: piThinkingLevelOf(model),
+            messages: seed,
+            tools: piTools,
+          },
+          // 串行执行：与既有行为一致（工具多为数据写入，避免并发竞态）
+          toolExecution: 'sequential',
+          shouldStopAfterTurn: () => ++turnCount >= maxRounds,
+          prepareNextTurn: async () => {
+            // 轮边界上下文压缩（每轮结束后、下一轮请求前调用）
+            if (!shouldCompact()) return undefined
+            try {
+              if (await runCompact(agent!.state.messages)) {
+                // 压缩成功：Agent 上下文整体替换为以摘要为基座的新种子
+                //（本轮 userMsg 与既有轮次均已被吸收进摘要，compact 标记已入界面历史）
+                return {
+                  context: {
+                    systemPrompt: sysPrompt,
+                    messages: seedMessagesOf(seedSource(), this.toolRecords),
+                    tools: piTools,
+                  },
                 }
-                this.contextUsed = delta.usage.totalTokens
-                return
               }
-              const piece = delta.content || delta.reasoning || ''
-              if (piece) {
-                if (!roundFirstDeltaAt) roundFirstDeltaAt = Date.now()
-                roundDeltaChars += piece.length
-                // 上下文实时估算：基准 + 当轮已输出（usage 到达后被真实值覆盖）
-                this.contextUsed = roundBaseTotal + estTokens(roundDeltaChars)
+            } catch (e) {
+              if (controller.signal.aborted || (e as Error)?.name === 'AbortError') throw e
+              // 压缩失败不阻断会话：继续用完整历史
+              console.warn('[ai] 上下文自动压缩失败', e)
+            }
+            return undefined
+          },
+        })
+        activeAgent = agent
+
+        /* Agent 事件 → 界面会话态镜像（消息流式 / 工具记录 / 任务清单 / token 统计） */
+        unsubscribe = agent.subscribe((event: AgentEvent) => {
+          switch (event.type) {
+            case 'turn_start':
+              // 轮级 token 采集重置（速度按单轮计算，避免工具执行间隙拉低均值）
+              turnFirstDeltaAt = 0
+              turnDeltaChars = 0
+              turnBaseTotal = this.contextUsed
+              turnStartAt = Date.now()
+              break
+            case 'message_start':
+              if (event.message.role === 'assistant') {
+                currentAsst = reactive({
+                  id: uid('ai-'),
+                  role: 'assistant' as const,
+                  content: '',
+                  reasoning: '',
+                  reasoningOpen: false,
+                  status: 'streaming' as const,
+                  createdAt: Date.now(),
+                })
+                this.messages.push(currentAsst)
               }
-              if (delta.content) {
-                asst.content += delta.content
+              break
+            case 'message_update': {
+              const e = event.assistantMessageEvent
+              const asst = currentAsst
+              if (!asst) break
+              if (e.type === 'text_delta') {
+                asst.content += e.delta
+                bumpDelta(e.delta.length)
                 // 任务清单：流式期间实时解析（部分块也解析，面板逐步刷新）
                 syncTasksFromContent(this, asst.content)
-              }
-              if (delta.reasoning) {
-                asst.reasoning = (asst.reasoning || '') + delta.reasoning
+              } else if (e.type === 'thinking_delta') {
+                asst.reasoning = (asst.reasoning || '') + e.delta
                 asst.reasoningOpen = true // 思考输出中自动展开
+                bumpDelta(e.delta.length)
+              } else if (e.type === 'toolcall_end') {
+                asst.toolCalls = [
+                  ...(asst.toolCalls || []),
+                  {
+                    id: e.toolCall.id,
+                    name: e.toolCall.name,
+                    args: JSON.stringify(e.toolCall.arguments ?? {}),
+                  },
+                ]
               }
-            },
-          )
-          if (result.content) asst.content = result.content
-          if (result.reasoning) asst.reasoning = result.reasoning
-          asst.status = 'done'
-          asst.reasoningOpen = false // 完成后自动收起（用户可手动再展开）
-          // 展示文本去头尾空白（流式期间的中间态不做处理，完成时统一收口）
-          asst.content = String(asst.content ?? '').trim()
-          asst.reasoning = String(asst.reasoning ?? '').trim()
-          // 任务清单最终收口（模板块完整形态解析）
-          syncTasksFromContent(this, asst.content)
-          // 轮末 usage 收口（个别服务只在结果携带而不发 usage 分片）：速度 + 上下文 + 消息/问题级用量
-          if (result.usage) {
-            // 速度若已由 usage 分片计算（asst.speedTokSec 已存在）则不重复计算
-            if (!asst.speedTokSec && result.usage.completionTokens > 0) {
-              const span = (Date.now() - (roundFirstDeltaAt || roundRequestedAt)) / 1000
-              if (span > 0) {
-                this.currentSpeedTokSec = result.usage.completionTokens / span
-                this.lastSpeedTokSec = this.currentSpeedTokSec
-                asst.speedTokSec = Math.round(this.currentSpeedTokSec)
+              break
+            }
+            case 'message_end': {
+              const m = event.message
+              const asst = currentAsst
+              currentAsst = null
+              if (m.role !== 'assistant' || !asst) break
+              // 展示文本收口（流式期间的中间态不做处理，完成时统一收口）
+              asst.content = textOf(m).trim()
+              asst.reasoning = thinkingOf(m).trim()
+              if (m.stopReason === 'error' || m.stopReason === 'aborted') {
+                asst.status = m.stopReason === 'aborted' ? 'aborted' : 'error'
+                asst.reasoningOpen = false
+                if (m.stopReason === 'error' && m.errorMessage) asst.error = m.errorMessage.trim()
+                endedAbnormally = m.stopReason
+                lastErrorText = m.errorMessage || ''
+              } else {
+                asst.status = 'done'
+                asst.reasoningOpen = false // 完成后自动收起（用户可手动再展开）
+                // 任务清单最终收口（模板块完整形态解析）
+                syncTasksFromContent(this, asst.content)
+                // 轮末 usage 收口：速度 + 上下文 + 消息/问题级用量
+                const usage = m.usage
+                if (usage && (usage.input || usage.output || usage.totalTokens)) {
+                  this.contextUsed = usage.totalTokens
+                  asst.tokens = { input: usage.input, output: usage.output }
+                  userMsg.tokens = {
+                    input: (userMsg.tokens?.input ?? 0) + usage.input,
+                    output: (userMsg.tokens?.output ?? 0) + usage.output,
+                  }
+                  if (usage.output > 0) {
+                    const span = (Date.now() - (turnFirstDeltaAt || turnStartAt)) / 1000
+                    if (span > 0) {
+                      this.currentSpeedTokSec = usage.output / span
+                      this.lastSpeedTokSec = this.currentSpeedTokSec
+                      asst.speedTokSec = Math.round(usage.output / span)
+                    }
+                  }
+                }
               }
+              break
             }
-            this.contextUsed = result.usage.totalTokens
-            asst.tokens = {
-              input: result.usage.promptTokens,
-              output: result.usage.completionTokens,
+            case 'tool_execution_start': {
+              const tool = tools.find((t) => t.spec.function.name === event.toolName)
+              const record: AiToolRecord = reactive({
+                id: uid('tool-'),
+                callId: event.toolCallId,
+                name: event.toolName,
+                argsText: prettyJson(event.args).trim(),
+                resultText: '',
+                status: 'running',
+                createdAt: Date.now(),
+                ...(tool?.kind === 'skill' ? { kind: 'skill' as const } : {}),
+              })
+              this.toolRecords.push(record)
+              recordStarts.set(event.toolCallId, { record, at: Date.now() })
+              break
             }
-            userMsg.tokens = {
-              input: (userMsg.tokens?.input ?? 0) + result.usage.promptTokens,
-              output: (userMsg.tokens?.output ?? 0) + result.usage.completionTokens,
-            }
-          }
-
-          if (!result.toolCalls.length) {
-            reachedFinal = true
-            break
-          }
-          // 工具调用：记录 → 执行 → 结果回填消息序列
-          asst.toolCalls = result.toolCalls.map((c: ChatToolCall) => ({
-            id: c.id,
-            name: c.function.name,
-            args: c.function.arguments || '{}',
-          }))
-          chatMsgs.push({
-            role: 'assistant',
-            content: result.content || null,
-            toolCalls: result.toolCalls,
-          })
-          msgsSinceCompact += 1
-          for (const call of result.toolCalls) {
-            const tool = tools.find((t) => t.spec.function.name === call.function.name)
-            const record: AiToolRecord = reactive({
-              id: uid('tool-'),
-              callId: call.id,
-              name: call.function.name,
-              argsText: '',
-              resultText: '',
-              status: 'running',
-              createdAt: Date.now(),
-              ...(tool?.kind === 'skill' ? { kind: 'skill' as const } : {}),
-            })
-            this.toolRecords.push(record)
-            const started = Date.now()
-            try {
-              if (!tool) throw new Error(`未知工具：${call.function.name}`)
-              const args = safeParseJson(call.function.arguments)
-              record.argsText = prettyJson(safeParseJson(call.function.arguments)).trim()
-              const value = await tool.invoke(args, { callId: call.id })
-              for (const d of tool.domains) dirtyDomains.add(d)
-              record.status = 'success'
-              record.resultText = prettyJson(value).trim()
+            case 'tool_execution_end': {
+              const entry = recordStarts.get(event.toolCallId)
+              if (!entry) break
+              recordStarts.delete(event.toolCallId)
+              const { record } = entry
+              record.durationMs = Date.now() - entry.at
+              record.status = event.isError ? 'error' : 'success'
+              const result = event.result as
+                | { content?: Array<{ type?: string; text?: string }>; details?: unknown }
+                | undefined
+              if (event.isError) {
+                // 错误文本去掉适配层加的前缀，界面展示原始原因
+                record.resultText = String(result?.content?.[0]?.text ?? '')
+                  .replace(/^工具执行失败：/, '')
+                  .trim()
+              } else {
+                record.resultText = prettyJson(result?.details).trim()
+              }
+              msgsSinceCompact += 1
               // 技能加载：回填展示信息（记录 + 聊天芯片——加载了哪个技能的哪些部分）
-              if (tool.kind === 'skill') {
-                const v = value as {
+              const tool = tools.find((t) => t.spec.function.name === event.toolName)
+              if (tool?.kind === 'skill' && !event.isError) {
+                const v = result?.details as {
                   skill?: string
                   title?: string
                   loadedParts?: Array<{ key: string; title: string }>
-                }
+                } | null
                 if (v?.skill) {
                   const info = {
                     name: String(v.skill),
@@ -1598,32 +1582,51 @@ export function createAiStore(deps: AiDeps) {
                     parts: (v.loadedParts || []).map((p) => String(p.title || p.key)),
                   }
                   record.skill = info
-                  const chip = asst.toolCalls?.find((c) => c.id === call.id)
+                  const lastAsst = [...this.messages].reverse().find((m) => m.role === 'assistant')
+                  const chip = lastAsst?.toolCalls?.find((c) => c.id === event.toolCallId)
                   if (chip) chip.skill = info
                 }
               }
-            } catch (e) {
-              record.status = 'error'
-              record.resultText = errorMessageOf(e, '工具执行失败').trim()
-              record.durationMs = Date.now() - started
-              chatMsgs.push({
-                role: 'tool',
-                toolCallId: call.id,
-                content: `工具执行失败：${record.resultText}`,
-              })
-              msgsSinceCompact += 1
-              continue
+              break
             }
-            record.durationMs = Date.now() - started
-            chatMsgs.push({
-              role: 'tool',
-              toolCallId: call.id,
-              content: capForModel(record.resultText),
-            })
-            msgsSinceCompact += 1
+            case 'turn_end': {
+              const m = event.message
+              if (m.role === 'assistant') {
+                msgsSinceCompact += 1
+                if (
+                  m.stopReason !== 'error' &&
+                  m.stopReason !== 'aborted' &&
+                  !toolCallsOf(m).length
+                )
+                  reachedFinal = true
+              }
+              break
+            }
+            default:
+              break
           }
-        }
-        if (!reachedFinal) {
+        })
+
+        await agent.prompt({
+          role: 'user',
+          content: userMsg.modelContent || userMsg.content,
+          timestamp: userMsg.createdAt,
+        })
+        await agent.waitForIdle()
+
+        if (endedAbnormally) {
+          // 任务未完成被中止 / 出错：执行中的任务转暂停（下轮发送时同步给模型）
+          if (this.tasks.some((t) => t.status === 'running')) {
+            this.tasks = this.tasks.map((t) =>
+              t.status === 'running' ? { ...t, status: 'paused' as const } : t,
+            )
+          }
+          if (endedAbnormally === 'aborted') {
+            message.info('已停止生成')
+          } else {
+            message.error(lastErrorText || 'AI 调用失败')
+          }
+        } else if (!reachedFinal) {
           this.messages.push({
             id: uid('ai-'),
             role: 'assistant',
@@ -1660,6 +1663,8 @@ export function createAiStore(deps: AiDeps) {
         this.currentSpeedTokSec = 0
         this.running = false
         this.abortController = null
+        activeAgent = null
+        unsubscribe?.()
       }
     },
 
