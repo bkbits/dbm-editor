@@ -2,7 +2,8 @@
 /**
  * AI 工具页：AGENT 交互界面
  * - 左侧上方：历史聊天数据（用户/助手消息；思考内容为可收缩块——流式输出中
- *   自动展开、完成后自动收起；助手消息附工具调用芯片，点击定位右侧记录）
+ *   自动展开、完成后自动收起，输出中块内停留在底部时新内容追加自动跟随
+ *   滚到底部，上翻查看即停跟、回底恢复；助手消息附工具调用芯片，点击定位右侧记录）
  * - 左侧下方：用户文本输入框（Enter 发送 / Shift+Enter 换行）+ 模型选择 + 停止
  * - 右侧：能力调用记录（ManagerApi 能力 + 代码生成 + 代码替换），默认收起
  *   详情，展开可查看参数与返回值；代码生成记录提供 zip 下载
@@ -98,6 +99,36 @@ watch(
     }
   },
   { deep: true },
+)
+
+/* ==================== 思考块滚动跟随 ==================== */
+
+/** 各思考块贴底状态（消息 id → 是否贴底）。默认视为贴底：思考流式输出追加
+ *  内容时，停留在底部的块自动跟随滚到底部；用户在块内上翻查看历史即停止
+ *  跟随（不打扰），翻回底部后自动恢复跟随 */
+const reasoningStick = new Map<string, boolean>()
+
+function onReasoningScroll(e: Event) {
+  const el = e.currentTarget as HTMLElement
+  const id = el.dataset.msgId
+  if (!id) return
+  reasoningStick.set(id, el.scrollHeight - el.scrollTop - el.clientHeight < 24)
+}
+
+watch(
+  () => ai.messages.map((m) => m.reasoning),
+  async () => {
+    await nextTick()
+    for (const m of ai.messages) {
+      // 仅跟随正在流式输出且展开中的思考块；用户已上翻（非贴底）的不打扰
+      if (m.status !== 'streaming' || !m.reasoning || !m.reasoningOpen) continue
+      if (reasoningStick.get(m.id) === false) continue
+      const el = chatScrollEl.value?.querySelector<HTMLElement>(
+        `.reasoning-body[data-msg-id="${m.id}"]`,
+      )
+      if (el) el.scrollTop = el.scrollHeight
+    }
+  },
 )
 
 /* ==================== 空态引导 ==================== */
@@ -249,7 +280,14 @@ const runningCount = computed(() => ai.toolRecords.filter((r) => r.status === 'r
                   <span>{{ m.status === 'streaming' ? '思考中…' : '思考过程' }}</span>
                   <ChevronRight :size="12" class="chev" :class="{ down: m.reasoningOpen }" />
                 </button>
-                <div v-show="m.reasoningOpen" class="reasoning-body">{{ m.reasoning }}</div>
+                <div
+                  v-show="m.reasoningOpen"
+                  class="reasoning-body"
+                  :data-msg-id="m.id"
+                  @scroll="onReasoningScroll"
+                >
+                  {{ m.reasoning }}
+                </div>
               </div>
 
               <!-- 正文：用户为纯文本，助手用 markstream 流式 Markdown 渲染 -->
