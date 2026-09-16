@@ -1056,3 +1056,25 @@ Stage Summary:
 - 产出：SyncTable.vue（通用多表同步滚动表格组件：columns/rowCount/rowKey/rowClass/draggable props + #cell/#head 插槽 + row-drag* 事件，可复用于其他固定列场景）、TableEditDialog.vue 字段表接入、e2e-task37.sh 重写（31 断言）、e2e-task36.sh 适配（26 断言）、task38-shots.sh 截图脚本、五张新截图
 - 关键决策：① 两条定向滚动条替代单块全覆盖滚动层（交互与拖拽兼得，sizer 公式与「唯一滚动源」意图保留）② 纵条放表体内仅跨表体高（sizer=内容高严格等价，表头本就不纵滚）③ 横条 margin-right 让位纵条同时保证滚动比例与中间壳一致（可视宽同减一条带宽）④ sizer 高度实测而非行数×rowH ⑤ 行级状态（悬停/拖拽/主键）按 idx 跨三表统一驱动 ⑥ 索引表维持原机制（无固定列、改动无收益）
 - 架构收益：固定列与滚动内容分属不同 DOM 树，Task36（sticky 吸附）/37（cell-pin 铺满）/37-b（不透明叠层+遮缝）三轮像素级 hack 的根因类别（透出/透底/高度不齐）从结构上不可能再发生；E2E 以「左右壳 scrollLeft===0 + 几何恒定 + elementFromPoint 采样」直接锁死
+
+---
+Task ID: 42
+Agent: main (Super Z)
+Task: AI 全局规则默认文本设置（默认值 + 重置恢复默认均为指定任务流程约定文本）
+
+Work Log:
+- 基线恢复：上一会话结束后 github/devel 已领先本地 5 提交（Task 38 SyncTable 重构 709d071 / 39 思考贴底 867a264 / 40 token 统计 92ba8ae / 41 八项增强 f44bb60），本地工作区残留被丢弃的 antdv-next 替换任务修改（10 文件 +908/-894，原生 button→a-button 特征）——stash 隔离存档后 ff-only 快进到 f44bb60；同步推送 origin/devel 与 github/main（用户反馈「GitHub 没有看到提交记录」根因：提交都在 devel 分支而用户看的是 main，github/main 停在 92ba8ae）
+- 常量层：新建 src/ai/defaults.ts 导出 DEFAULT_AI_GLOBAL_RULES（七步任务流程：读取设置 → 刷新重载 → 分析需求多方案选择 → 指定任务队列清单 → 按清单执行 → 刷新重载校验 → 校验结果；三条遵守规则：技能层层递进加载 / 一轮工具调用只更新一个元素 / 大量增删分批实施），种子层与设置页共享引用避免默认文本多处硬拷贝漂移
+- 种子层（mock/db.ts）：createSeedDB 的 aiSettings.globalRules 由 '' 改为 DEFAULT_AI_GLOBAL_RULES——新库开箱即带任务流程约定；旧库已保存值不受影响（含用户主动清空的空串，尊重「留空仅用内置规则」语义），v8 迁移补空缺省分支保持不变
+- 设置页（AiSettingsSection.vue）：全局规则区块头部新增「恢复默认」按钮（a-button small + RotateCcw 12px，与字段约定卡片同款模式）——点击将草稿 globalRules 置为 DEFAULT_AI_GLOBAL_RULES（草稿级需保存生效）；label 行改 rules-head 横向布局（标签 + 灰色提示「附加在系统提示中（优先级最高）；留空则仅使用内置默认规则」+ 右侧按钮）；placeholder 改为「点『恢复默认』可找回默认任务流程约定」
+- mock 增强（ai-sse-mock-scroll.mjs）：请求日志补 sysRules/sysRulesFlow 字段（system 是否含【全局规则】块与「# 任务流程:」文本），供 E2E 验证默认规则真正流入系统提示（不影响既有分支与断言）
+- E2E（scripts/e2e-task42.sh 13 断言全绿）：新库默认文本（# 任务流程: + 七步完整 + # 遵守规则三条）→ 清空 → 恢复默认草稿恢复 → 配置 AI 服务保存 → localStorage 持久化 → JS 改库置空 globalRules 重载（旧库空值不被种子覆盖）→ 空值下恢复默认生效 → 再保存 → mock 收到 system 含默认规则（sysRules=true sysRulesFlow=true）
+- 回归：task41 32 断言 / task39 12 断言 / task35 32 断言全绿（mock 日志行变更不影响既有 grep 断言）
+- VLM 视觉复核：截图中 agent-browser 守护进程 CDP WebSocket 损坏导致 screenshot 与 eval 连不同浏览器实例（截图内容与 DOM 位置不一致的假象）——pkill 守护进程与 chrome 重启后恢复；scrollIntoView 居中截图 + PIL 2x 裁剪，VLM 确认标签行三元素布局整齐无重叠、默认文本正常显示（textarea 5 行内「# 遵守规则」段在滚动区属预期）
+- README 同步：AI 设置段补默认文本语义与「恢复默认」说明（含旧库空值不被覆盖）、AI 工具全局规则段补 defaults.ts 出处、E2E 表补 task42 行
+- bun run typecheck 通过；vp check 72 文件格式 + 62 文件 lint 全绿；bun run build 库构建通过；check-readme.py 32 标题通过
+
+Stage Summary:
+- 全局规则默认文本全链路落地：新库种子默认 → 设置页可视化编辑与一键恢复默认 → 保存持久化 → 系统提示附加（默认规则随 AGENT 每次调用生效）
+- 关键决策：① 默认文本以共享常量 src/ai/defaults.ts 单点维护（种子层与设置页引用同源）；② 「重置」实现为全局规则区块专属「恢复默认」按钮（草稿级、需保存生效，与字段约定卡片既有模式一致）；③ 旧库已保存空值不注入默认（尊重用户主动清空语义），需要时经按钮一键找回——默认与克制兼容
+- 排障沉淀：agent-browser 守护进程 CDP 半死状态会静默返回旧实例截图（screenshot/eval 内容不一致），pkill agent-browser + chrome 重启即愈；视口内小区块 VLM 复核应先 PIL 裁剪放大再送审

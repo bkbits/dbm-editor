@@ -8,8 +8,9 @@
  * （经 defineExpose 暴露 dirty / invalid / save / resetDraft）。
  */
 import { computed, reactive, watch } from 'vue'
-import { Bot, Plus, Trash2 } from '@lucide/vue'
+import { Bot, Plus, RotateCcw, Trash2 } from '@lucide/vue'
 import type { AiModelConfig, ThinkingIntensity } from '@/types/model'
+import { DEFAULT_AI_GLOBAL_RULES } from '@/ai/defaults'
 import { useAiStore } from '@/stores/ai'
 import { useUiStore } from '@/stores/ui'
 import { uid } from '@/utils/id'
@@ -51,6 +52,11 @@ function toDraft(m: AiModelConfig): ModelDraft {
     inputContextLength: m.inputContextLength ?? null,
     outputContextLength: m.outputContextLength ?? null,
   }
+}
+
+/** 全局规则恢复默认（仅本区块草稿，需保存生效）：重置为默认任务流程约定文本 */
+function resetGlobalRules() {
+  draft.globalRules = DEFAULT_AI_GLOBAL_RULES
 }
 
 function resetDraft() {
@@ -300,11 +306,20 @@ defineExpose({ dirty, invalid, save, resetDraft })
 
     <div class="rules-block">
       <div class="field-row column">
-        <label class="field-label">全局规则</label>
+        <div class="rules-head">
+          <label class="field-label">全局规则</label>
+          <span class="rules-hint">
+            附加在 AI 工具每次调用的系统提示中（优先级最高）；留空则仅使用内置默认规则
+          </span>
+          <a-button class="rules-reset" size="small" @click="resetGlobalRules">
+            <template #icon><RotateCcw :size="12" /></template>
+            恢复默认
+          </a-button>
+        </div>
         <a-textarea
           v-model:value="draft.globalRules"
           :rows="5"
-          placeholder="多行文本：将作为规则文本附加在 AI 工具每次调用的系统提示中（可约定行为规范、输出风格、操作边界等）；留空则仅使用内置默认规则"
+          placeholder="多行文本：可约定行为规范、输出风格、操作边界等；点「恢复默认」可找回默认任务流程约定"
         />
       </div>
     </div>
@@ -450,6 +465,23 @@ defineExpose({ dirty, invalid, save, resetDraft })
 
 .rules-block {
   margin-bottom: 4px;
+
+  .rules-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+
+    .rules-hint {
+      flex: 1;
+      min-width: 0;
+      font-size: 11px;
+      color: var(--dbm-text-3);
+    }
+
+    .rules-reset {
+      flex-shrink: 0;
+    }
+  }
 }
 
 .rounds-block {

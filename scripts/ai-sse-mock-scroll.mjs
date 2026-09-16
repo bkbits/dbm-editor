@@ -95,8 +95,9 @@ const server = http.createServer((req, res) => {
     // 分支匹配基准：剥离界面注入的「暂停任务同步」块（在用户正文之后追加，含【任务清单】字样会污染分支）
     const userBase = lastUserText.split('\n\n【任务清单·同步】上轮任务被用户中止')[0]
     const sysText = String(msgs.find((m) => m.role === 'system')?.content || '')
+    // sys-rules：系统提示是否携带用户全局规则块（默认任务流程文本流入验证）
     console.log(
-      `ock-scroll] model=${parsed.model} msgs=${msgs.length} toolResults=${toolCount} lastUser=${lastUserText.slice(0, 80).replace(/\n/g, '\\n')}`,
+      `ock-scroll] model=${parsed.model} msgs=${msgs.length} toolResults=${toolCount} sysRules=${sysText.includes('【全局规则】')} sysRulesFlow=${sysText.includes('# 任务流程:')} lastUser=${lastUserText.slice(0, 80).replace(/\n/g, '\\n')}`,
     )
 
     /* ---------- 压缩请求（无 tools 且 system 含压缩器） ---------- */

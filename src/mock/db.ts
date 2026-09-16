@@ -20,6 +20,7 @@ import type {
   ThinkingIntensity,
   TypeMapping,
 } from '@/types/model'
+import { DEFAULT_AI_GLOBAL_RULES } from '@/ai/defaults'
 import { normalizeFieldConventions } from '@/utils/fieldConvention'
 import { toCamelCase } from '@/utils/string'
 import {
@@ -107,7 +108,13 @@ function createSeedDB(): MockDB {
     templates: clone(SEED_TEMPLATES),
     dictCategoryTemplate: clone(SEED_DICT_CATEGORY_TEMPLATE),
     settings: clone(SEED_SETTINGS),
-    aiSettings: { baseUrl: '', apiKey: '', models: [], globalRules: '' },
+    aiSettings: {
+      baseUrl: '',
+      apiKey: '',
+      models: [],
+      // 新库开箱即带默认任务流程约定（旧库已保存值不受影响，含主动清空的空串）
+      globalRules: DEFAULT_AI_GLOBAL_RULES,
+    },
   }
 }
 
