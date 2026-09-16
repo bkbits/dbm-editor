@@ -30,10 +30,14 @@ interface ModelDraft {
   outputContextLength: number | null
 }
 
+/** 工具调用轮数上限缺省（与 api 层 DEFAULT_MAX_TOOL_ROUNDS 一致） */
+const DEFAULT_ROUNDS = 50
+
 const draft = reactive({
   baseUrl: '',
   apiKey: '',
   globalRules: '',
+  maxToolRounds: DEFAULT_ROUNDS as number,
   models: [] as ModelDraft[],
 })
 
@@ -53,6 +57,9 @@ function resetDraft() {
   draft.baseUrl = ai.aiSettings.baseUrl
   draft.apiKey = ai.aiSettings.apiKey
   draft.globalRules = ai.aiSettings.globalRules || ''
+  const rounds = Math.floor(Number(ai.aiSettings.maxToolRounds))
+  draft.maxToolRounds =
+    Number.isFinite(rounds) && rounds >= 1 ? Math.min(500, rounds) : DEFAULT_ROUNDS
   draft.models = ai.aiSettings.models.map(toDraft)
 }
 
@@ -130,11 +137,19 @@ function draftModelsNormalized(): AiModelConfig[] {
   }))
 }
 
+/** 轮数上限草稿归一（空 / 非法回退 50；范围 1-500） */
+function draftRoundsNormalized(): number {
+  const n = Math.floor(Number(draft.maxToolRounds))
+  if (!Number.isFinite(n) || n < 1) return DEFAULT_ROUNDS
+  return Math.min(500, n)
+}
+
 const dirty = computed(
   () =>
     draft.baseUrl !== ai.aiSettings.baseUrl ||
     draft.apiKey !== ai.aiSettings.apiKey ||
     (draft.globalRules || '') !== (ai.aiSettings.globalRules || '') ||
+    draftRoundsNormalized() !== ai.maxToolRounds ||
     JSON.stringify(draftModelsNormalized()) !==
       JSON.stringify(
         ai.aiSettings.models.map(
@@ -165,6 +180,7 @@ async function save() {
     apiKey: draft.apiKey,
     models: draftModelsNormalized(),
     globalRules: draft.globalRules,
+    maxToolRounds: draftRoundsNormalized(),
   })
 }
 
@@ -264,6 +280,24 @@ defineExpose({ dirty, invalid, save, resetDraft })
       </div>
     </div>
 
+    <!-- 轮数上限（独立块：位于模型列表之后，避免影响既有选择器顺序） -->
+    <div class="rounds-block">
+      <div class="field-row">
+        <label class="field-label">轮数上限</label>
+        <a-input-number
+          v-model:value="draft.maxToolRounds"
+          size="small"
+          :min="1"
+          :max="500"
+          :step="5"
+          style="width: 110px"
+        />
+        <span class="rounds-hint">
+          单次任务工具调用轮数上限（默认 {{ DEFAULT_ROUNDS }}，达到上限自动中止防失控）
+        </span>
+      </div>
+    </div>
+
     <div class="rules-block">
       <div class="field-row column">
         <label class="field-label">全局规则</label>
@@ -309,6 +343,11 @@ defineExpose({ dirty, invalid, save, resetDraft })
     margin-left: 74px;
     font-size: 11px;
     color: var(--dbm-danger);
+  }
+
+  .rounds-hint {
+    font-size: 11px;
+    color: var(--dbm-text-3);
   }
 }
 
@@ -411,5 +450,27 @@ defineExpose({ dirty, invalid, save, resetDraft })
 
 .rules-block {
   margin-bottom: 4px;
+}
+
+.rounds-block {
+  margin-bottom: 14px;
+
+  .field-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .field-label {
+    flex-shrink: 0;
+    width: 64px;
+    font-size: 12px;
+    color: var(--dbm-text-2);
+  }
+
+  .rounds-hint {
+    font-size: 11px;
+    color: var(--dbm-text-3);
+  }
 }
 </style>

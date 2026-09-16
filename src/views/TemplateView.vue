@@ -845,7 +845,8 @@ const isEdit = computed(() => Boolean(draft.value.id))
   }
 
   &::selection {
-    background: var(--dbm-primary-weak);
+    background: var(--dbm-primary);
+    color: var(--dbm-on-primary);
   }
 }
 

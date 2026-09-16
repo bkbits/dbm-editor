@@ -24,8 +24,11 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/* 文本选中：实底主色 + 专用前景色（原 primary-weak 与用户消息气泡底色完全同色，
+   选中完全不可见；实底高亮在任何背景上均可辨识，暗色主题用深青前景保持对比度） */
 ::selection {
-  background: var(--dbm-primary-weak);
+  background: var(--dbm-primary);
+  color: var(--dbm-on-primary);
 }
 
 /* 滚动条 */

@@ -101,6 +101,16 @@ const NAVIGATE_TYPES = ['11', '1N', 'N1', 'NN']
 /** 思考强度合法档位（AI 设置保存校验用） */
 const THINKING_INTENSITIES: ThinkingIntensity[] = ['low', 'medium', 'high', 'xhigh', 'max']
 
+/** 工具调用轮数上限缺省值（AI 设置缺省 / 非法值回退） */
+export const DEFAULT_MAX_TOOL_ROUNDS = 50
+
+/** 归一工具调用轮数上限：整数 1-500，缺省 / 非法回退 50 */
+function normalizeMaxToolRounds(v: unknown): number {
+  const n = Math.floor(Number(v))
+  if (!Number.isFinite(n) || n < 1) return DEFAULT_MAX_TOOL_ROUNDS
+  return Math.min(500, n)
+}
+
 /** openai wire 消息形态：camelCase 契约 → snake_case 标准 */
 function toWireMessage(m: ChatMessage): Record<string, unknown> {
   const out: Record<string, unknown> = { role: m.role, content: m.content ?? null }
@@ -289,6 +299,7 @@ export class DemoManagerApi implements ManagerApi {
       apiKey: String(raw?.apiKey ?? ''),
       models,
       globalRules: String(raw?.globalRules ?? ''),
+      maxToolRounds: normalizeMaxToolRounds(raw?.maxToolRounds),
     }
   }
 
@@ -332,6 +343,7 @@ export class DemoManagerApi implements ManagerApi {
       apiKey,
       models,
       globalRules: String(settings?.globalRules ?? ''),
+      maxToolRounds: normalizeMaxToolRounds(settings?.maxToolRounds),
     }
     persistDB()
   }

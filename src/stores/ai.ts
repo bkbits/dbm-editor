@@ -22,6 +22,8 @@ import type {
   UpdateTablePosDTO,
 } from '@/types/model'
 import { errorMessageOf } from '@/api/manager-api'
+import { DEFAULT_MAX_TOOL_ROUNDS } from '@/api/demo-manager-api'
+import { SKILLS, findSkill, skillNames } from '@/ai/skills'
 import { uid } from '@/utils/id'
 import type { DictStore } from './dict'
 import type { ModelStore } from './model'
@@ -39,6 +41,8 @@ export interface AiChatToolCall {
   id: string // 与 ChatToolCall.id 对应（点击可定位右侧记录）
   name: string
   args: string // 原始 JSON 参数文本
+  /** 技能加载调用的展示信息（loadSkill 专用样式：加载了哪个技能的哪些部分） */
+  skill?: { name: string; title: string; parts: string[] }
 }
 
 /** 会话消息（左侧聊天区展示形态） */
@@ -59,6 +63,94 @@ export interface AiChatMessage {
   tokens?: { input: number; output: number }
   /** 输出速度（tok/s；assistant 消息本轮真实速度，usage 到达时计算） */
   speedTokSec?: number
+  /** 发送给模型的实际内容（含系统附加信息如暂停任务同步；缺省回退 content） */
+  modelContent?: string
+  /** 上下文自动压缩标记：此消息之前的历史已被压缩为 summary（重建模型序列时以此为界） */
+  compact?: { summary: string }
+}
+
+/* ==================== 任务清单 ==================== */
+
+/** 任务状态（与模板文案一一对应） */
+export type AiTaskStatus = 'running' | 'pending' | 'completed' | 'paused'
+
+/** 任务项（左侧任务面板展示形态） */
+export interface AiTaskItem {
+  id: string
+  title: string
+  status: AiTaskStatus
+}
+
+/** 模板状态文案 → 状态机内值 */
+const TASK_STATUS_BY_LABEL: Record<string, AiTaskStatus> = {
+  执行中: 'running',
+  未开始: 'pending',
+  已完成: 'completed',
+  暂停: 'paused',
+}
+
+/** 状态机内值 → 模板文案（注入暂停任务同步时复用模板格式） */
+export const TASK_STATUS_LABEL: Record<AiTaskStatus, string> = {
+  running: '执行中',
+  pending: '未开始',
+  completed: '已完成',
+  paused: '暂停',
+}
+
+/** 任务清单块头部行：【任务清单】【任务清单·汇报】【任务清单·同步】（含流式未写完的前缀形态） */
+const TASK_HEADER_RE = /^\s*【任务清单[^】]*】?\s*$/
+const TASK_HEADER_PREFIX = '【任务清单'
+/** 任务项行：`1. [执行中] 任务描述`（序号可选） */
+const TASK_ITEM_RE = /^\s*(?:\d+[.、)]\s*)?\[(执行中|未开始|已完成|暂停)\]\s*(.+?)\s*$/
+
+/** 任务清单模板头部（系统提示中约定的输出形态） */
+const TASK_HEADER_REPORT = '【任务清单·汇报】'
+const TASK_HEADER_SYNC = '【任务清单·同步】'
+
+/** 按模板渲染任务清单块（注入暂停任务同步时复用模板格式） */
+function renderTaskBlock(header: string, tasks: AiTaskItem[]): string {
+  return `${header}\n${tasks.map((t, i) => `${i + 1}. [${TASK_STATUS_LABEL[t.status]}] ${t.title}`).join('\n')}`
+}
+
+/**
+ * 解析文本中的任务清单块（【任务清单·汇报】/【任务清单·同步】），
+ * 返回最后一个有效块解析出的任务列表（无有效块为 null）与剔除清单块后的展示文本。
+ * 流式期间可重复调用：未写完的头部 / 项行也会被剔除，避免闪烁。
+ */
+export function parseAiTaskList(text: string): { tasks: AiTaskItem[] | null; cleaned: string } {
+  const lines = String(text ?? '').split('\n')
+  const kept: string[] = []
+  let tasks: AiTaskItem[] | null = null
+  let i = 0
+  while (i < lines.length) {
+    const line = lines[i]
+    const isHeader = TASK_HEADER_RE.test(line) || line.trimStart().startsWith(TASK_HEADER_PREFIX)
+    if (isHeader) {
+      i += 1
+      const list: AiTaskItem[] = []
+      while (i < lines.length) {
+        const m = TASK_ITEM_RE.exec(lines[i])
+        if (!m) break
+        list.push({ id: String(list.length), title: m[2], status: TASK_STATUS_BY_LABEL[m[1]] })
+        i += 1
+      }
+      if (list.length) tasks = list
+      continue
+    }
+    kept.push(line)
+    i += 1
+  }
+  const cleaned = kept
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/^\n+/, '')
+  return { tasks, cleaned }
+}
+
+/** 从助手消息内容提取任务清单并写入仓库（无块时不动现有清单） */
+function syncTasksFromContent(store: { tasks: AiTaskItem[] }, text: string): void {
+  const { tasks } = parseAiTaskList(text)
+  if (tasks) store.tasks = tasks
 }
 
 /** 能力调用记录（右侧面板展示形态） */
@@ -72,6 +164,9 @@ export interface AiToolRecord {
   status: 'running' | 'success' | 'error'
   durationMs?: number
   createdAt: number
+  /** 技能加载记录（loadSkill 专用样式：加载了哪个技能的哪些部分） */
+  kind?: 'skill'
+  skill?: { name: string; title: string; parts: string[] }
 }
 
 /** 代码生成产物的 zip 下载缓存（Blob URL，会话内可重复下载） */
@@ -112,6 +207,8 @@ interface ToolInvokeCtx {
 interface AgentTool {
   spec: ChatToolSpec
   domains: ToolDomain[]
+  /** 界面专用样式标记：skill = 技能加载（独立样式展示加载内容） */
+  kind?: 'skill'
   invoke: (args: Record<string, unknown>, ctx: ToolInvokeCtx) => Promise<unknown>
 }
 
@@ -351,6 +448,25 @@ async function generateFilesOf(deps: AiDeps, args: Record<string, unknown>) {
 
 /* ==================== 系统提示 ==================== */
 
+/** 任务清单规则与模板（固定附加在系统提示中；模型按模板输出，界面解析为左侧任务面板） */
+const TASK_LIST_PROMPT = `
+任务清单（复杂任务必须使用）：
+- 开始执行复杂任务（多步骤、涉及多表或多领域改动）前，先制定分步计划，并用「汇报模板」输出完整清单
+- 执行过程中每当任务状态变化（开始 / 完成 / 新增 / 调整），随时用「同步模板」输出最新完整清单（包含全部任务与最新状态，不要只输出变化项）
+- 状态只允许四种：执行中 / 未开始 / 已完成 / 暂停；同一任务前后描述保持一致，便于界面跟踪
+- 清单块会被界面解析为左侧任务面板展示给用户，请勿在正文中以其他格式重复罗列任务
+
+汇报模板：
+${TASK_HEADER_REPORT}
+1. [未开始] 任务描述
+2. [未开始] 任务描述
+
+同步模板：
+${TASK_HEADER_SYNC}
+1. [已完成] 任务描述
+2. [执行中] 任务描述
+3. [未开始] 任务描述`
+
 /** AGENT 系统提示：能力说明 + 默认规则（任务执行流程）+（可选）全局规则 */
 function buildSystemPrompt(globalRules: string): string {
   const base = `你是「图形数据库模型编辑工具」内嵌的 AI 助手，运行在 AGENT 模式：可以通过工具直接读写当前模型数据，并执行代码生成与代码替换。
@@ -362,15 +478,17 @@ function buildSystemPrompt(globalRules: string): string {
 - 字典：getDictCategories / addDictCategory / updateDictCategory / removeDictCategory / getDicts / addDict / updateDict / removeDict
 - 模板：getTemplates / addTemplate / updateTemplate / removeTemplate / getDictCategoryTemplate / updateDictCategoryTemplate
 - 设置与数据：getSettings / saveSettings / importFromDB / load / save / refresh / resetDemo
+- 技能加载：loadSkill（加载内置技能文档获取领域知识与操作规范，可选部分；执行对应领域任务前按需加载）
 - 代码生成：generateCode（按模板生成产物并打包 zip 供用户下载，返回文件清单）
 - 代码替换：replaceCode（生成并写回源码文件，执行前需经用户确认，属危险操作）
 
 任务执行流程（默认规则，必须遵守）：
 1. 读取最新设置与数据作为任务上下文参考：动手前先调用查询工具（getSettings / getTables / getDicts 等）获取当前真实状态；修改任何元素前必须先读取该元素的当前值，基于最新数据构造修改载荷——禁止凭记忆或推测直接提交，避免给予脏数据执行任务
 2. 分析任务需求：如果有不明确的地方，提供多种可能的选项，让用户选择，确认后再继续
-3. 如果是复杂任务，先创建分步任务计划
+3. 如果是复杂任务，先创建分步任务计划，并按任务清单模板汇报（见下方任务清单规则）；涉及特定领域（表设计 / 导航 / 字典 / 代码生成 / 数据库导入 / 画布布局）时先 loadSkill 加载对应技能文档再执行
 4. 开始执行任务：按计划调用工具逐步完成；新增对象自行生成唯一 id，惯例前缀：分类 cat-、表 t-、字段 c-、索引 i-、导航 nav-、字典分类 dictcat-、字典 dict-、字典值 dv-、模板 tpl-
 5. 根据需要，校验任务执行结果：关键修改完成后按需调用查询工具核对结果是否符合预期，确认无误再汇报
+${TASK_LIST_PROMPT}
 
 必须遵守的规则：
 - 树形表不要添加关联自身的导航：树形表有专门的 parentIdColumn 设置（表示父级数据 id），配置它即可表达层级关系
@@ -424,8 +542,65 @@ function safeParseJson(text: string): Record<string, unknown> {
   return parsed as Record<string, unknown>
 }
 
-/** 单次会话工具调用轮数上限（防失控循环） */
-const MAX_TOOL_ROUNDS = 12
+/* ==================== 上下文自动压缩（compact） ==================== */
+
+/** 触发阈值：已用上下文占模型输入上下文长度的比例 */
+const COMPACT_RATIO = 0.85
+/** 压缩后至少新增 N 条消息才允许再次压缩（防止对摘要反复压缩） */
+const COMPACT_MIN_NEW_MSGS = 4
+/** 压缩请求中单条消息的序列化上限（字符） */
+const COMPACT_MSG_CAP = 4000
+/** 压缩请求中工具结果的上限（字符，比普通消息短） */
+const COMPACT_TOOL_CAP = 1200
+/** 压缩请求序列化总上限（字符，超出从中间截断保留头尾） */
+const COMPACT_TOTAL_CAP = 36000
+
+/** 压缩请求的系统提示 */
+const COMPACT_SYSTEM_PROMPT = `你是「图形数据库模型编辑工具」AI 助手的上下文压缩器。请将下面的任务对话历史压缩为一份结构化摘要，必须保留：
+1. 任务目标与用户的原始需求（含后续修正意见）
+2. 用户提到的关键数据与偏好
+3. 已完成的操作及结果（新增 / 修改 / 删除的表、字段、字典、模板、设置等，保留名称与关键结构）
+4. 工具调用中有价值的信息（查询到的关键数据、错误与修正过程）
+5. 任务清单的最新状态（各任务及状态）与未完成的事项、下一步计划
+输出摘要正文（简洁的条目式 markdown），不要输出任何解释或前后缀。`
+
+/** 压缩后回填给模型的用户消息（作为后续对话的上下文基座） */
+function compactUserContent(summary: string): string {
+  return `【上下文压缩】此前对话已自动压缩为以下摘要，请基于摘要继续完成当前任务（无需向用户复述摘要）：\n\n${summary}`
+}
+
+/** 截断到指定字符数（超限截断并标注总长） */
+function capCompact(text: string, cap: number): string {
+  const t = String(text ?? '')
+  return t.length > cap ? `${t.slice(0, cap)}\n…（过长已截断，共 ${t.length} 字符）` : t
+}
+
+/** 将模型消息序列序列列化为压缩请求的输入文本（跳过系统提示） */
+function serializeForCompact(msgs: ChatMessage[]): string {
+  const parts: string[] = []
+  for (const m of msgs) {
+    if (m.role === 'system') continue
+    if (m.role === 'user') {
+      parts.push(`【用户】\n${capCompact(m.content || '', COMPACT_MSG_CAP)}`)
+    } else if (m.role === 'assistant') {
+      const names = m.toolCalls?.length
+        ? `\n（调用工具：${m.toolCalls.map((t) => t.function.name).join('、')}）`
+        : ''
+      parts.push(`【助手】\n${capCompact(m.content || '（无正文）', COMPACT_MSG_CAP)}${names}`)
+    } else if (m.role === 'tool') {
+      parts.push(
+        `【工具结果 ${m.toolCallId ?? ''}】\n${capCompact(m.content || '', COMPACT_TOOL_CAP)}`,
+      )
+    }
+  }
+  let joined = parts.join('\n\n')
+  if (joined.length > COMPACT_TOTAL_CAP) {
+    const head = Math.floor(COMPACT_TOTAL_CAP * 0.25)
+    const tail = COMPACT_TOTAL_CAP - head
+    joined = `${joined.slice(0, head)}\n\n…（中间部分省略）\n\n${joined.slice(-tail)}`
+  }
+  return joined
+}
 
 /**
  * 构建 AGENT 工具注册表：ManagerApi 全部能力（去除 AI 设置与 chatComplete；
@@ -517,6 +692,49 @@ function buildAgentTools(deps: AiDeps, hooks: AgentHooks): AgentTool[] {
       },
     ),
   )
+
+  /* ---------- 技能加载（内置技能文档；单独占用一轮工具调用） ---------- */
+  tools.push({
+    kind: 'skill',
+    spec: {
+      type: 'function',
+      function: {
+        name: 'loadSkill',
+        description: `加载内置技能文档，获取领域操作规范与知识（单独占用一轮工具调用；执行对应领域任务前按需加载）：${SKILLS.map((s) => `${s.name}（${s.title}——${s.description}，部分：${s.parts.map((p) => p.key).join(' / ')}）`).join('；')}`,
+        parameters: obj(
+          '加载参数',
+          {
+            skill: str(`技能名：${skillNames().join(' / ')}`),
+            parts: strArr('要加载的部分列表（缺省 = 全部部分；只加载任务相关的部分可节省上下文）'),
+          },
+          ['skill'],
+        ),
+      },
+    },
+    domains: [],
+    invoke: async (a) => {
+      const skill = findSkill(String(a.skill ?? ''))
+      if (!skill) {
+        throw new Error(`未知技能：${a.skill}（可用技能：${skillNames().join(' / ')}）`)
+      }
+      const wanted = Array.isArray(a.parts)
+        ? a.parts.map((p) => String(p).trim().toLowerCase()).filter(Boolean)
+        : []
+      const chosen = wanted.length ? skill.parts.filter((p) => wanted.includes(p.key)) : skill.parts
+      if (!chosen.length) {
+        throw new Error(
+          `技能 ${skill.name} 不存在部分：${wanted.join('、')}（可用部分：${skill.parts.map((p) => p.key).join(' / ')}）`,
+        )
+      }
+      return {
+        skill: skill.name,
+        title: skill.title,
+        loadedParts: chosen.map((p) => ({ key: p.key, title: p.title })),
+        content: chosen.map((p) => `## ${p.title}\n${p.content}`).join('\n\n'),
+        note: `技能「${skill.title}」已加载，请严格按文档中的规范执行任务`,
+      }
+    },
+  })
 
   /* ---------- 分类 ---------- */
   tools.push(
@@ -884,6 +1102,9 @@ export function createAiStore(deps: AiDeps) {
     /** 待确认的代码替换（弹窗展示文件清单，用户确认/取消后 resolve） */
     pendingReplace: null as AiPendingReplace | null,
 
+    /* ---------- 任务清单（左侧任务面板；由模型按模板同步） ---------- */
+    tasks: [] as AiTaskItem[],
+
     /* ---------- token 用量统计 ---------- */
     /** 上下文已用 token（最近一轮 usage 的 total；流式期间含当轮输出估算增长） */
     contextUsed: 0,
@@ -904,6 +1125,12 @@ export function createAiStore(deps: AiDeps) {
       )
     },
 
+    /** 单次任务工具调用轮数上限（设置项，缺省 50） */
+    get maxToolRounds(): number {
+      const n = Math.floor(Number(this.aiSettings.maxToolRounds))
+      return Number.isFinite(n) && n >= 1 ? Math.min(500, n) : DEFAULT_MAX_TOOL_ROUNDS
+    },
+
     /* ---------- 设置读写 ---------- */
 
     async init(): Promise<void> {
@@ -918,6 +1145,10 @@ export function createAiStore(deps: AiDeps) {
               apiKey: String(s.apiKey ?? ''),
               models: Array.isArray(s.models) ? s.models.map(clone) : [],
               globalRules: String(s.globalRules ?? ''),
+              maxToolRounds:
+                Math.floor(Number(s.maxToolRounds)) >= 1
+                  ? Math.min(500, Math.floor(Number(s.maxToolRounds)))
+                  : DEFAULT_MAX_TOOL_ROUNDS,
             }
             if (!this.aiSettings.models.some((m) => m.id === this.selectedModelId)) {
               this.selectedModelId = this.aiSettings.models[0]?.id ?? ''
@@ -941,6 +1172,10 @@ export function createAiStore(deps: AiDeps) {
         apiKey: String(settings.apiKey ?? ''),
         models: (settings.models || []).map(clone),
         globalRules: String(settings.globalRules ?? ''),
+        maxToolRounds:
+          Math.floor(Number(settings.maxToolRounds)) >= 1
+            ? Math.min(500, Math.floor(Number(settings.maxToolRounds)))
+            : DEFAULT_MAX_TOOL_ROUNDS,
       }
       await deps.getApi().saveAiSettings(saved)
       this.aiSettings = saved
@@ -958,11 +1193,12 @@ export function createAiStore(deps: AiDeps) {
       this.abortController?.abort()
     },
 
-    /** 开启新会话（清空消息与调用记录，释放 zip 缓存；不影响模型选择） */
+    /** 开启新会话（清空消息、调用记录与任务清单，释放 zip 缓存；不影响模型选择） */
     clearSession() {
       if (this.running) this.stop()
       this.messages = []
       this.toolRecords = []
+      this.tasks = []
       this.contextUsed = 0
       this.releaseZipDownloads()
     },
@@ -985,6 +1221,7 @@ export function createAiStore(deps: AiDeps) {
       if (this.running) this.stop()
       this.messages = []
       this.toolRecords = []
+      this.tasks = []
       this.contextUsed = 0
       this.currentSpeedTokSec = 0
       this.lastSpeedTokSec = 0
@@ -1029,6 +1266,12 @@ export function createAiStore(deps: AiDeps) {
      * 发送用户消息并运行 AGENT 循环：
      * 流式输出（思考 / 正文）→ 工具调用 → 结果回填 → 继续生成，直至最终回答。
      * 全局规则非空时附加在系统提示中；工具改动过的域在结束时同步刷新仓库。
+     *
+     * 任务清单：模型按系统提示中的模板输出【任务清单·汇报/同步】块，
+     * 流式期间实时解析进 this.tasks（左侧任务面板）；用户中止时执行中的任务转暂停，
+     * 下一轮发送时把暂停中的任务同步给模型（modelContent）。
+     * 上下文压缩：已用上下文 ≥ 模型输入上下文的 85% 时，在轮边界自动发起压缩请求，
+     * 历史折叠为摘要（compact 标记消息），模型序列以摘要为基座继续。
      */
     async send(text: string) {
       const content = String(text ?? '').trim()
@@ -1046,6 +1289,7 @@ export function createAiStore(deps: AiDeps) {
         return
       }
       const model = this.currentModel!
+      const maxRounds = this.maxToolRounds
       /* 界面态钩子：zip 缓存注册 + 代码替换确认（绑定本仓库实例） */
       const hooks: AgentHooks = {
         registerZip: (callId, blob, fileName, fileCount) => {
@@ -1070,14 +1314,26 @@ export function createAiStore(deps: AiDeps) {
       const tools = buildAgentTools(deps, hooks)
       const dirtyDomains = new Set<string>()
 
+      /* ---------- 暂停任务同步：上轮被中止的任务在下轮发给模型 ---------- */
+      const pausedTasks = this.tasks.filter((t) => t.status === 'paused')
       const userMsg: AiChatMessage = reactive({
         id: uid('ai-'),
         role: 'user',
         content,
+        ...(pausedTasks.length
+          ? {
+              modelContent: `${content}\n\n${renderTaskBlock(
+                '【任务清单·同步】上轮任务被用户中止，以下任务处于暂停状态，请在理解上下文后继续完成（完成后按模板同步状态）：',
+                pausedTasks,
+              )}`,
+            }
+          : {}),
         status: 'done',
         createdAt: Date.now(),
       })
       this.messages.push(userMsg)
+      // 无暂停任务时清空上一任务的残留清单（新问题 = 新任务上下文）
+      if (!pausedTasks.length) this.tasks = []
       this.running = true
       const controller = new AbortController()
       this.abortController = controller
@@ -1095,49 +1351,115 @@ export function createAiStore(deps: AiDeps) {
         if (elapsed > 0) this.currentSpeedTokSec = estTokens(roundDeltaChars) / elapsed
       }, 500)
 
-      // 重建 openai 形态消息序列：系统提示 + 本会话历史（跳过失败/中止消息）
-      const chatMsgs: ChatMessage[] = [
-        { role: 'system', content: buildSystemPrompt(this.aiSettings.globalRules || '') },
-      ]
-      for (const m of this.messages) {
-        if (m.role === 'user') {
-          chatMsgs.push({ role: 'user', content: m.content })
-        } else if (
-          m.role === 'assistant' &&
-          m.status === 'done' &&
-          (m.content || m.toolCalls?.length)
-        ) {
-          chatMsgs.push({
-            role: 'assistant',
-            content: m.content || null,
-            ...(m.toolCalls?.length
-              ? {
-                  toolCalls: m.toolCalls.map((t) => ({
-                    id: t.id,
-                    type: 'function' as const,
-                    function: { name: t.name, arguments: t.args || '{}' },
-                  })),
-                }
-              : {}),
-          })
-          for (const tc of m.toolCalls || []) {
-            const rec = this.toolRecords.find((r) => r.callId === tc.id)
-            chatMsgs.push({
-              role: 'tool',
-              toolCallId: tc.id,
-              content: rec
-                ? rec.status === 'error'
-                  ? `工具执行失败：${rec.resultText}`
-                  : capForModel(rec.resultText)
-                : '（无执行记录）',
-            })
+      const sysPrompt = buildSystemPrompt(this.aiSettings.globalRules || '')
+
+      /**
+       * 重建 openai 形态消息序列：系统提示 + 会话历史（跳过失败/中止消息）。
+       * compact 标记消息为界：之前的消息已被压缩为摘要，序列重置为 [系统, 摘要] 再继续累积。
+       * 返回上次压缩后累积的消息数（compact 再触发频率下限）。
+       */
+      const rebuildChatMsgs = (): number => {
+        const msgs: ChatMessage[] = [{ role: 'system', content: sysPrompt }]
+        let sinceCompact = 0
+        for (const m of this.messages) {
+          if (m.compact) {
+            // 压缩边界：丢弃之前累积，以摘要用户消息为基座
+            msgs.length = 1
+            msgs.push({ role: 'user', content: compactUserContent(m.compact.summary) })
+            sinceCompact = 0
+            continue
           }
+          if (m.role === 'user') {
+            msgs.push({ role: 'user', content: m.modelContent || m.content })
+            sinceCompact += 1
+          } else if (
+            m.role === 'assistant' &&
+            m.status === 'done' &&
+            (m.content || m.toolCalls?.length)
+          ) {
+            msgs.push({
+              role: 'assistant',
+              content: m.content || null,
+              ...(m.toolCalls?.length
+                ? {
+                    toolCalls: m.toolCalls.map((t) => ({
+                      id: t.id,
+                      type: 'function' as const,
+                      function: { name: t.name, arguments: t.args || '{}' },
+                    })),
+                  }
+                : {}),
+            })
+            sinceCompact += 1
+            for (const tc of m.toolCalls || []) {
+              const rec = this.toolRecords.find((r) => r.callId === tc.id)
+              msgs.push({
+                role: 'tool',
+                toolCallId: tc.id,
+                content: rec
+                  ? rec.status === 'error'
+                    ? `工具执行失败：${rec.resultText}`
+                    : capForModel(rec.resultText)
+                  : '（无执行记录）',
+              })
+              sinceCompact += 1
+            }
+          }
+        }
+        chatMsgs.length = 0
+        chatMsgs.push(...msgs)
+        return sinceCompact
+      }
+      const chatMsgs: ChatMessage[] = []
+      let msgsSinceCompact = rebuildChatMsgs()
+
+      /** 上下文自动压缩：序列化历史 → 压缩请求 → compact 标记消息 + 重建序列 */
+      const runCompact = async (): Promise<void> => {
+        const serialized = serializeForCompact(chatMsgs)
+        if (!serialized) return
+        const res = await deps.getApi().chatComplete({
+          model: model.id,
+          messages: [
+            { role: 'system', content: COMPACT_SYSTEM_PROMPT },
+            { role: 'user', content: `请压缩以下对话历史：\n\n${serialized}` },
+          ],
+          signal: controller.signal,
+        })
+        const summary = String(res.content || '').trim()
+        if (!summary) return
+        this.messages.push(
+          reactive({
+            id: uid('ai-'),
+            role: 'assistant',
+            content: '',
+            status: 'done',
+            createdAt: Date.now(),
+            compact: { summary },
+          }),
+        )
+        msgsSinceCompact = rebuildChatMsgs()
+      }
+
+      /** 轮边界压缩触发：占用 ≥ 85% 且压缩后已有足够新消息（防对摘要反复压缩） */
+      const maybeCompact = async (): Promise<void> => {
+        const limit = model.inputContextLength ?? 0
+        if (limit <= 0 || this.contextUsed <= 0) return
+        if (this.contextUsed / limit < COMPACT_RATIO) return
+        if (msgsSinceCompact < COMPACT_MIN_NEW_MSGS) return
+        try {
+          await runCompact()
+        } catch (e) {
+          if (controller.signal.aborted || (e as Error)?.name === 'AbortError') throw e
+          // 压缩失败不阻断会话：继续用完整历史
+          console.warn('[ai] 上下文自动压缩失败', e)
         }
       }
 
       try {
         let reachedFinal = false
-        for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+        for (let round = 0; round < maxRounds; round++) {
+          // 轮边界：占用达阈值先压缩再请求（首轮也检查——跨任务累积的占用）
+          await maybeCompact()
           // 轮级 token 采集重置（速度按单轮计算，避免工具执行间隙拉低均值）
           roundFirstDeltaAt = 0
           roundDeltaChars = 0
@@ -1182,7 +1504,11 @@ export function createAiStore(deps: AiDeps) {
                 // 上下文实时估算：基准 + 当轮已输出（usage 到达后被真实值覆盖）
                 this.contextUsed = roundBaseTotal + estTokens(roundDeltaChars)
               }
-              if (delta.content) asst.content += delta.content
+              if (delta.content) {
+                asst.content += delta.content
+                // 任务清单：流式期间实时解析（部分块也解析，面板逐步刷新）
+                syncTasksFromContent(this, asst.content)
+              }
               if (delta.reasoning) {
                 asst.reasoning = (asst.reasoning || '') + delta.reasoning
                 asst.reasoningOpen = true // 思考输出中自动展开
@@ -1196,6 +1522,8 @@ export function createAiStore(deps: AiDeps) {
           // 展示文本去头尾空白（流式期间的中间态不做处理，完成时统一收口）
           asst.content = String(asst.content ?? '').trim()
           asst.reasoning = String(asst.reasoning ?? '').trim()
+          // 任务清单最终收口（模板块完整形态解析）
+          syncTasksFromContent(this, asst.content)
           // 轮末 usage 收口（个别服务只在结果携带而不发 usage 分片）：速度 + 上下文 + 消息/问题级用量
           if (result.usage) {
             // 速度若已由 usage 分片计算（asst.speedTokSec 已存在）则不重复计算
@@ -1233,7 +1561,9 @@ export function createAiStore(deps: AiDeps) {
             content: result.content || null,
             toolCalls: result.toolCalls,
           })
+          msgsSinceCompact += 1
           for (const call of result.toolCalls) {
+            const tool = tools.find((t) => t.spec.function.name === call.function.name)
             const record: AiToolRecord = reactive({
               id: uid('tool-'),
               callId: call.id,
@@ -1242,11 +1572,11 @@ export function createAiStore(deps: AiDeps) {
               resultText: '',
               status: 'running',
               createdAt: Date.now(),
+              ...(tool?.kind === 'skill' ? { kind: 'skill' as const } : {}),
             })
             this.toolRecords.push(record)
             const started = Date.now()
             try {
-              const tool = tools.find((t) => t.spec.function.name === call.function.name)
               if (!tool) throw new Error(`未知工具：${call.function.name}`)
               const args = safeParseJson(call.function.arguments)
               record.argsText = prettyJson(safeParseJson(call.function.arguments)).trim()
@@ -1254,6 +1584,24 @@ export function createAiStore(deps: AiDeps) {
               for (const d of tool.domains) dirtyDomains.add(d)
               record.status = 'success'
               record.resultText = prettyJson(value).trim()
+              // 技能加载：回填展示信息（记录 + 聊天芯片——加载了哪个技能的哪些部分）
+              if (tool.kind === 'skill') {
+                const v = value as {
+                  skill?: string
+                  title?: string
+                  loadedParts?: Array<{ key: string; title: string }>
+                }
+                if (v?.skill) {
+                  const info = {
+                    name: String(v.skill),
+                    title: String(v.title || v.skill),
+                    parts: (v.loadedParts || []).map((p) => String(p.title || p.key)),
+                  }
+                  record.skill = info
+                  const chip = asst.toolCalls?.find((c) => c.id === call.id)
+                  if (chip) chip.skill = info
+                }
+              }
             } catch (e) {
               record.status = 'error'
               record.resultText = errorMessageOf(e, '工具执行失败').trim()
@@ -1263,6 +1611,7 @@ export function createAiStore(deps: AiDeps) {
                 toolCallId: call.id,
                 content: `工具执行失败：${record.resultText}`,
               })
+              msgsSinceCompact += 1
               continue
             }
             record.durationMs = Date.now() - started
@@ -1271,13 +1620,14 @@ export function createAiStore(deps: AiDeps) {
               toolCallId: call.id,
               content: capForModel(record.resultText),
             })
+            msgsSinceCompact += 1
           }
         }
         if (!reachedFinal) {
           this.messages.push({
             id: uid('ai-'),
             role: 'assistant',
-            content: `已连续执行 ${MAX_TOOL_ROUNDS} 轮工具调用仍未得到最终回答，为避免失控已中止；可继续追问让任务收尾。`,
+            content: `已连续执行 ${maxRounds} 轮工具调用仍未得到最终回答，为避免失控已中止；可继续追问让任务收尾。`,
             status: 'error',
             createdAt: Date.now(),
           })
@@ -1291,6 +1641,12 @@ export function createAiStore(deps: AiDeps) {
           last.status = aborted ? 'aborted' : 'error'
           last.reasoningOpen = false
           if (!aborted) last.error = errorMessageOf(e, 'AI 调用失败').trim()
+        }
+        // 任务未完成被中止 / 出错：执行中的任务转暂停（下轮发送时同步给模型）
+        if (this.tasks.some((t) => t.status === 'running')) {
+          this.tasks = this.tasks.map((t) =>
+            t.status === 'running' ? { ...t, status: 'paused' as const } : t,
+          )
         }
         if (aborted) {
           message.info('已停止生成')

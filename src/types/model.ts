@@ -362,6 +362,8 @@ export interface AiSettings {
   models: AiModelConfig[] // 模型列表
   /** 全局规则（多行文本；非空时作为规则文本附加在 AI 工具的系统提示中） */
   globalRules?: string
+  /** 单次任务工具调用轮数上限（防失控；缺省 50，范围 1-500） */
+  maxToolRounds?: number
 }
 
 /* ---------- openai chat completions 标准流式契约 ---------- */

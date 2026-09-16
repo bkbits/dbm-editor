@@ -1,10 +1,14 @@
 <script setup lang="ts">
 /**
  * AI 工具页：AGENT 交互界面
- * - 左侧上方：历史聊天数据（用户/助手消息；思考内容为可收缩块——流式输出中
+ * - 左侧：当前任务清单（模型按模板同步；执行中 / 未开始 / 已完成 / 暂停四态醒目展示，
+ *   中止后执行中任务转暂停，下轮发送时同步给模型）
+ * - 中间上方：历史聊天数据（用户/助手消息；思考内容为可收缩块——流式输出中
  *   自动展开、完成后自动收起，输出中块内停留在底部时新内容追加自动跟随
- *   滚到底部，上翻查看即停跟、回底恢复；助手消息附工具调用芯片，点击定位右侧记录）
- * - 左侧下方：用户文本输入框（Enter 发送 / Shift+Enter 换行）+ 模型选择 + 停止
+ *   滚到底部，上翻查看即停跟、回底恢复；助手消息附工具调用芯片，点击定位右侧
+ *   记录；技能加载芯片独立样式展示加载了哪个技能的哪些部分；上下文自动压缩
+ *   以分隔条提示）
+ * - 中间下方：用户文本输入框（Enter 发送 / Shift+Enter 换行）+ 模型选择 + 停止
  * - 右侧：能力调用记录（ManagerApi 能力 + 代码生成 + 代码替换），默认收起
  *   详情，展开可查看参数与返回值；代码生成记录提供 zip 下载
  * - 助手正文用 markstream-vue 做流式 Markdown 渲染（mode=chat 平滑出字）
@@ -13,12 +17,17 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import {
   AlertTriangle,
+  Archive,
+  BookOpen,
   Bot,
   Brain,
   CheckCircle2,
   ChevronRight,
+  Circle,
+  CirclePause,
   Download,
   Eraser,
+  ListTodo,
   Loader2,
   Send,
   Settings2,
@@ -30,7 +39,7 @@ import {
 } from '@lucide/vue'
 import MarkdownRender from 'markstream-vue'
 import 'markstream-vue/index.css'
-import { useAiStore, type AiZipDownload } from '@/stores/ai'
+import { parseAiTaskList, useAiStore, type AiTaskStatus, type AiZipDownload } from '@/stores/ai'
 import { useUiStore } from '@/stores/ui'
 import { useThemeStore } from '@/stores/theme'
 
@@ -108,12 +117,25 @@ watch(
  *  内容时，停留在底部的块自动跟随滚到底部；用户在块内上翻查看历史即停止
  *  跟随（不打扰），翻回底部后自动恢复跟随 */
 const reasoningStick = new Map<string, boolean>()
+/** 程序跟随写入的 scrollTop（消息 id → 值）：用于区分「程序滚动」与「用户主动上翻」。
+ *  洞口：程序写入 scrollTop 后 scroll 事件是异步派发的，事件到达时内容可能已
+ *  又增长（scrollHeight 变大、scrollTop 停在旧值），若按「距底距离」判断会把
+ *  自己的跟随误判为用户上翻而永久停跟（真实 SSE 高频分片下必现）；按「是否
+ *  低于程序最近写入位置」判断则不受内容增长时序影响 */
+const reasoningOwnTop = new Map<string, number>()
 
 function onReasoningScroll(e: Event) {
   const el = e.currentTarget as HTMLElement
   const id = el.dataset.msgId
   if (!id) return
-  reasoningStick.set(id, el.scrollHeight - el.scrollTop - el.clientHeight < 24)
+  const own = reasoningOwnTop.get(id) ?? 0
+  if (el.scrollTop < own - 4) {
+    // 低于程序跟随点：用户主动上翻 → 停止跟随
+    reasoningStick.set(id, false)
+  } else if (el.scrollHeight - el.scrollTop - el.clientHeight < 24) {
+    // 回到底部：恢复跟随
+    reasoningStick.set(id, true)
+  }
 }
 
 watch(
@@ -127,10 +149,34 @@ watch(
       const el = chatScrollEl.value?.querySelector<HTMLElement>(
         `.reasoning-body[data-msg-id="${m.id}"]`,
       )
-      if (el) el.scrollTop = el.scrollHeight
+      if (el && el.scrollHeight > el.clientHeight) {
+        el.scrollTop = el.scrollHeight
+        reasoningOwnTop.set(m.id, el.scrollTop)
+      }
     }
   },
 )
+
+/* ==================== 任务清单（左侧面板） ==================== */
+
+/** 任务状态展示元数据（图标 / 文案 / 颜色令牌） */
+const TASK_STATUS_META: Record<AiTaskStatus, { label: string; cls: string; title: string }> = {
+  running: { label: '执行中', cls: 'running', title: '正在执行' },
+  pending: { label: '未开始', cls: 'pending', title: '尚未开始' },
+  completed: { label: '已完成', cls: 'completed', title: '已完成' },
+  paused: { label: '暂停', cls: 'paused', title: '已暂停（上轮被中止）' },
+}
+
+/** 各状态任务数（面板头部汇总） */
+const taskCountBy = (s: AiTaskStatus) => ai.tasks.filter((t) => t.status === s).length
+
+/* ==================== 消息展示文本 ==================== */
+
+/** 助手消息展示文本：剔除任务清单块（已解析到左侧任务面板，正文中不再重复展示） */
+function displayContent(m: { role: string; content: string }): string {
+  if (m.role !== 'assistant' || !m.content) return m.content
+  return parseAiTaskList(m.content).cleaned
+}
 
 /* ==================== token 用量统计 ==================== */
 
@@ -157,6 +203,7 @@ const suggestions = [
   '查询当前模型里有哪些分类和表',
   '为全部表生成代码，给我文件清单',
   '把字典的字典键和值数量统计出来',
+  '重新设置每个表卡片的位置，美化当前画布布置',
 ]
 
 function useSuggestion(text: string) {
@@ -253,7 +300,51 @@ const runningCount = computed(() => ai.toolRecords.filter((r) => r.status === 'r
 <template>
   <div class="ai-view">
     <div class="ai-layout">
-      <!-- ==================== 左侧：聊天 ==================== -->
+      <!-- ==================== 左侧：当前任务清单 ==================== -->
+      <aside class="task-pane">
+        <div class="task-head">
+          <span class="task-title"><ListTodo :size="13" /> 任务清单</span>
+          <span v-if="ai.tasks.length" class="task-count">{{ ai.tasks.length }}</span>
+        </div>
+        <div class="task-summary" v-if="ai.tasks.length">
+          <span class="ts-chip running"
+            ><Loader2 :size="10" class="spin" /> 执行中 {{ taskCountBy('running') }}</span
+          >
+          <span class="ts-chip completed"
+            ><CheckCircle2 :size="10" /> 完成 {{ taskCountBy('completed') }}</span
+          >
+          <span class="ts-chip paused"
+            ><CirclePause :size="10" /> 暂停 {{ taskCountBy('paused') }}</span
+          >
+          <span class="ts-chip pending"
+            ><Circle :size="10" /> 待办 {{ taskCountBy('pending') }}</span
+          >
+        </div>
+        <div class="task-list">
+          <div v-if="!ai.tasks.length" class="task-empty">
+            暂无任务<br />
+            <span>复杂任务将在这里展示分步计划与执行进度</span>
+          </div>
+          <div
+            v-for="(t, i) in ai.tasks"
+            :key="t.id || i"
+            class="task-item"
+            :class="TASK_STATUS_META[t.status].cls"
+            :title="TASK_STATUS_META[t.status].title"
+          >
+            <span class="ti-icon">
+              <Loader2 v-if="t.status === 'running'" :size="13" class="spin" />
+              <CheckCircle2 v-else-if="t.status === 'completed'" :size="13" />
+              <CirclePause v-else-if="t.status === 'paused'" :size="13" />
+              <Circle v-else :size="13" />
+            </span>
+            <span class="ti-label">{{ TASK_STATUS_META[t.status].label }}</span>
+            <span class="ti-text">{{ t.title }}</span>
+          </div>
+        </div>
+      </aside>
+
+      <!-- ==================== 中间：聊天 ==================== -->
       <section class="chat-pane">
         <div ref="chatScrollEl" class="chat-scroll" @scroll="onChatScroll">
           <!-- 空态 -->
@@ -289,76 +380,93 @@ const runningCount = computed(() => ai.toolRecords.filter((r) => r.status === 'r
             class="msg"
             :class="[m.role, { streaming: m.status === 'streaming' }]"
           >
-            <div v-if="m.role === 'user'" class="msg-avatar user"><User :size="13" /></div>
-            <div v-else class="msg-avatar bot"><Bot :size="13" /></div>
-
-            <div class="msg-body">
-              <!-- 思考内容：可收缩（输出中自动展开 / 完成后自动收起） -->
-              <div v-if="m.reasoning" class="reasoning-block" :class="{ open: m.reasoningOpen }">
-                <button
-                  class="reasoning-head"
-                  type="button"
-                  @click="m.reasoningOpen = !m.reasoningOpen"
-                >
-                  <Brain :size="12" />
-                  <span>{{ m.status === 'streaming' ? '思考中…' : '思考过程' }}</span>
-                  <ChevronRight :size="12" class="chev" :class="{ down: m.reasoningOpen }" />
-                </button>
-                <div
-                  v-show="m.reasoningOpen"
-                  class="reasoning-body"
-                  :data-msg-id="m.id"
-                  @scroll="onReasoningScroll"
-                >
-                  {{ m.reasoning }}
-                </div>
-              </div>
-
-              <!-- 正文：用户为纯文本，助手用 markstream 流式 Markdown 渲染 -->
-              <div v-if="m.content && m.role === 'user'" class="msg-content user-text">
-                {{ m.content }}
-              </div>
-              <MarkdownRender
-                v-else-if="m.content"
-                mode="chat"
-                class="msg-content md-render"
-                :content="m.content"
-                :final="m.status !== 'streaming'"
-                :is-dark="theme.isDark"
-              />
-              <div v-else-if="m.status === 'streaming'" class="msg-content pending">…</div>
-
-              <!-- 工具调用芯片 -->
-              <div v-if="m.toolCalls?.length" class="tool-chips">
-                <button
-                  v-for="tc in m.toolCalls"
-                  :key="tc.id"
-                  class="tool-chip"
-                  type="button"
-                  title="查看调用详情（右侧面板）"
-                  @click="locateRecord(tc.id)"
-                >
-                  <Wrench :size="11" />
-                  <span class="mono">{{ tc.name }}</span>
-                </button>
-              </div>
-
-              <!-- token 用量：问题花费（user）/ 本轮输出与速度（assistant） -->
-              <div v-if="m.tokens" class="msg-tokens">
-                <template v-if="m.role === 'user'">
-                  输入 {{ fmtTok(m.tokens.input) }} · 回答 {{ fmtTok(m.tokens.output) }} tok
-                </template>
-                <template v-else>
-                  输出 {{ fmtTok(m.tokens.output) }} tok<template v-if="m.speedTokSec">
-                    · {{ m.speedTokSec }} tok/s</template
-                  >
-                </template>
-              </div>
-
-              <!-- 错误 / 中止 -->
-              <div v-if="m.status === 'error' && m.error" class="msg-error">{{ m.error }}</div>
-              <div v-else-if="m.status === 'aborted'" class="msg-aborted">（已中止生成）</div>
+            <!-- 上下文自动压缩分隔条：此前的历史已折叠为摘要 -->
+            <div v-if="m.compact" class="msg-compact" :title="m.compact.summary">
+              <span class="compact-line"></span>
+              <span class="compact-tag"><Archive :size="11" /> 上下文已自动压缩</span>
+              <span class="compact-line"></span>
             </div>
+            <template v-else>
+              <div v-if="m.role === 'user'" class="msg-avatar user"><User :size="13" /></div>
+              <div v-else class="msg-avatar bot"><Bot :size="13" /></div>
+
+              <div class="msg-body">
+                <!-- 思考内容：可收缩（输出中自动展开 / 完成后自动收起） -->
+                <div v-if="m.reasoning" class="reasoning-block" :class="{ open: m.reasoningOpen }">
+                  <button
+                    class="reasoning-head"
+                    type="button"
+                    @click="m.reasoningOpen = !m.reasoningOpen"
+                  >
+                    <Brain :size="12" />
+                    <span>{{ m.status === 'streaming' ? '思考中…' : '思考过程' }}</span>
+                    <ChevronRight :size="12" class="chev" :class="{ down: m.reasoningOpen }" />
+                  </button>
+                  <div
+                    v-show="m.reasoningOpen"
+                    class="reasoning-body"
+                    :data-msg-id="m.id"
+                    @scroll="onReasoningScroll"
+                  >
+                    {{ m.reasoning }}
+                  </div>
+                </div>
+
+                <!-- 正文：用户为纯文本，助手用 markstream 流式 Markdown 渲染
+                   （任务清单块已剥离——解析到左侧任务面板） -->
+                <div v-if="m.content && m.role === 'user'" class="msg-content user-text">
+                  {{ m.content }}
+                </div>
+                <MarkdownRender
+                  v-else-if="displayContent(m)"
+                  mode="chat"
+                  class="msg-content md-render"
+                  :content="displayContent(m)"
+                  :final="m.status !== 'streaming'"
+                  :is-dark="theme.isDark"
+                />
+                <div v-else-if="m.status === 'streaming'" class="msg-content pending">…</div>
+
+                <!-- 工具调用芯片（技能加载为独立样式：展示加载了哪个技能的哪些部分） -->
+                <div v-if="m.toolCalls?.length" class="tool-chips">
+                  <button
+                    v-for="tc in m.toolCalls"
+                    :key="tc.id"
+                    class="tool-chip"
+                    :class="{ skill: tc.skill }"
+                    type="button"
+                    :title="
+                      tc.skill
+                        ? `已加载技能「${tc.skill.title}」的部分：${tc.skill.parts.join('、')}`
+                        : '查看调用详情（右侧面板）'
+                    "
+                    @click="locateRecord(tc.id)"
+                  >
+                    <BookOpen v-if="tc.skill" :size="11" />
+                    <Wrench v-else :size="11" />
+                    <span class="mono">{{
+                      tc.skill ? `技能 ${tc.skill.title} · ${tc.skill.parts.length} 部分` : tc.name
+                    }}</span>
+                  </button>
+                </div>
+
+                <!-- token 用量：问题花费（user）/ 本轮输出与速度（assistant） -->
+                <div v-if="m.tokens" class="msg-tokens">
+                  <template v-if="m.role === 'user'">
+                    输入 {{ fmtTok(m.tokens.input) }} · 回答 {{ fmtTok(m.tokens.output) }} tok
+                  </template>
+                  <template v-else>
+                    输出 {{ fmtTok(m.tokens.output) }} tok<template v-if="m.speedTokSec">
+                      · {{ m.speedTokSec }} tok/s</template
+                    >
+                  </template>
+                </div>
+
+                <!-- 错误 / 中止 -->
+                <div v-if="m.status === 'error' && m.error" class="msg-error">{{ m.error }}</div>
+                <div v-else-if="m.status === 'aborted'" class="msg-aborted">（已中止生成）</div>
+              </div>
+            </template>
           </div>
         </div>
 
@@ -379,12 +487,15 @@ const runningCount = computed(() => ai.toolRecords.filter((r) => r.status === 'r
               <span
                 v-if="ai.contextUsed"
                 class="ctx-meter"
-                :class="{ warn: ctxLimit && ai.contextUsed / ctxLimit > 0.8 }"
+                :class="{
+                  warn: ctxLimit && ai.contextUsed / ctxLimit > 0.8,
+                  compact: ctxLimit && ai.contextUsed / ctxLimit >= 0.85,
+                }"
                 :title="
                   `上下文已用 ${ai.contextUsed} token` +
                   (ctxLimit
-                    ? `（上限 ${ctxLimit}，超出 80% 时高亮）`
-                    : '（模型未配置输入上下文长度，设置后可显示上限）')
+                    ? `（上限 ${ctxLimit}，超出 80% 高亮；达到 85% 时自动压缩历史）`
+                    : '（模型未配置输入上下文长度，设置后可显示上限并自动压缩）')
                 "
               >
                 上下文 {{ fmtTok(ai.contextUsed) }}{{ ctxLimit ? `/${fmtTok(ctxLimit)}` : '' }}
@@ -466,7 +577,7 @@ const runningCount = computed(() => ai.toolRecords.filter((r) => r.status === 'r
             :id="`tool-rec-${r.id}`"
             :key="r.id"
             class="tool-record"
-            :class="r.status"
+            :class="[r.status, { skill: r.kind === 'skill' }]"
           >
             <div class="record-head" @click="toggleRecord(r.id)">
               <span class="rec-status">
@@ -474,7 +585,10 @@ const runningCount = computed(() => ai.toolRecords.filter((r) => r.status === 'r
                 <CheckCircle2 v-else-if="r.status === 'success'" :size="12" />
                 <XCircle v-else :size="12" />
               </span>
-              <span class="rec-name mono">{{ r.name }}</span>
+              <BookOpen v-if="r.kind === 'skill'" :size="12" class="rec-skill-icon" />
+              <span class="rec-name mono" :class="{ 'skill-name': r.kind === 'skill' }">{{
+                r.kind === 'skill' ? `技能·${r.skill?.title || r.name}` : r.name
+              }}</span>
               <button
                 v-if="zipEntry(r.callId)"
                 class="zip-mini"
@@ -488,6 +602,17 @@ const runningCount = computed(() => ai.toolRecords.filter((r) => r.status === 'r
               <ChevronRight :size="12" class="chev" :class="{ down: expandedRecords.has(r.id) }" />
             </div>
             <div v-if="expandedRecords.has(r.id)" class="record-body">
+              <!-- 技能加载：已加载部分清单（独立样式） -->
+              <div v-if="r.skill" class="rec-skill">
+                <div class="skill-name-row">
+                  <BookOpen :size="12" />
+                  <span class="mono">{{ r.skill.name }}</span>
+                  <span class="skill-parts-count">{{ r.skill.parts.length }} 部分</span>
+                </div>
+                <div class="skill-parts">
+                  <span v-for="p in r.skill.parts" :key="p" class="skill-part-chip">{{ p }}</span>
+                </div>
+              </div>
               <div v-if="zipEntry(r.callId)" class="rec-zip">
                 <button class="zip-btn" type="button" @click="ai.downloadZip(r.callId)">
                   <Download :size="12" />
@@ -564,6 +689,210 @@ const runningCount = computed(() => ai.toolRecords.filter((r) => r.status === 'r
   display: flex;
   gap: 12px;
   min-height: 0;
+}
+
+/* ==================== 左侧任务清单面板 ==================== */
+.task-pane {
+  width: 212px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--dbm-bg-panel);
+  border: 1px solid var(--dbm-border);
+  border-radius: var(--dbm-radius-m);
+  overflow: hidden;
+
+  .task-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--dbm-border);
+    flex-shrink: 0;
+
+    .task-title {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--dbm-text-1);
+    }
+
+    .task-count {
+      margin-left: auto;
+      font-size: 11px;
+      color: var(--dbm-text-3);
+      font-family: var(--dbm-font-mono);
+    }
+  }
+
+  /* 状态汇总芯片（醒目体现四态） */
+  .task-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--dbm-border);
+    flex-shrink: 0;
+
+    .ts-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      font-size: 10px;
+      line-height: 1;
+      padding: 3px 6px;
+      border-radius: 999px;
+      border: 1px solid var(--dbm-border);
+      color: var(--dbm-text-3);
+      background: var(--dbm-bg-2);
+
+      &.running {
+        color: var(--dbm-primary);
+        border-color: color-mix(in srgb, var(--dbm-primary) 40%, transparent);
+        background: var(--dbm-primary-weak);
+        font-weight: 600;
+      }
+
+      &.completed {
+        color: var(--dbm-success);
+        border-color: color-mix(in srgb, var(--dbm-success) 40%, transparent);
+        background: var(--dbm-success-weak);
+      }
+
+      &.paused {
+        color: var(--dbm-warning);
+        border-color: color-mix(in srgb, var(--dbm-warning) 40%, transparent);
+        background: var(--dbm-warning-weak);
+        font-weight: 600;
+      }
+    }
+  }
+
+  .task-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .task-empty {
+    margin: auto;
+    padding: 0 10px;
+    text-align: center;
+    font-size: 11.5px;
+    line-height: 1.8;
+    color: var(--dbm-text-3);
+
+    span {
+      font-size: 10.5px;
+      opacity: 0.8;
+    }
+  }
+
+  /* 任务项：左侧状态色条 + 状态徽标（醒目） */
+  .task-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 6px 8px;
+    border-radius: var(--dbm-radius-s);
+    border: 1px solid var(--dbm-border);
+    border-left-width: 3px;
+    background: var(--dbm-bg-2);
+
+    .ti-icon {
+      flex-shrink: 0;
+      margin-top: 1px;
+      display: inline-flex;
+    }
+
+    .ti-label {
+      flex-shrink: 0;
+      font-size: 9.5px;
+      line-height: 1.5;
+      padding: 0 4px;
+      border-radius: 4px;
+      color: var(--dbm-text-3);
+      background: var(--dbm-bg-3);
+      white-space: nowrap;
+    }
+
+    .ti-text {
+      min-width: 0;
+      font-size: 11px;
+      line-height: 1.55;
+      color: var(--dbm-text-2);
+      word-break: break-word;
+    }
+
+    &.running {
+      border-left-color: var(--dbm-primary);
+
+      .ti-icon {
+        color: var(--dbm-primary);
+      }
+
+      .ti-label {
+        color: var(--dbm-primary);
+        background: var(--dbm-primary-weak);
+        font-weight: 600;
+      }
+
+      .ti-text {
+        color: var(--dbm-text-1);
+      }
+    }
+
+    &.completed {
+      border-left-color: var(--dbm-success);
+      opacity: 0.82;
+
+      .ti-icon {
+        color: var(--dbm-success);
+      }
+
+      .ti-label {
+        color: var(--dbm-success);
+        background: var(--dbm-success-weak);
+      }
+
+      .ti-text {
+        text-decoration: line-through;
+        text-decoration-color: color-mix(in srgb, var(--dbm-text-3) 60%, transparent);
+      }
+    }
+
+    &.paused {
+      border-left-color: var(--dbm-warning);
+      background: var(--dbm-warning-weak);
+
+      .ti-icon {
+        color: var(--dbm-warning);
+      }
+
+      .ti-label {
+        color: var(--dbm-warning);
+        background: color-mix(in srgb, var(--dbm-warning) 18%, transparent);
+        font-weight: 600;
+      }
+
+      .ti-text {
+        color: var(--dbm-text-1);
+      }
+    }
+
+    &.pending {
+      border-left-color: var(--dbm-border-strong);
+
+      .ti-icon {
+        color: var(--dbm-text-3);
+      }
+    }
+  }
 }
 
 /* ==================== 左侧聊天面板 ==================== */
@@ -679,10 +1008,48 @@ const runningCount = computed(() => ai.toolRecords.filter((r) => r.status === 'r
       border: 1px solid color-mix(in srgb, var(--dbm-primary) 24%, transparent);
       border-radius: var(--dbm-radius-m);
       padding: 8px 12px;
+      max-width: calc(100% - 40px);
     }
 
     .msg-content {
       white-space: pre-wrap;
+    }
+  }
+
+  /* 助手消息主体铺满可用宽度（思考块 / 正文不再收窄成列） */
+  &:not(.user) .msg-body {
+    flex: 1 1 auto;
+    max-width: none;
+  }
+
+  /* 上下文自动压缩分隔条：居中占满消息行宽 */
+  .msg-compact {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 2px 0;
+    user-select: none;
+
+    .compact-line {
+      flex: 1;
+      height: 1px;
+      background: var(--dbm-border);
+    }
+
+    .compact-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
+      font-size: 10.5px;
+      color: var(--dbm-text-3);
+      font-family: var(--dbm-font-mono);
+      padding: 2px 8px;
+      border: 1px dashed var(--dbm-border);
+      border-radius: 999px;
+      background: var(--dbm-bg-2);
+      cursor: help;
     }
   }
 
@@ -712,7 +1079,6 @@ const runningCount = computed(() => ai.toolRecords.filter((r) => r.status === 'r
     flex-direction: column;
     gap: 8px;
     min-width: 0;
-    max-width: calc(100% - 40px);
   }
 
   .msg-content {
@@ -814,6 +1180,20 @@ const runningCount = computed(() => ai.toolRecords.filter((r) => r.status === 'r
       border-color: var(--dbm-primary);
       color: var(--dbm-primary-text);
       background: var(--dbm-primary-weak);
+    }
+
+    /* 技能加载芯片：独立样式（书本图标 + 信息蓝调） */
+    &.skill {
+      border-color: color-mix(in srgb, var(--dbm-info) 45%, transparent);
+      background: var(--dbm-info-weak);
+      color: var(--dbm-info);
+      font-weight: 600;
+
+      &:hover {
+        border-color: var(--dbm-info);
+        background: color-mix(in srgb, var(--dbm-info) 20%, transparent);
+        color: var(--dbm-info);
+      }
     }
   }
 }
@@ -976,6 +1356,12 @@ const runningCount = computed(() => ai.toolRecords.filter((r) => r.status === 'r
       &.warn {
         color: var(--dbm-warning);
         font-weight: 600;
+      }
+
+      /* 达到自动压缩阈值：更醒目提示（悬浮说明自动压缩行为） */
+      &.compact {
+        color: var(--dbm-danger);
+        font-weight: 700;
       }
     }
 
@@ -1174,6 +1560,22 @@ const runningCount = computed(() => ai.toolRecords.filter((r) => r.status === 'r
   overflow: hidden;
   flex-shrink: 0; /* 记录过多时不被纵向挤压，超出由列表滚动 */
 
+  /* 技能加载记录：独立样式（信息蓝调边框 + 淡底） */
+  &.skill {
+    border-color: color-mix(in srgb, var(--dbm-info) 45%, transparent);
+    background: color-mix(in srgb, var(--dbm-info) 5%, var(--dbm-bg-2));
+
+    .rec-skill-icon {
+      color: var(--dbm-info);
+      flex-shrink: 0;
+    }
+
+    .rec-name.skill-name {
+      color: var(--dbm-info);
+      font-weight: 600;
+    }
+  }
+
   &.success .rec-status {
     color: var(--dbm-success);
   }
@@ -1265,6 +1667,48 @@ const runningCount = computed(() => ai.toolRecords.filter((r) => r.status === 'r
     display: flex;
     flex-direction: column;
     gap: 8px;
+  }
+
+  /* 技能加载详情：已加载部分清单（独立样式） */
+  .rec-skill {
+    border: 1px dashed color-mix(in srgb, var(--dbm-info) 50%, transparent);
+    background: var(--dbm-info-weak);
+    border-radius: var(--dbm-radius-s);
+    padding: 6px 8px;
+
+    .skill-name-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--dbm-info);
+      font-size: 11.5px;
+      font-weight: 600;
+
+      .skill-parts-count {
+        margin-left: auto;
+        font-weight: 400;
+        font-size: 10px;
+        color: var(--dbm-text-3);
+        font-family: var(--dbm-font-mono);
+      }
+    }
+
+    .skill-parts {
+      margin-top: 5px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+
+      .skill-part-chip {
+        font-size: 10px;
+        line-height: 1.4;
+        padding: 1px 6px;
+        border-radius: 4px;
+        color: var(--dbm-info);
+        background: color-mix(in srgb, var(--dbm-info) 14%, transparent);
+        border: 1px solid color-mix(in srgb, var(--dbm-info) 30%, transparent);
+      }
+    }
   }
 
   .rec-zip {
@@ -1450,9 +1894,20 @@ const runningCount = computed(() => ai.toolRecords.filter((r) => r.status === 'r
     flex-direction: column;
   }
 
+  .task-pane {
+    width: auto;
+    max-height: 30%; /* 窄屏：任务面板放底部，限高滚动 */
+    order: 3;
+  }
+
+  .chat-pane {
+    order: 1;
+  }
+
   .tools-pane {
     width: auto;
     max-height: 42%;
+    order: 2;
   }
 }
 </style>
