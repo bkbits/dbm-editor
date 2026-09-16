@@ -427,15 +427,24 @@ function addLogicDeleteField() {
   message.success(`已按设置约定添加逻辑删除字段「${name}」`)
 }
 
-/** 取消逻辑删除标记（不删列本身，字段可能承载其他用途） */
+/** 删除逻辑删除字段（整列移除并重排序号；主键首行防御性仅清标记） */
 function removeLogicDeleteField() {
   const col = logicDeleteColumn.value
   if (!col) {
     message.info('当前表没有逻辑删除字段')
     return
   }
-  col.logicDelete = false
-  message.success('已取消逻辑删除标记')
+  const name = col.columnName.trim() || col.propertyName || '未命名字段'
+  const idx = draft.columns.indexOf(col)
+  if (idx > 0) {
+    draft.columns.splice(idx, 1)
+    renumber()
+    message.success(`已删除逻辑删除字段「${name}」`)
+  } else {
+    // 防御：主键首行不可删（正常情况下主键行不会带逻辑删除标记）
+    col.logicDelete = false
+    message.warning('主键行不可删除，已仅清除其逻辑删除标记')
+  }
 }
 
 function addColumn() {
@@ -808,30 +817,35 @@ async function save() {
               @dragover.prevent="columnDrag.onDragOver(idx, $event)"
               @drop.prevent="columnDrag.onDrop()"
             >
-              <!-- 主键首行：锁定图标（不可拖拽排序）；其余行：拖拽手柄 -->
-              <span
-                v-if="isPkRow(idx)"
-                class="drag-handle pk-lock"
-                title="主键字段（依设置约定固定为第一个字段，不可修改、不可排序）"
-              >
-                <Lock :size="12" />
-              </span>
-              <span
-                v-else
-                class="drag-handle"
-                title="拖拽排序"
-                @pointerdown="columnDrag.handleDown(idx)"
-              >
-                <GripVertical :size="13" />
-              </span>
-              <a-input
-                v-model:value="col.columnName"
-                size="small"
-                class="mono"
-                placeholder="字段名"
-                :disabled="isPkRow(idx)"
-                @change="onColumnName(col)"
-              />
+              <!-- 固定列包裹层：sticky 吸附 + 纵向铺满行高（防滚动内容从格子上下空隙透出） -->
+              <div class="cell-pin cell-pin-sort">
+                <!-- 主键首行：锁定图标（不可拖拽排序）；其余行：拖拽手柄 -->
+                <span
+                  v-if="isPkRow(idx)"
+                  class="drag-handle pk-lock"
+                  title="主键字段（依设置约定固定为第一个字段，不可修改、不可排序）"
+                >
+                  <Lock :size="12" />
+                </span>
+                <span
+                  v-else
+                  class="drag-handle"
+                  title="拖拽排序"
+                  @pointerdown="columnDrag.handleDown(idx)"
+                >
+                  <GripVertical :size="13" />
+                </span>
+              </div>
+              <div class="cell-pin cell-pin-name">
+                <a-input
+                  v-model:value="col.columnName"
+                  size="small"
+                  class="mono"
+                  placeholder="字段名"
+                  :disabled="isPkRow(idx)"
+                  @change="onColumnName(col)"
+                />
+              </div>
               <a-input
                 v-model:value="col.propertyName"
                 size="small"
@@ -916,16 +930,18 @@ async function save() {
                   :disabled="isPkRow(idx)"
                 />
               </template>
-              <button
-                v-if="!isPkRow(idx)"
-                class="row-del"
-                type="button"
-                title="删除字段"
-                @click="removeColumn(idx)"
-              >
-                <Trash2 :size="12" />
-              </button>
-              <span v-else class="row-del-placeholder" title="主键字段不可删除"></span>
+              <div class="cell-pin cell-pin-del">
+                <button
+                  v-if="!isPkRow(idx)"
+                  class="row-del"
+                  type="button"
+                  title="删除字段"
+                  @click="removeColumn(idx)"
+                >
+                  <Trash2 :size="12" />
+                </button>
+                <span v-else class="row-del-placeholder" title="主键字段不可删除"></span>
+              </div>
             </div>
           </div>
         </div>
@@ -969,10 +985,11 @@ async function save() {
             size="small"
             danger
             class="logic-del-btn"
+            title="删除当前逻辑删除字段（整列移除）"
             @click="removeLogicDeleteField"
           >
-            <template #icon><Eraser :size="12" /></template>
-            取消逻辑删除标记
+            <template #icon><Trash2 :size="12" /></template>
+            删除逻辑字段
           </a-button>
           <span class="audit-tip" :title="`逻辑删除字段：${logicDeleteLabel}`">
             逻辑删除：{{ logicDeleteLabel }}
@@ -1213,49 +1230,82 @@ async function save() {
 
 /*
  * 左右固定列（横向滚动时吸附视口两缘，不随滚动条移动）：
- * - 第 1 格（排序手柄）吸附 left:0，第 2 格（字段名）吸附 left:34px（28px 列宽 + 6px 列距）
- * - 末格（删除按钮）吸附 right:0
- * 表头 .columns-head 与每行 .column-row 同为 .cols-grid，选择器一并命中
- * （表头容器另有 sticky top，与格子级 sticky left 正交叠加，竖横双向均吸附）。
- * sticky 格子需不透明背景遮盖滚动穿过的内容，行悬停 / 主键行底色需同步覆盖。
+ * - 行内三个固定位置（排序手柄 / 字段名 / 删除按钮）包 .cell-pin 包裹层承担
+ *   sticky + 不透明背景，并 align-self: stretch 纵向铺满行轨——
+ *   行高由行内最高格子决定（如复选框列），格子本身若按内容高度居中（align-items: center）
+ *   会上下留空，横向滚动时中间列内容即从这些空隙透过（排序/字段名缝隙、删除按钮底部透色）；
+ *   包裹层铺满行高后，连同遮缝伪元素一起实现纵向全覆盖，内部控件 flex 居中不变形。
+ * - 表头 .columns-head 的格子仍是 span 直接 sticky：表头容器背景不透明且铺满
+ *   全宽（横向可滚时盒子必不窄于视口），缝隙处恒有容器背景兜底，格子背景
+ *   只需遮挡滚过的表头文字即可。
  */
-.cols-grid > :nth-child(1),
-.cols-grid > :nth-child(2),
-.cols-grid > :last-child {
+.columns-head.cols-grid > :nth-child(1),
+.columns-head.cols-grid > :nth-child(2),
+.columns-head.cols-grid > :last-child {
   position: sticky;
   z-index: 1;
   background: var(--dbm-bg-raise);
 }
 
-.cols-grid > :nth-child(1) {
+.columns-head.cols-grid > :nth-child(1) {
   left: 0;
 }
 
-.cols-grid > :nth-child(2) {
+.columns-head.cols-grid > :nth-child(2) {
   left: 34px;
 }
 
-.cols-grid > :last-child {
+.columns-head.cols-grid > :last-child {
   right: 0;
 }
 
-/* 行悬停 / 主键行底色同步到 sticky 格子（格子自身不透明背景优先于行背景） */
-.column-row:hover > :nth-child(1),
-.column-row:hover > :nth-child(2),
-.column-row:hover > :last-child,
-.column-row.pk-row > :nth-child(1),
-.column-row.pk-row > :nth-child(2),
-.column-row.pk-row > :last-child {
+/* 行内固定列包裹层：sticky 吸附两缘 + 纵向 stretch 铺满行轨（根因修复） */
+.cell-pin {
+  position: sticky;
+  z-index: 1;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  background: var(--dbm-bg-raise);
+}
+
+/* 排序手柄 / 删除按钮为定宽小控件，水平居中即可 */
+.cell-pin-sort,
+.cell-pin-del {
+  justify-content: center;
+}
+
+.cell-pin-sort {
+  left: 0;
+}
+
+.cell-pin-name {
+  left: 34px;
+}
+
+.cell-pin-del {
+  right: 0;
+}
+
+/* 字段名输入框撑满包裹层宽（flex 子项不再自动占满轨道宽） */
+.cell-pin-name > :deep(*) {
+  width: 100%;
+}
+
+/* 行悬停 / 主键行底色同步到固定列（包裹层不透明背景优先于行背景） */
+.column-row:hover > .cell-pin,
+.column-row.pk-row > .cell-pin {
   background: var(--dbm-bg-hover);
 }
 
 /*
- * 间隙遮缝：sticky 格子向相邻列方向延伸 7px（覆盖 6px 列距 + 1px 抗锯齿），
- * 背景随格子 inherit（悬停/主键行同步变色），滚动内容从延伸带下方穿过。
+ * 间隙遮缝：固定列向相邻列方向延伸 7px（覆盖 6px 列距 + 1px 抗锯齿），
+ * 背景随包裹层 inherit（悬停/主键行同步变色），滚动内容从延伸带下方穿过；
+ * 包裹层已铺满行高，伪元素 top/bottom 同步铺满，纵向不再有透出空隙。
  */
-.cols-grid > :nth-child(2)::before,
-.cols-grid > :nth-child(2)::after,
-.cols-grid > :last-child::before {
+.cell-pin-name::before,
+.cell-pin-name::after,
+.cell-pin-del::before {
   content: '';
   position: absolute;
   top: 0;
@@ -1264,15 +1314,15 @@ async function save() {
   background: inherit;
 }
 
-.cols-grid > :nth-child(2)::before {
+.cell-pin-name::before {
   left: -7px;
 }
 
-.cols-grid > :nth-child(2)::after {
+.cell-pin-name::after {
   right: -7px;
 }
 
-.cols-grid > :last-child::before {
+.cell-pin-del::before {
   left: -7px;
 }
 

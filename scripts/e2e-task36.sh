@@ -104,7 +104,7 @@ agent-browser eval "(function(){var rows=[...document.querySelectorAll('.column-
 sleep 0.5
 check "互斥：原 del_flag 行勾选被取消" "(function(){var r=[...document.querySelectorAll('.column-row')].find(r => r.querySelector('input')?.value === 'del_flag');var c=r?.querySelectorAll('.ant-checkbox-input');return !!c && !c[2].checked})()"
 check "互斥：转移 toast 提示出现" "(function(){return document.body.innerText.includes('每表最多一个')})()"
-check "按钮切换为「取消逻辑删除标记」" "!![...document.querySelectorAll('.audit-actions button')].find(b => b.textContent.includes('取消逻辑删除标记'))"
+check "按钮切换为「删除逻辑字段」" "!![...document.querySelectorAll('.audit-actions button')].find(b => b.textContent.includes('删除逻辑字段'))"
 
 # 保存表 → 持久化（勾选在新行上）；antdv 双字按钮自动插空格（「保 存」），匹配需剔除空白
 agent-browser eval "[...document.querySelectorAll('.ant-modal-footer button')].find(b => b.textContent.replace(/\s/g, '') === '保存')?.click()" >/dev/null 2>&1
