@@ -232,18 +232,19 @@ export class DemoManagerApi implements ManagerApi {
     if (!indexTypes.length) throw new Error('至少保留一个索引类型')
     const tableOptions = normalizeOptionSettings(settings.tableOptions, '表选项')
     const columnOptions = normalizeOptionSettings(settings.columnOptions, '列选项')
-    // 主键与审计字段约定：归一后校验名称合法且互不重复（主键与四个审计字段间）
+    // 主键、审计与逻辑删除字段约定：归一后校验名称合法且互不重复
     const fieldConventions = normalizeFieldConventions(settings.fieldConventions)
     const convNames = [
       fieldConventions.primaryKey.name,
       ...AUDIT_FIELD_ROLES.map((role) => fieldConventions.auditFields[role].name),
+      fieldConventions.logicDelete.name,
     ]
     for (const n of convNames) {
       if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(n))
         throw new Error(`字段约定名称需为合法标识符（字母/数字/下划线）：${n}`)
     }
     if (new Set(convNames).size !== convNames.length)
-      throw new Error('主键与审计字段的名称需互不重复')
+      throw new Error('主键、审计与逻辑删除字段的名称需互不重复')
     getDB().settings = {
       indexTypes,
       typeMappings,
@@ -843,15 +844,32 @@ export class DemoManagerApi implements ManagerApi {
   }
 }
 
-/** 字段列表归一：字段名非空唯一、tableId 归一、sort 重排 */
+/**
+ * 字段列表归一：字段名非空唯一、tableId 归一、sort 重排；
+ * 逻辑删除字段每表至多一个（多标拒绝，UI 勾选互斥之外的数据层兑底）
+ */
 function normalizeColumns(table: ManagerTable, tableName: string): TableColumn[] {
   const colNames = new Set<string>()
-  return (table.columns || []).map((c, i) => {
+  let logicDeleteCount = 0
+  const columns = (table.columns || []).map((c, i) => {
     const colName = requireStr(c?.columnName, 'columnName', '字段名')
     if (colNames.has(colName)) throw new Error(`表 ${tableName} 存在重复字段名：${colName}`)
     colNames.add(colName)
-    return { ...clone(c), id: c.id || uid('c-'), tableId: table.id, sort: Number(c.sort ?? i) || i }
+    if (c?.logicDelete === true) logicDeleteCount++
+    return {
+      ...clone(c),
+      id: c.id || uid('c-'),
+      tableId: table.id,
+      sort: Number(c.sort ?? i) || i,
+      // 仅显式 true 落库（false/缺省归一为 undefined，减少数据噪音）
+      logicDelete: c?.logicDelete === true ? true : undefined,
+    }
   })
+  if (logicDeleteCount > 1)
+    throw new Error(
+      `表 ${tableName} 的逻辑删除字段最多只能有一个（当前标记了 ${logicDeleteCount} 个）`,
+    )
+  return columns
 }
 
 /** 索引列表归一：索引名非空唯一、索引字段存在 */

@@ -7,6 +7,7 @@ import type {
   AuditFieldConvention,
   AuditFieldRole,
   FieldConventions,
+  LogicDeleteConvention,
   PrimaryKeyConvention,
 } from '@/types/model'
 
@@ -34,9 +35,12 @@ export const AUDIT_FIELD_NOT_NULL: Record<AuditFieldRole, boolean> = {
   updateTime: false,
 }
 
+/** 逻辑删除字段标签（设置页与表编辑共用） */
+export const LOGIC_DELETE_FIELD_LABEL = '逻辑删除'
+
 /**
  * 默认约定（需求规格：主键 id/BIGINT；审计字段蛇形命名 create_by 等，Java 属性名由小驼峰转换自动得到 createBy）。
- * 审计字段 javaType 缺省（空 = 按列类型映射规则自动推导，建列时取推导值；显式设定则固定使用）
+ * 审计字段与逻辑删除字段 javaType 缺省（空 = 按列类型映射规则自动推导，建列时取推导值；显式设定则固定使用）
  */
 export const DEFAULT_FIELD_CONVENTIONS: FieldConventions = {
   primaryKey: { name: 'id', type: 'BIGINT' },
@@ -46,6 +50,18 @@ export const DEFAULT_FIELD_CONVENTIONS: FieldConventions = {
     updateBy: { name: 'update_by', type: 'BIGINT' },
     updateTime: { name: 'update_time', type: 'DATETIME' },
   },
+  logicDelete: { name: 'deleted', type: 'TINYINT' },
+}
+
+/** 归一化逻辑删除字段约定（旧数据缺省时按默认补齐） */
+function normalizeLogicDelete(raw: unknown): LogicDeleteConvention {
+  const r = ((raw || {}) as Partial<LogicDeleteConvention>) || {}
+  const def = DEFAULT_FIELD_CONVENTIONS.logicDelete
+  return {
+    name: String(r.name ?? def.name).trim() || def.name,
+    type: String(r.type ?? def.type).trim() || def.type,
+    javaType: String(r.javaType ?? '').trim() || undefined,
+  }
 }
 
 /**
@@ -57,6 +73,7 @@ export function normalizeFieldConventions(raw: unknown): FieldConventions {
   const s = (raw || {}) as {
     primaryKey?: Partial<PrimaryKeyConvention>
     auditFields?: Partial<Record<AuditFieldRole, Partial<AuditFieldConvention>>>
+    logicDelete?: Partial<LogicDeleteConvention>
   }
   const def = DEFAULT_FIELD_CONVENTIONS
   const auditFields = {} as FieldConventions['auditFields']
@@ -74,10 +91,15 @@ export function normalizeFieldConventions(raw: unknown): FieldConventions {
       type: String(s.primaryKey?.type ?? def.primaryKey.type).trim() || def.primaryKey.type,
     },
     auditFields,
+    logicDelete: normalizeLogicDelete(s.logicDelete),
   }
 }
 
-/** 全部约定字段名（主键在前，审计按角色顺序；校验/展示用） */
+/** 全部约定字段名（主键在前，审计按角色顺序，逻辑删除末尾；校验/展示用） */
 export function conventionNames(fc: FieldConventions): string[] {
-  return [fc.primaryKey.name, ...AUDIT_FIELD_ROLES.map((role) => fc.auditFields[role].name)]
+  return [
+    fc.primaryKey.name,
+    ...AUDIT_FIELD_ROLES.map((role) => fc.auditFields[role].name),
+    fc.logicDelete.name,
+  ]
 }

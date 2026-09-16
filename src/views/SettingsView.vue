@@ -281,17 +281,21 @@ function javaOf(dbType: string): string {
   return settingsStore.matchJavaType(dbType) || getJavaTypeByType(dbType)
 }
 
-/** 字段约定校验：名称非空、合法标识符、五个名称互不重复 */
+/** 字段约定校验：名称非空、合法标识符、六个名称（主键/四审计/逻辑删除）互不重复 */
 const fieldConventionsInvalid = computed(() => {
   const fc = fieldConventions.value
-  const names = [fc.primaryKey.name, ...AUDIT_FIELD_ROLES.map((role) => fc.auditFields[role].name)]
+  const names = [
+    fc.primaryKey.name,
+    ...AUDIT_FIELD_ROLES.map((role) => fc.auditFields[role].name),
+    fc.logicDelete.name,
+  ]
   for (const raw of names) {
     const n = raw.trim()
     if (!n) return '名称不能为空'
     if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(n)) return `「${raw}」需为合法标识符（字母/数字/下划线）`
   }
   if (new Set(names.map((n) => n.trim())).size !== names.length)
-    return '名称重复：主键与四个审计字段间需互不相同'
+    return '名称重复：主键、审计与逻辑删除字段间需互不相同'
   return null
 })
 
@@ -342,7 +346,7 @@ async function save() {
     return
   }
   if (fieldConventionsInvalid.value) {
-    message.warning(`主键与审计字段约定无效：${fieldConventionsInvalid.value}`)
+    message.warning(`字段约定无效：${fieldConventionsInvalid.value}`)
     return
   }
   if (aiInvalid.value) {
@@ -387,7 +391,7 @@ async function save() {
 const sections = [
   { id: 'sec-type-mapping', label: '列默认类型', icon: SlidersHorizontal },
   { id: 'sec-index-types', label: '索引类型', icon: Layers },
-  { id: 'sec-field-conventions', label: '主键与审计字段', icon: KeyRound },
+  { id: 'sec-field-conventions', label: '字段约定', icon: KeyRound },
   { id: 'sec-codegen', label: '代码生成', icon: Code2 },
   { id: 'sec-ai', label: 'AI', icon: Bot },
 ]
@@ -613,14 +617,14 @@ function onSettingsScroll() {
 
           <section id="sec-field-conventions" class="settings-card">
             <div class="card-head">
-              <span class="card-title"><KeyRound :size="13" /> 主键与审计字段</span>
-              <span class="card-sub">表结构字段约定：主键固定首字段，审计字段一键增删</span>
+              <span class="card-title"><KeyRound :size="13" /> 主键 / 审计 / 逻辑删除</span>
+              <span class="card-sub">表结构字段约定：主键固定首字段，审计与逻辑删除一键增删</span>
             </div>
 
             <div class="card-intro">
               「编辑表」对话框中，每张表的<b>第一个字段固定为主键</b>（按下方约定生成，不可修改、不可排序，每表强制拥有，Java
-              类型按「列默认类型」规则自动推导）；「添加审计字段」按下方约定一键补齐四个审计字段（创建人/创建时间强制非空，更新人/更新时间可空），可整组移除。名称、类型与审计字段
-              Java 类型保存后对新加入的约定字段生效；审计字段 Java
+              类型按「列默认类型」规则自动推导）；「添加审计字段」按下方约定一键补齐四个审计字段（创建人/创建时间强制非空，更新人/更新时间可空），可整组移除；「添加逻辑删除字段」按下方约定一键补齐软删除标记字段（每表至多一个，强制非空）。名称、类型与审计/逻辑删除字段
+              Java 类型保存后对新加入的约定字段生效；Java
               类型留空时按「列默认类型」规则自动推导、随类型联动，设定后固定使用该值；字段名采用数据库蛇形命名，Java
               属性名自动转小驼峰。
             </div>
@@ -703,6 +707,41 @@ function onSettingsScroll() {
                 </span>
                 <span class="conv-dash">—</span>
               </div>
+              <div class="conv-row conv-grid conv-logic">
+                <span class="conv-label">逻辑删除</span>
+                <a-input
+                  v-model:value="fieldConventions.logicDelete.name"
+                  size="small"
+                  class="mono"
+                  :placeholder="DEFAULT_FIELD_CONVENTIONS.logicDelete.name"
+                  spellcheck="false"
+                />
+                <a-auto-complete
+                  v-model:value="fieldConventions.logicDelete.type"
+                  :options="convTypeOptions"
+                  size="small"
+                  class="mono"
+                  :placeholder="DEFAULT_FIELD_CONVENTIONS.logicDelete.type"
+                  :filter-option="
+                    (input: string, option: any) =>
+                      String(option.value).toUpperCase().includes(input.toUpperCase())
+                  "
+                />
+                <a-auto-complete
+                  v-model:value="fieldConventions.logicDelete.javaType"
+                  :options="javaTypeOptions"
+                  size="small"
+                  class="mono conv-java-input"
+                  allow-clear
+                  :placeholder="javaOf(fieldConventions.logicDelete.type)"
+                  :filter-option="
+                    (input: string, option: any) =>
+                      String(option.value).toLowerCase().includes(input.toLowerCase())
+                  "
+                />
+                <span class="conv-tag required">非空</span>
+                <span class="conv-dash">—</span>
+              </div>
             </div>
 
             <div class="conv-foot">
@@ -714,9 +753,9 @@ function onSettingsScroll() {
                 {{ fieldConventionsInvalid }}
               </span>
               <span v-else class="conv-tip">
-                默认：id / create_by / create_time / update_by / update_time（Java
-                属性名自动转小驼峰；非空约束为固定语义，随字段角色而定；审计字段 Java 类型留空 =
-                按类型映射自动推导）
+                默认：id / create_by / create_time / update_by / update_time / deleted（Java
+                属性名自动转小驼峰；非空约束为固定语义，随字段角色而定；审计与逻辑删除字段 Java
+                类型留空 = 按类型映射自动推导；逻辑删除每表至多一个）
               </span>
             </div>
           </section>
@@ -1359,7 +1398,7 @@ function onSettingsScroll() {
   }
 }
 
-/* ==================== 主键与审计字段卡片 ==================== */
+/* ==================== 主键 / 审计 / 逻辑删除字段卡片 ==================== */
 
 .conv-table {
   .conv-grid {
@@ -1445,6 +1484,11 @@ function onSettingsScroll() {
 
     &.conv-pk .conv-label {
       color: var(--dbm-primary-text);
+    }
+
+    /* 逻辑删除行标签以信息色区分（软删除语义） */
+    &.conv-logic .conv-label {
+      color: var(--dbm-info);
     }
   }
 }
@@ -1626,7 +1670,7 @@ function onSettingsScroll() {
     }
   }
 
-  /* 主键与审计字段：六列压缩为两列（标签+名称一行，类型自动换行下沉） */
+  /* 字段约定（主键/审计/逻辑删除）：六列压缩为两列（标签+名称一行，类型自动换行下沉） */
   .conv-table .conv-grid {
     grid-template-columns: minmax(90px, 1fr) minmax(110px, 1fr);
     gap: 4px 8px;

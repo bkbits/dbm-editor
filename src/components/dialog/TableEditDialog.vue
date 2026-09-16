@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { message } from 'antdv-next'
-import { Plus, Trash2, GripVertical, Lock, ShieldCheck } from '@lucide/vue'
+import { Plus, Trash2, GripVertical, Lock, ShieldCheck, Eraser } from '@lucide/vue'
 import type { AuditFieldRole, OptionSetting, TableColumn, TableIndex } from '@/types/model'
 import { useUiStore } from '@/stores/ui'
 import { useModelStore } from '@/stores/model'
@@ -123,10 +123,14 @@ const columnOptionDefs = computed(() => settingsStore.columnOptions)
 /** 字段表格网格模板：基础列 + 列选项动态列（boolean=勾选列，其余=输入列） */
 const colsGridStyle = computed(() => {
   const defs = settingsStore.columnOptions
-  if (!defs.length) return undefined
+  if (!defs.length)
+    return {
+      gridTemplateColumns:
+        '28px minmax(96px, 1fr) minmax(84px, 1fr) 132px 118px 44px 44px 44px 108px minmax(72px, 1fr) 26px',
+    }
   const extra = defs.map((d) => (d.type === 'boolean' ? '42px' : '96px')).join(' ')
   return {
-    gridTemplateColumns: `28px minmax(96px, 1fr) minmax(84px, 1fr) 132px 118px 44px 44px 108px minmax(72px, 1fr) ${extra} 26px`,
+    gridTemplateColumns: `28px minmax(96px, 1fr) minmax(84px, 1fr) 132px 118px 44px 44px 44px 108px minmax(72px, 1fr) ${extra} 26px`,
   }
 })
 
@@ -345,6 +349,95 @@ function removeAuditFields() {
   else message.info('当前表没有约定名称的审计字段')
 }
 
+/* ---------- 逻辑删除字段（依设置约定，每表至多一个） ---------- */
+
+/** 依约定构造逻辑删除字段草稿（软删除标记 0/1，强制非空） */
+function makeLogicDeleteColumn(): DraftColumn {
+  const conv = conventions.value.logicDelete
+  const col: DraftColumn = {
+    id: uid('c-'),
+    tableId: '',
+    columnName: conv.name,
+    propertyName: toCamelCase(conv.name, true),
+    sort: draft.columns.length,
+    type: conv.type,
+    javaType:
+      conv.javaType || (settingsStore.matchJavaType(conv.type) ?? getJavaTypeByType(conv.type)),
+    comment: '逻辑删除标记（0=正常，1=已删除）',
+    notNull: true,
+    primaryKey: false,
+    logicDelete: true,
+    dict: '',
+    _optVals: {},
+  }
+  fillOptionDefaults(col._optVals, settingsStore.columnOptions)
+  return col
+}
+
+/** 当前逻辑删除字段（至多一个；导入/AI 脏数据可能多标，validate 兕底拦截） */
+const logicDeleteColumn = computed(() => draft.columns.find((c) => c.logicDelete === true))
+
+/** 约定的逻辑删除字段名 */
+const logicDeleteName = computed(() => conventions.value.logicDelete.name.trim())
+
+/** 逻辑删除字段约定描述（按钮行提示） */
+const logicDeleteLabel = computed(() => {
+  const conv = conventions.value.logicDelete
+  return `${conv.name} · ${conv.type}`
+})
+
+/** 勾选互斥：勾选新的同时清除其他列标记（单表唯一），主键行禁止勾选 */
+function onLogicDeleteToggle(col: DraftColumn, e: Event) {
+  const checked = (e.target as HTMLInputElement).checked
+  if (!checked) {
+    col.logicDelete = false
+    return
+  }
+  let transferred = ''
+  for (const c of draft.columns) {
+    if (c !== col && c.logicDelete) {
+      c.logicDelete = false
+      transferred = c.columnName
+    }
+  }
+  col.logicDelete = true
+  if (transferred) message.info(`逻辑删除标记已从「${transferred}」转移至当前字段（每表最多一个）`)
+}
+
+/** 一键添加逻辑删除字段：已存在同名列则直接复用打标记，否则依约定新建 */
+function addLogicDeleteField() {
+  const name = logicDeleteName.value
+  if (!name) {
+    message.warning('逻辑删除字段约定名为空，请先在系统设置中配置')
+    return
+  }
+  const existing = draft.columns.find((c) => c.columnName.trim() === name)
+  if (existing) {
+    if (existing.logicDelete) {
+      message.info(`字段「${name}」已是逻辑删除字段`)
+      return
+    }
+    for (const c of draft.columns) if (c !== existing) c.logicDelete = false
+    existing.logicDelete = true
+    message.success(`已将字段「${name}」标记为逻辑删除字段`)
+    return
+  }
+  draft.columns.push(makeLogicDeleteColumn())
+  renumber()
+  message.success(`已按设置约定添加逻辑删除字段「${name}」`)
+}
+
+/** 取消逻辑删除标记（不删列本身，字段可能承载其他用途） */
+function removeLogicDeleteField() {
+  const col = logicDeleteColumn.value
+  if (!col) {
+    message.info('当前表没有逻辑删除字段')
+    return
+  }
+  col.logicDelete = false
+  message.success('已取消逻辑删除标记')
+}
+
 function addColumn() {
   const col: DraftColumn = {
     id: uid('c-'),
@@ -465,6 +558,9 @@ function validate(): string | null {
     if (names.has(c.columnName)) return `字段名重复：${c.columnName}`
     names.add(c.columnName)
   }
+  // 逻辑删除字段唯一性兕底（交互勾选已互斥；拦截导入/AI 构造的多标数据）
+  if (draft.columns.filter((c) => c.logicDelete === true).length > 1)
+    return '逻辑删除字段最多只能有一个，请取消多余的标记'
   const idxNames = new Set<string>()
   for (const i of draft.indexes) {
     if (!i.indexName.trim()) return '存在空索引名'
@@ -517,6 +613,7 @@ async function save() {
       comment: c.comment || '',
       notNull: c.notNull,
       primaryKey: c.primaryKey,
+      logicDelete: c.logicDelete === true ? true : undefined,
       dict: c.dict || '',
       options: buildOptionRecord(c._optVals || {}, settingsStore.columnOptions, (name, value) => ({
         columnId: c.id,
@@ -684,6 +781,7 @@ async function save() {
             <span>Java类型</span>
             <span class="h-center">非空</span>
             <span class="h-center">主键</span>
+            <span class="h-center" title="逻辑删除字段（软删除标记，每表最多一个）">逻辑删</span>
             <span>字典</span>
             <span>注释</span>
             <span
@@ -774,6 +872,16 @@ async function save() {
               <div class="center-cell" title="主键标记锁定：首字段固定为主键（依设置约定）">
                 <a-checkbox v-model:checked="col.primaryKey" disabled />
               </div>
+              <div
+                class="center-cell"
+                title="逻辑删除字段（软删除标记，每表最多一个；勾选新的会自动转移标记）"
+              >
+                <a-checkbox
+                  :checked="col.logicDelete === true"
+                  :disabled="isPkRow(idx)"
+                  @change="onLogicDeleteToggle(col, $event)"
+                />
+              </div>
               <a-select
                 v-model:value="col.dict"
                 :options="dictOptions"
@@ -825,7 +933,7 @@ async function save() {
           <template #icon><Plus :size="12" /></template>
           添加字段
         </a-button>
-        <!-- 审计字段一键增删（依设置约定） -->
+        <!-- 审计字段与逻辑删除字段一键操作（依设置约定） -->
         <div class="audit-actions">
           <a-button
             v-if="!allAuditPresent"
@@ -847,6 +955,28 @@ async function save() {
             删除审计字段
           </a-button>
           <span class="audit-tip" :title="auditNamesLabel">审计字段：{{ auditNamesLabel }}</span>
+          <a-button
+            v-if="!logicDeleteColumn"
+            size="small"
+            class="logic-add-btn"
+            @click="addLogicDeleteField"
+          >
+            <template #icon><Eraser :size="12" /></template>
+            添加逻辑删除字段
+          </a-button>
+          <a-button
+            v-else
+            size="small"
+            danger
+            class="logic-del-btn"
+            @click="removeLogicDeleteField"
+          >
+            <template #icon><Eraser :size="12" /></template>
+            取消逻辑删除标记
+          </a-button>
+          <span class="audit-tip" :title="`逻辑删除字段：${logicDeleteLabel}`">
+            逻辑删除：{{ logicDeleteLabel }}
+          </span>
         </div>
       </a-tab-pane>
 
@@ -1070,7 +1200,7 @@ async function save() {
   display: grid;
   grid-template-columns:
     28px minmax(96px, 1fr) minmax(84px, 1fr)
-    132px 118px 44px 44px 108px minmax(72px, 1fr) 26px;
+    132px 118px 44px 44px 44px 108px minmax(72px, 1fr) 26px;
   /*
    * 盒宽下限 = 轨道最小宽之和（min-content）：列选项等动态列使轨道总最小宽超出容器时，
    * 盒子随轨道加宽而非仅轨道溢出盒子——否则表头 border-bottom / 行悬停背景 /
@@ -1079,6 +1209,71 @@ async function save() {
   min-width: min-content;
   gap: 4px 6px;
   align-items: center;
+}
+
+/*
+ * 左右固定列（横向滚动时吸附视口两缘，不随滚动条移动）：
+ * - 第 1 格（排序手柄）吸附 left:0，第 2 格（字段名）吸附 left:34px（28px 列宽 + 6px 列距）
+ * - 末格（删除按钮）吸附 right:0
+ * 表头 .columns-head 与每行 .column-row 同为 .cols-grid，选择器一并命中
+ * （表头容器另有 sticky top，与格子级 sticky left 正交叠加，竖横双向均吸附）。
+ * sticky 格子需不透明背景遮盖滚动穿过的内容，行悬停 / 主键行底色需同步覆盖。
+ */
+.cols-grid > :nth-child(1),
+.cols-grid > :nth-child(2),
+.cols-grid > :last-child {
+  position: sticky;
+  z-index: 1;
+  background: var(--dbm-bg-raise);
+}
+
+.cols-grid > :nth-child(1) {
+  left: 0;
+}
+
+.cols-grid > :nth-child(2) {
+  left: 34px;
+}
+
+.cols-grid > :last-child {
+  right: 0;
+}
+
+/* 行悬停 / 主键行底色同步到 sticky 格子（格子自身不透明背景优先于行背景） */
+.column-row:hover > :nth-child(1),
+.column-row:hover > :nth-child(2),
+.column-row:hover > :last-child,
+.column-row.pk-row > :nth-child(1),
+.column-row.pk-row > :nth-child(2),
+.column-row.pk-row > :last-child {
+  background: var(--dbm-bg-hover);
+}
+
+/*
+ * 间隙遮缝：sticky 格子向相邻列方向延伸 7px（覆盖 6px 列距 + 1px 抗锯齿），
+ * 背景随格子 inherit（悬停/主键行同步变色），滚动内容从延伸带下方穿过。
+ */
+.cols-grid > :nth-child(2)::before,
+.cols-grid > :nth-child(2)::after,
+.cols-grid > :last-child::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 7px;
+  background: inherit;
+}
+
+.cols-grid > :nth-child(2)::before {
+  left: -7px;
+}
+
+.cols-grid > :nth-child(2)::after {
+  right: -7px;
+}
+
+.cols-grid > :last-child::before {
+  left: -7px;
 }
 
 .idx-grid {

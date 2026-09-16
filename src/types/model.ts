@@ -59,6 +59,8 @@ export interface TableColumn {
   notNull: boolean // 是否非空
   primaryKey: boolean // 是否主键
   dict: string // 关联字典键
+  /** 是否逻辑删除字段（每表最多一个；软删除语义，如 deleted 0/1） */
+  logicDelete?: boolean
   /** 列选项值列表（键为选项名称，见 Settings.columnOptions 定义） */
   options?: Record<string, ColumnOption>
 }
@@ -301,15 +303,26 @@ export interface AuditFieldConvention {
   javaType?: string
 }
 
+/** 逻辑删除字段约定（软删除标记，如 deleted TINYINT 0/1；每表至多一个） */
+export interface LogicDeleteConvention {
+  name: string // 字段名（默认 deleted）
+  type: string // 数据库类型（默认 TINYINT）
+  /** Java 类型（空 = 按列类型映射规则自动推导；显式设定后建列固定使用该值） */
+  javaType?: string
+}
+
 /**
  * 主键与审计字段约定：表编辑对话框据此固定首字段与审计字段一键增删。
  * 主键每表强制拥有且固定为第一个字段（不可修改、不可排序）；
- * 创建人/创建时间强制非空，更新人/更新时间可空（非空约束为固定语义，随角色而定）
+ * 创建人/创建时间强制非空，更新人/更新时间可空（非空约束为固定语义，随角色而定）；
+ * 逻辑删除字段为软删除标记（每表至多一个，标记互斥）
  */
 export interface FieldConventions {
   primaryKey: PrimaryKeyConvention
   /** 审计字段（按角色标识，顺序见 utils/fieldConvention.ts 的 AUDIT_FIELD_ROLES） */
   auditFields: Record<AuditFieldRole, AuditFieldConvention>
+  /** 逻辑删除字段约定（旧数据缺省时按内置默认补齐，见 utils/fieldConvention.ts） */
+  logicDelete: LogicDeleteConvention
 }
 
 /** 应用设置 */

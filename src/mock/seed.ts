@@ -1824,5 +1824,6 @@ export const SEED_SETTINGS: Settings = {
       updateBy: { name: 'update_by', type: 'BIGINT' },
       updateTime: { name: 'update_time', type: 'DATETIME' },
     },
+    logicDelete: { name: 'deleted', type: 'TINYINT' },
   },
 }
