@@ -34,7 +34,11 @@ header_nav() { # aria-label
 }
 
 cleanup() {
-  [ -n "${DEV_PID:-}" ] && kill "$DEV_PID" 2>/dev/null
+  # kill 父进程之外补杀 vite 子进程，避免孤儿 dev server 占端口污染后续运行
+  if [ -n "${DEV_PID:-}" ]; then
+    pkill -P "$DEV_PID" 2>/dev/null
+    kill "$DEV_PID" 2>/dev/null
+  fi
 }
 trap cleanup EXIT
 
@@ -53,7 +57,7 @@ done
 if [ -z "$PORT" ]; then echo "FATAL: dev server 未就绪"; tail -20 /tmp/task37-dev.log; exit 1; fi
 echo "== dev server: http://localhost:$PORT =="
 
-export AGENT_BROWSER_SESSION="task37-e2e"
+export AGENT_BROWSER_SESSION="task37-e2e-$$"
 agent-browser set viewport 760 900 >/dev/null 2>&1
 agent-browser open "http://localhost:$PORT" >/dev/null 2>&1
 agent-browser wait --load networkidle >/dev/null 2>&1 || true
@@ -92,7 +96,20 @@ check "中间列滚出可视区（滚动生效）" "(function(){var g=document.q
 check "表头字段名同步吸附" "(function(){var g=document.querySelector('.grid-scroll');var h=document.querySelector('.columns-head');var c=h.children[1];return Math.abs(c.getBoundingClientRect().left - g.getBoundingClientRect().left - 34) < 2})()"
 agent-browser screenshot "$SHOTS/task37-sticky-fixed.png" >/dev/null 2>&1
 
-# ---------- 5. 删除逻辑字段 = 整列移除（非仅清标记） ----------
+# ---------- 5. 固定列不透明性 + 表头遮缝（半透明底色/空末格透出修复） ----------
+echo "== 表编辑：固定列不透明性 =="
+check "pk 行删除位包裹层背景不透明（无 alpha 透底）" "(function(){var r=document.querySelector('.column-row.pk-row');var pin=r?.querySelector('.cell-pin-del');if(!pin)return false;var c=getComputedStyle(pin).backgroundColor;if(c.indexOf('rgba')===-1)return true;var a=parseFloat(c.slice(c.lastIndexOf(',')+1).replace(')','').trim());return a===1})()"
+check "pk 行包裹层带悬停色叠层（视觉与行底色一致）" "(function(){var r=document.querySelector('.column-row.pk-row');var pin=r?.querySelector('.cell-pin-del');return !!pin && getComputedStyle(pin).backgroundImage.indexOf('linear-gradient')>-1})()"
+check "普通行包裹层背景不透明且无叠层" "(function(){var r=[...document.querySelectorAll('.column-row')].find(function(x){return !x.classList.contains('pk-row')});var pin=r?.querySelector('.cell-pin-del');if(!pin)return false;var c=getComputedStyle(pin).backgroundColor;if(c.indexOf('rgba')>-1)return false;return getComputedStyle(pin).backgroundImage==='none'})()"
+check "pk 行遮缝伪元素继承不透明合成背景" "(function(){var r=document.querySelector('.column-row.pk-row');var pin=r?.querySelector('.cell-pin-name');var s=getComputedStyle(pin,'::before');if(s.content==='none')return false;var c=s.backgroundColor;if(c.indexOf('rgba')>-1)return false;return s.backgroundImage.indexOf('linear-gradient')>-1})()"
+check "表头末格纵向拉伸（空 span 高度非 0）" "(function(){var h=document.querySelector('.columns-head');var c=h.children[h.children.length-1];return c.getBoundingClientRect().height > 10})()"
+check "表头字段名左侧遮缝伪元素存在" "(function(){var h=document.querySelector('.columns-head');var s=getComputedStyle(h.children[1],'::before');return s.content !== 'none' && s.width === '7px'})()"
+check "表头末格左侧遮缝伪元素存在" "(function(){var h=document.querySelector('.columns-head');var c=h.children[h.children.length-1];var s=getComputedStyle(c,'::before');return s.content !== 'none' && s.width === '7px'})()"
+
+# 裁剪坐标（供事后 PIL 裁切 + VLM 视觉复核）
+agent-browser eval "JSON.stringify({grid:(function(){var r=document.querySelector('.grid-scroll').getBoundingClientRect();return {l:Math.round(r.left),t:Math.round(r.top),w:Math.round(r.width),h:Math.round(r.height)}})(),pk:(function(){var r=document.querySelector('.column-row.pk-row').getBoundingClientRect();return {t:Math.round(r.top),b:Math.round(r.bottom)}})()})" 2>/dev/null
+
+# ---------- 6. 删除逻辑字段 = 整列移除（非仅清标记） ----------
 echo "== 表编辑：删除逻辑字段 =="
 agent-browser eval "window.__rows = document.querySelectorAll('.columns-body .column-row').length" >/dev/null 2>&1
 agent-browser eval "[...document.querySelectorAll('.audit-actions button')].find(b => b.textContent.includes('添加逻辑删除字段'))?.click()" >/dev/null 2>&1
@@ -109,7 +126,7 @@ check "deleted 字段行已消失" "(function(){return ![...document.querySelect
 check "删除 toast 出现（已删除逻辑删除字段）" "document.body.innerText.includes('已删除逻辑删除字段')"
 check "按钮切回「添加逻辑删除字段」" "!![...document.querySelectorAll('.audit-actions button')].find(b => b.textContent.includes('添加逻辑删除字段'))"
 
-# ---------- 6. 汇总 ----------
+# ---------- 7. 汇总 ----------
 echo ""
 echo "== 汇总: PASS=$PASS FAIL=$FAIL =="
 if [ ${#FAILED_NAMES[@]} -gt 0 ]; then

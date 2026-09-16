@@ -1235,20 +1235,30 @@ async function save() {
  *   行高由行内最高格子决定（如复选框列），格子本身若按内容高度居中（align-items: center）
  *   会上下留空，横向滚动时中间列内容即从这些空隙透过（排序/字段名缝隙、删除按钮底部透色）；
  *   包裹层铺满行高后，连同遮缝伪元素一起实现纵向全覆盖，内部控件 flex 居中不变形。
- * - 表头 .columns-head 的格子仍是 span 直接 sticky：表头容器背景不透明且铺满
- *   全宽（横向可滚时盒子必不窄于视口），缝隙处恒有容器背景兜底，格子背景
- *   只需遮挡滚过的表头文字即可。
+ * - 表头 .columns-head 的格子仍是 span 直接 sticky + stretch 铺满行轨
+ *   （末格为空 span，不拉伸则高度 0 遮不住滚过的表头文字），并共用下方的
+ *   遮缝伪元素规则；表头容器另有不透明背景与 sticky top，竖横双向均吸附。
  */
 .columns-head.cols-grid > :nth-child(1),
 .columns-head.cols-grid > :nth-child(2),
 .columns-head.cols-grid > :last-child {
   position: sticky;
   z-index: 1;
+  /*
+   * 纵向铺满表头行轨：末格是无内容的空 span（内容高度为 0，背景与遮缝伪元素
+   * 高度同为 0，滚动的表头文字直接从删除列表头位置穿过）；
+   * stretch 拉伸补齐高度，文字格 flex 纵向居中保持原视觉。
+   */
+  align-self: stretch;
+  display: flex;
+  align-items: center;
   background: var(--dbm-bg-raise);
 }
 
 .columns-head.cols-grid > :nth-child(1) {
   left: 0;
+  /* 「排序」文字在 28px 轨内水平居中（flex 化后 text-align 不再作用于匿名文字项） */
+  justify-content: center;
 }
 
 .columns-head.cols-grid > :nth-child(2) {
@@ -1292,20 +1302,34 @@ async function save() {
   width: 100%;
 }
 
-/* 行悬停 / 主键行底色同步到固定列（包裹层不透明背景优先于行背景） */
+/*
+ * 行悬停 / 主键行底色同步到固定列。
+ * --dbm-bg-hover 为半透明色（亮 rgba(15,23,32,0.05) / 暗 rgba(255,255,255,0.06)），
+ * 直接用作固定列背景会透出下方滚过的内容（id 行删除位无输入框遮挡最明显，
+ * 排序/字段名遮缝伪元素同样继承半透明色而透缝）；
+ * 改为「悬停色叠在不透明 --dbm-bg-raise 之上」——与行底色在弹窗表面上的
+ * 合成结果完全一致，且不透底。::before/::after 的 background:inherit
+ * 会一并继承图像层与颜色层，遮缝带同步不透明。
+ */
 .column-row:hover > .cell-pin,
 .column-row.pk-row > .cell-pin {
-  background: var(--dbm-bg-hover);
+  background-color: var(--dbm-bg-raise);
+  background-image: linear-gradient(var(--dbm-bg-hover), var(--dbm-bg-hover));
 }
 
 /*
  * 间隙遮缝：固定列向相邻列方向延伸 7px（覆盖 6px 列距 + 1px 抗锯齿），
- * 背景随包裹层 inherit（悬停/主键行同步变色），滚动内容从延伸带下方穿过；
- * 包裹层已铺满行高，伪元素 top/bottom 同步铺满，纵向不再有透出空隙。
+ * 背景随宿主 inherit（行包裹层 / 表头格子，悬停/主键行同步变色），
+ * 滚动内容从延伸带下方穿过；行包裹层已铺满行高、表头格子已 stretch，
+ * 伪元素 top/bottom 同步铺满，纵向不再有透出空隙。
+ * 表头格子与行包裹层共用同一组遮缝规则（表头第 2 格左右两侧、末格左侧）。
  */
 .cell-pin-name::before,
 .cell-pin-name::after,
-.cell-pin-del::before {
+.cell-pin-del::before,
+.columns-head.cols-grid > :nth-child(2)::before,
+.columns-head.cols-grid > :nth-child(2)::after,
+.columns-head.cols-grid > :last-child::before {
   content: '';
   position: absolute;
   top: 0;
@@ -1314,15 +1338,18 @@ async function save() {
   background: inherit;
 }
 
-.cell-pin-name::before {
+.cell-pin-name::before,
+.columns-head.cols-grid > :nth-child(2)::before {
   left: -7px;
 }
 
-.cell-pin-name::after {
+.cell-pin-name::after,
+.columns-head.cols-grid > :nth-child(2)::after {
   right: -7px;
 }
 
-.cell-pin-del::before {
+.cell-pin-del::before,
+.columns-head.cols-grid > :last-child::before {
   left: -7px;
 }
 

@@ -34,7 +34,11 @@ header_nav() { # aria-label
 }
 
 cleanup() {
-  [ -n "${DEV_PID:-}" ] && kill "$DEV_PID" 2>/dev/null
+  # kill 父进程之外补杀 vite 子进程，避免孤儿 dev server 占端口污染后续运行
+  if [ -n "${DEV_PID:-}" ]; then
+    pkill -P "$DEV_PID" 2>/dev/null
+    kill "$DEV_PID" 2>/dev/null
+  fi
 }
 trap cleanup EXIT
 
@@ -53,7 +57,7 @@ done
 if [ -z "$PORT" ]; then echo "FATAL: dev server 未就绪"; tail -20 /tmp/task36-dev.log; exit 1; fi
 echo "== dev server: http://localhost:$PORT =="
 
-export AGENT_BROWSER_SESSION="task36-e2e"
+export AGENT_BROWSER_SESSION="task36-e2e-$$"
 agent-browser set viewport 1440 900 >/dev/null 2>&1
 agent-browser open "http://localhost:$PORT" >/dev/null 2>&1
 agent-browser wait --load networkidle >/dev/null 2>&1 || true
