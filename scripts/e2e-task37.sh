@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
-# Task 37 E2E：表编辑固定列透出修复（.cell-pin 包裹层纵向铺满行高）+「删除逻辑字段」整列移除
+# Task 37 E2E：字段表多 table 同步滚动架构（SyncTable）验证
+# - 结构：表头三壳 + 表体三壳六张表 + 两条专用滚动条（sizer 撑尺寸）
+# - 列宽分配：显式列精确宽 / 弹性列 ≥ minWidth / 总和 = sizer 宽
+# - 约束：三表体行高一致、表头与表体同列等宽
+# - 滚动同步：横向条驱动表头/表体中间壳，纵向条驱动表体三壳；左右壳恒不滚
+# - 遮挡证明：elementFromPoint 采样（左/右壳控件位置命中自身，非中间列内容）
+# - 「删除逻辑字段」= 整列移除（行为链）
 # 单次调用内完成：起 dev server → 浏览器全流程断言 → 截图 → 杀服务
 #（沙箱在工具调用之间回收派生进程，故必须一体化执行）
 set -u
@@ -63,70 +69,91 @@ agent-browser open "http://localhost:$PORT" >/dev/null 2>&1
 agent-browser wait --load networkidle >/dev/null 2>&1 || true
 
 # ---------- 2. 窄视口打开表编辑（横向滚动场景） ----------
-echo "== 表编辑：固定列包裹层几何 =="
+echo "== 表编辑：多表同步滚动结构 =="
 header_nav 模型编辑器
 poll_expr "!!document.querySelector('.table-card')" 5
 
 agent-browser eval "document.querySelector('.table-card').dispatchEvent(new MouseEvent('dblclick', {bubbles: true}))" >/dev/null 2>&1
-poll_expr "!!(document.querySelector('.columns-head') && document.querySelector('.columns-head').getClientRects().length > 0)" 8
+poll_expr "!!(document.querySelector('.sync-table') && document.querySelector('.sync-table').getClientRects().length > 0)" 8
 sleep 0.8
 
-# ---------- 3. 包裹层几何断言（透出根因修复的直接证据） ----------
-# 修复前：sticky 格子按内容高度居中（删除按钮 22px），行高由最高格子（复选框列）决定，
-# 格子上下留空 → 滚动内容从排序/字段名缝隙与删除按钮底部透出。
-# 修复后：.cell-pin align-self:stretch 纵向铺满行轨，高度 ≥ 行内任何中间列格子。
-check "每行固定列包裹层为 3 个" "(function(){var rows=[...document.querySelectorAll('.columns-body .column-row')];return rows.length>0 && rows.every(function(r){var pins=[...r.children].filter(function(c){return c.classList.contains('cell-pin')});return pins.length===3})})()"
-check "删除列包裹层纵向铺满（≥ 行内最高格）" "(function(){var rows=[...document.querySelectorAll('.columns-body .column-row')];for(var i=0;i<rows.length;i++){var r=rows[i];var pin=r.querySelector('.cell-pin-del');var pinH=pin.getBoundingClientRect().height;var maxH=0;[...r.children].forEach(function(c){if(!c.classList.contains('cell-pin')){maxH=Math.max(maxH,c.getBoundingClientRect().height)}});if(pinH<maxH-0.5)return 'row'+i+' pin'+pinH+' lt max'+maxH}return 'true'})()"
-check "排序/字段名列包裹层纵向铺满" "(function(){var rows=[...document.querySelectorAll('.columns-body .column-row')];for(var i=0;i<rows.length;i++){var r=rows[i];var a=r.querySelector('.cell-pin-sort');var b=r.querySelector('.cell-pin-name');var maxH=0;[...r.children].forEach(function(c){if(!c.classList.contains('cell-pin')){maxH=Math.max(maxH,c.getBoundingClientRect().height)}});if(a.getBoundingClientRect().height<maxH-0.5||b.getBoundingClientRect().height<maxH-0.5)return 'row'+i}return 'true'})()"
-check "包裹层高度贴合行高（无上下空隙）" "(function(){var rows=[...document.querySelectorAll('.columns-body .column-row')];for(var i=0;i<rows.length;i++){var r=rows[i];var rowH=r.getBoundingClientRect().height;var pins=[...r.children].filter(function(c){return c.classList.contains('cell-pin')});var pinH=pins[0].getBoundingClientRect().height;if(rowH-pinH>6)return 'row'+i+' gap'+(rowH-pinH)}return 'true'})()"
-check "遮缝伪元素随包裹层铺满行高" "(function(){var r=document.querySelector('.columns-body .column-row:not(.pk-row)')||document.querySelector('.column-row');var p=r.querySelector('.cell-pin-name');var h=p.getBoundingClientRect().height;var bh=parseFloat(getComputedStyle(p,'::before').height);return !isNaN(bh) && Math.abs(bh-h)<=2})()"
+# ---------- 3. 结构断言（六张表 + 两条专用滚动条） ----------
+check "表头三壳各含一张表" "(function(){var l=document.querySelector('.st-head-left table'),c=document.querySelector('.st-head-center table'),r=document.querySelector('.st-head-right table');return !!(l&&c&&r)})()"
+check "表体三壳各含一张表" "(function(){var l=document.querySelector('.st-body-left table'),c=document.querySelector('.st-body-center table'),r=document.querySelector('.st-body-right table');return !!(l&&c&&r)})()"
+check "左壳表仅两列（排序+字段名）" "document.querySelectorAll('.st-body-left col').length === 2"
+check "右壳表仅一列（删除）" "document.querySelectorAll('.st-body-right col').length === 1"
+check "横向滚动条为唯一横向滚动源（sizer 撑宽）" "(function(){var b=document.querySelector('.st-scrollbar-h'),s=document.querySelector('.st-sizer-h');return !!(b&&s) && s.getBoundingClientRect().width > b.clientWidth})()"
+check "窄视口横向溢出成立" "(function(){var b=document.querySelector('.st-scrollbar-h');return b.scrollWidth > b.clientWidth + 4})()"
 
-# ---------- 4. 横向滚动吸附不回归（包裹层承接原 sticky 几何） ----------
-echo "== 表编辑：横向滚动吸附 =="
-check "窄视口横向滚动出现" "(function(){var g=document.querySelector('.grid-scroll');return g && g.scrollWidth > g.clientWidth + 4})()"
-agent-browser eval "document.querySelector('.grid-scroll').scrollLeft = Math.floor(document.querySelector('.grid-scroll').scrollWidth / 3)" >/dev/null 2>&1
+# ---------- 4. 列宽分配（显式列精确 / 弹性列下限 / 总和 = sizer 宽） ----------
+echo "== 表编辑：列宽分配 =="
+check "显式宽度列精确（数据库类型 136px）" "(function(){var cols=[...document.querySelectorAll('.st-body-center col')];var i=1;return Math.abs(parseFloat(cols[i].style.width) - 136) < 0.6})()"
+check "弹性列不低于 minWidth（字段名 ≥100 / 属性名 ≥88 / 注释 ≥76）" "(function(){var w=function(sel){return document.querySelector(sel).getBoundingClientRect().width};return w('.st-body-left td.st-c-name')>=100-0.6 && w('.st-body-center td.st-c-propertyName')>=88-0.6 && w('.st-body-center td.st-c-comment')>=76-0.6})()"
+check "三区列宽总和 = 横向 sizer 宽（分配总和精确）" "(function(){var sum=function(sel){return [...document.querySelectorAll(sel)].reduce(function(s,c){return s+parseFloat(c.style.width)},0)};var t=sum('.st-body-left col')+sum('.st-body-center col')+sum('.st-body-right col');var sw=document.querySelector('.st-sizer-h').getBoundingClientRect().width;return Math.abs(t-sw)<=1})()"
+
+# ---------- 5. 对齐约束（行高一致 / 表头表体同列等宽） ----------
+echo "== 表编辑：对齐约束 =="
+check "三表体行高一致（每行 32px）" "(function(){var hs=[...document.querySelectorAll('.st-body tr')].map(function(r){return r.getBoundingClientRect().height});return hs.length>0 && hs.every(function(h){return Math.abs(h-32)<=1})})()"
+check "表头与表体同列等宽（中间列逐列比对）" "(function(){var hc=[...document.querySelectorAll('.st-head-center th')],bc=[...document.querySelectorAll('.st-body-center tr:first-child td')];if(hc.length!==bc.length||!hc.length)return false;for(var i=0;i<hc.length;i++){if(Math.abs(hc[i].getBoundingClientRect().width-bc[i].getBoundingClientRect().width)>1)return false}return true})()"
+check "左壳与右壳首行横向对齐表体（y 一致）" "(function(){var l=document.querySelector('.st-body-left tr').getBoundingClientRect(),c=document.querySelector('.st-body-center tr').getBoundingClientRect(),r=document.querySelector('.st-body-right tr').getBoundingClientRect();return Math.abs(l.top-c.top)<=1 && Math.abs(c.top-r.top)<=1})()"
+
+# ---------- 6. 横向滚动同步 ----------
+echo "== 表编辑：横向滚动同步 =="
+agent-browser eval "window.__leftBefore=document.querySelector('.st-body-left').getBoundingClientRect().left;window.__rightBefore=document.querySelector('.st-body-right').getBoundingClientRect().right;'ok'" >/dev/null 2>&1
+agent-browser eval "document.querySelector('.st-scrollbar-h').scrollLeft = Math.floor(document.querySelector('.st-scrollbar-h').scrollWidth / 3)" >/dev/null 2>&1
 sleep 0.5
-agent-browser screenshot "$SHOTS/task37-sticky-mid.png" >/dev/null 2>&1
-agent-browser eval "document.querySelector('.grid-scroll').scrollLeft = 999999" >/dev/null 2>&1
+agent-browser screenshot "$SHOTS/task37-sync-mid.png" >/dev/null 2>&1
+check "表头中间壳同步横向滚动" "(function(){var b=document.querySelector('.st-scrollbar-h');return b.scrollLeft>10 && document.querySelector('.st-head-center').scrollLeft===b.scrollLeft})()"
+check "表体中间壳同步横向滚动" "(function(){var b=document.querySelector('.st-scrollbar-h');return document.querySelector('.st-body-center').scrollLeft===b.scrollLeft})()"
+check "左/右壳不随横向滚动平移（几何恒定）" "(function(){return Math.abs(document.querySelector('.st-body-left').getBoundingClientRect().left-window.__leftBefore)<1 && Math.abs(document.querySelector('.st-body-right').getBoundingClientRect().right-window.__rightBefore)<1})()"
+
+# elementFromPoint 采样：滚动中途在左壳字段名输入框 / 右壳删除按钮位置采样，
+# 命中元素应属于对应壳内的控件（证明固定列不被中间列内容遮挡、也不遮挡交互）
+check "采样：字段名输入框位置命中左壳输入框" "(function(){var el=document.querySelector('.st-body-left .st-c-name input');var r=el.getBoundingClientRect();var hit=document.elementFromPoint(r.left+r.width/2, r.top+r.height/2);return !!hit && !!hit.closest('.st-body-left')})()"
+check "采样：删除按钮位置命中右壳按钮" "(function(){var el=document.querySelector('.st-body-right .st-c-del button, .st-body-right .row-del-placeholder');var r=el.getBoundingClientRect();var hit=document.elementFromPoint(r.left+r.width/2, r.top+r.height/2);return !!hit && !!hit.closest('.st-body-right')})()"
+
+agent-browser eval "document.querySelector('.st-scrollbar-h').scrollLeft = 999999" >/dev/null 2>&1
 sleep 0.5
-check "排序手柄列吸附左缘" "(function(){var g=document.querySelector('.grid-scroll');var row=document.querySelector('.column-row');var c=row.children[0];return Math.abs(c.getBoundingClientRect().left - g.getBoundingClientRect().left) < 2})()"
-check "字段名列吸附左缘（偏移 34px）" "(function(){var g=document.querySelector('.grid-scroll');var row=document.querySelector('.column-row');var c=row.children[1];return Math.abs(c.getBoundingClientRect().left - g.getBoundingClientRect().left - 34) < 2})()"
-check "删除按钮吸附右缘（含滚动条带宽）" "(function(){var g=document.querySelector('.grid-scroll');var row=document.querySelector('.column-row');var c=row.children[row.children.length-1];var r=c.getBoundingClientRect().right,gr=g.getBoundingClientRect().right;return r<=gr+2 && r>=gr-20})()"
-check "中间列滚出可视区（滚动生效）" "(function(){var g=document.querySelector('.grid-scroll');var row=document.querySelector('.column-row');var c=row.children[4];return c.getBoundingClientRect().left < g.getBoundingClientRect().left - 4})()"
-check "表头字段名同步吸附" "(function(){var g=document.querySelector('.grid-scroll');var h=document.querySelector('.columns-head');var c=h.children[1];return Math.abs(c.getBoundingClientRect().left - g.getBoundingClientRect().left - 34) < 2})()"
-agent-browser screenshot "$SHOTS/task37-sticky-fixed.png" >/dev/null 2>&1
+check "滚动到最右：越界 scrollLeft 被钳制" "(function(){var b=document.querySelector('.st-scrollbar-h');return b.scrollLeft <= b.scrollWidth - b.clientWidth + 1})()"
+check "滚动到最右：中间首列完全滚出" "(function(){var left=document.querySelector('.st-body-left');return document.querySelector('.st-body-center .st-c-propertyName').getBoundingClientRect().left < left.getBoundingClientRect().right - 4})()"
+agent-browser screenshot "$SHOTS/task37-sync-fixed.png" >/dev/null 2>&1
 
-# ---------- 5. 固定列不透明性 + 表头遮缝（半透明底色/空末格透出修复） ----------
-echo "== 表编辑：固定列不透明性 =="
-check "pk 行删除位包裹层背景不透明（无 alpha 透底）" "(function(){var r=document.querySelector('.column-row.pk-row');var pin=r?.querySelector('.cell-pin-del');if(!pin)return false;var c=getComputedStyle(pin).backgroundColor;if(c.indexOf('rgba')===-1)return true;var a=parseFloat(c.slice(c.lastIndexOf(',')+1).replace(')','').trim());return a===1})()"
-check "pk 行包裹层带悬停色叠层（视觉与行底色一致）" "(function(){var r=document.querySelector('.column-row.pk-row');var pin=r?.querySelector('.cell-pin-del');return !!pin && getComputedStyle(pin).backgroundImage.indexOf('linear-gradient')>-1})()"
-check "普通行包裹层背景不透明且无叠层" "(function(){var r=[...document.querySelectorAll('.column-row')].find(function(x){return !x.classList.contains('pk-row')});var pin=r?.querySelector('.cell-pin-del');if(!pin)return false;var c=getComputedStyle(pin).backgroundColor;if(c.indexOf('rgba')>-1)return false;return getComputedStyle(pin).backgroundImage==='none'})()"
-check "pk 行遮缝伪元素继承不透明合成背景" "(function(){var r=document.querySelector('.column-row.pk-row');var pin=r?.querySelector('.cell-pin-name');var s=getComputedStyle(pin,'::before');if(s.content==='none')return false;var c=s.backgroundColor;if(c.indexOf('rgba')>-1)return false;return s.backgroundImage.indexOf('linear-gradient')>-1})()"
-check "表头末格纵向拉伸（空 span 高度非 0）" "(function(){var h=document.querySelector('.columns-head');var c=h.children[h.children.length-1];return c.getBoundingClientRect().height > 10})()"
-check "表头字段名左侧遮缝伪元素存在" "(function(){var h=document.querySelector('.columns-head');var s=getComputedStyle(h.children[1],'::before');return s.content !== 'none' && s.width === '7px'})()"
-check "表头末格左侧遮缝伪元素存在" "(function(){var h=document.querySelector('.columns-head');var c=h.children[h.children.length-1];var s=getComputedStyle(c,'::before');return s.content !== 'none' && s.width === '7px'})()"
+# ---------- 7. 滚轮转发（壳内容滚轮驱动专用滚动条） ----------
+echo "== 表编辑：滚轮转发 =="
+agent-browser eval "window.__sl=document.querySelector('.st-scrollbar-h').scrollLeft;'ok'" >/dev/null 2>&1
+agent-browser eval "document.querySelector('.st-body-center').dispatchEvent(new WheelEvent('wheel', {deltaX: -120, bubbles: true, cancelable: true}))" >/dev/null 2>&1
+sleep 0.3
+check "壳上滚轮驱动横向滚动条回滚" "document.querySelector('.st-scrollbar-h').scrollLeft < window.__sl"
 
-# 裁剪坐标（供事后 PIL 裁切 + VLM 视觉复核）
-agent-browser eval "JSON.stringify({grid:(function(){var r=document.querySelector('.grid-scroll').getBoundingClientRect();return {l:Math.round(r.left),t:Math.round(r.top),w:Math.round(r.width),h:Math.round(r.height)}})(),pk:(function(){var r=document.querySelector('.column-row.pk-row').getBoundingClientRect();return {t:Math.round(r.top),b:Math.round(r.bottom)}})()})" 2>/dev/null
+# ---------- 8. 纵向滚动同步（添加字段至溢出 → 纵向条驱动表体三壳） ----------
+echo "== 表编辑：纵向滚动同步 =="
+agent-browser eval "for(var i=0;i<8;i++){[...document.querySelectorAll('.add-btn')].find(b=>b.textContent.includes('添加字段'))?.click()}" >/dev/null 2>&1
+sleep 0.8
+check "行数增加后纵向滚动条出现" "(function(){var b=document.querySelector('.st-scrollbar-v');var t=document.querySelector('.sync-table');return t.classList.contains('st-has-vbar') && !!b && b.scrollHeight > b.clientHeight})()"
+agent-browser eval "document.querySelector('.st-scrollbar-v').scrollTop = 60" >/dev/null 2>&1
+sleep 0.4
+check "纵向滚动：表体三壳 scrollTop 同步" "(function(){var b=document.querySelector('.st-scrollbar-v');var l=document.querySelector('.st-body-left'),c=document.querySelector('.st-body-center'),r=document.querySelector('.st-body-right');return b.scrollTop===60 && l.scrollTop===60 && c.scrollTop===60 && r.scrollTop===60})()"
+check "纵向滚动：表头恒不纵滚" "(function(){return document.querySelector('.st-head-center').scrollTop===0 && document.querySelector('.st-header').getBoundingClientRect().height < 40})()"
+agent-browser screenshot "$SHOTS/task37-sync-vscroll.png" >/dev/null 2>&1
 
-# ---------- 6. 删除逻辑字段 = 整列移除（非仅清标记） ----------
+# ---------- 9. 删除逻辑字段 = 整列移除（非仅清标记） ----------
 echo "== 表编辑：删除逻辑字段 =="
-agent-browser eval "window.__rows = document.querySelectorAll('.columns-body .column-row').length" >/dev/null 2>&1
+agent-browser eval "window.__rows = document.querySelectorAll('.st-body-left .column-row').length" >/dev/null 2>&1
 agent-browser eval "[...document.querySelectorAll('.audit-actions button')].find(b => b.textContent.includes('添加逻辑删除字段'))?.click()" >/dev/null 2>&1
 sleep 0.5
-check "添加后行数 +1" "document.querySelectorAll('.columns-body .column-row').length === window.__rows + 1"
-check "deleted 字段行已添加" "(function(){return [...document.querySelectorAll('.column-row')].some(r => r.querySelector('.cell-pin-name input')?.value === 'deleted')})()"
-check "deleted 行逻辑删勾选" "(function(){var r=[...document.querySelectorAll('.column-row')].find(r => r.querySelector('.cell-pin-name input')?.value === 'deleted');var c=r?.querySelectorAll('.ant-checkbox-input');return !!c && c[2].checked})()"
+check "添加后行数 +1" "document.querySelectorAll('.st-body-left .column-row').length === window.__rows + 1"
+check "deleted 字段行已添加" "(function(){return [...document.querySelectorAll('.st-body-left .column-row')].some(r => r.querySelector('.st-c-name input')?.value === 'deleted')})()"
+check "deleted 行逻辑删勾选" "(function(){var rows=[...document.querySelectorAll('.st-body-left .column-row')];var li=rows.findIndex(r => r.querySelector('.st-c-name input')?.value === 'deleted');var c=document.querySelectorAll('.st-body-center .column-row')[li]?.querySelectorAll('.ant-checkbox-input');return !!c && c[2].checked})()"
 check "按钮切换为「删除逻辑字段」" "!![...document.querySelectorAll('.audit-actions button')].find(b => b.textContent.includes('删除逻辑字段'))"
 
 agent-browser eval "[...document.querySelectorAll('.audit-actions button')].find(b => b.textContent.includes('删除逻辑字段'))?.click()" >/dev/null 2>&1
 sleep 0.5
-check "删除后行数复原（整列移除）" "document.querySelectorAll('.columns-body .column-row').length === window.__rows"
-check "deleted 字段行已消失" "(function(){return ![...document.querySelectorAll('.column-row')].some(r => r.querySelector('.cell-pin-name input')?.value === 'deleted')})()"
+check "删除后行数复原（整列移除）" "document.querySelectorAll('.st-body-left .column-row').length === window.__rows"
+check "deleted 字段行已消失" "(function(){return ![...document.querySelectorAll('.st-body-left .column-row')].some(r => r.querySelector('.st-c-name input')?.value === 'deleted')})()"
 check "删除 toast 出现（已删除逻辑删除字段）" "document.body.innerText.includes('已删除逻辑删除字段')"
 check "按钮切回「添加逻辑删除字段」" "!![...document.querySelectorAll('.audit-actions button')].find(b => b.textContent.includes('添加逻辑删除字段'))"
 
-# ---------- 7. 汇总 ----------
+# ---------- 10. 汇总 ----------
 echo ""
 echo "== 汇总: PASS=$PASS FAIL=$FAIL =="
 if [ ${#FAILED_NAMES[@]} -gt 0 ]; then

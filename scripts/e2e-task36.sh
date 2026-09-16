@@ -88,25 +88,25 @@ header_nav 模型编辑器
 poll_expr "!!document.querySelector('.table-card')" 5
 
 agent-browser eval "document.querySelector('.table-card').dispatchEvent(new MouseEvent('dblclick', {bubbles: true}))" >/dev/null 2>&1
-poll_expr "!!document.querySelector('.columns-head')" 8
-sleep 0.5
+poll_expr "!!(document.querySelector('.sync-table') && document.querySelector('.sync-table').getClientRects().length > 0)" 8
+sleep 0.8
 
-check "字段表头含「逻辑删」列" "(function(){return [...document.querySelectorAll('.columns-head > span')].some(s => s.textContent.trim() === '逻辑删')})()"
+check "字段表头含「逻辑删」列" "(function(){return [...document.querySelectorAll('.st-head-center th')].some(s => s.textContent.trim() === '逻辑删')})()"
 check "「添加逻辑删除字段」按钮存在" "!![...document.querySelectorAll('.audit-actions button')].find(b => b.textContent.includes('添加逻辑删除字段'))"
 check "逻辑删除约定提示（del_flag）" "document.body.innerText.includes('逻辑删除：del_flag · TINYINT')"
 
 # 点击「添加逻辑删除字段」→ 依约定建列（del_flag，非空，标记勾选）
 agent-browser eval "[...document.querySelectorAll('.audit-actions button')].find(b => b.textContent.includes('添加逻辑删除字段'))?.click()" >/dev/null 2>&1
 sleep 0.5
-check "del_flag 字段行已添加" "(function(){return [...document.querySelectorAll('.column-row')].some(r => r.querySelector('input')?.value === 'del_flag')})()"
+check "del_flag 字段行已添加" "(function(){return [...document.querySelectorAll('.st-body-left .column-row')].some(r => r.querySelector('.st-c-name input')?.value === 'del_flag')})()"
 
-# 勾选序（非空=0 主键=1 逻辑删=2）：del_flag 行逻辑删应勾选
-check "del_flag 行逻辑删已勾选" "(function(){var r=[...document.querySelectorAll('.column-row')].find(r => r.querySelector('input')?.value === 'del_flag');var c=r?.querySelectorAll('.ant-checkbox-input');return !!c && c[2].checked})()"
+# 勾选序（非空=0 主键=1 逻辑删=2，均在中间表）：del_flag 行逻辑删应勾选
+check "del_flag 行逻辑删已勾选" "(function(){var rows=[...document.querySelectorAll('.st-body-left .column-row')];var li=rows.findIndex(r => r.querySelector('.st-c-name input')?.value === 'del_flag');var c=document.querySelectorAll('.st-body-center .column-row')[li]?.querySelectorAll('.ant-checkbox-input');return !!c && c[2].checked})()"
 
 # 互斥验证：给另一普通字段行勾选逻辑删 → del_flag 行勾选被自动转移
-agent-browser eval "(function(){var rows=[...document.querySelectorAll('.column-row')];var r=rows.find(r => {var v=r.querySelector('input')?.value;return v && v!=='del_flag' && r.querySelectorAll('.ant-checkbox-input').length>=3 && !r.classList.contains('pk-row')});var c=r?.querySelectorAll('.ant-checkbox-input');if(c&&c[2]){c[2].click();return true}return false})()" >/dev/null 2>&1
+agent-browser eval "(function(){var rows=[...document.querySelectorAll('.st-body-left .column-row')];var li=rows.findIndex(r => {var v=r.querySelector('.st-c-name input')?.value;return v && v!=='del_flag' && !r.classList.contains('pk-row')});var c=document.querySelectorAll('.st-body-center .column-row')[li]?.querySelectorAll('.ant-checkbox-input');if(c&&c[2]){c[2].click();return true}return false})()" >/dev/null 2>&1
 sleep 0.5
-check "互斥：原 del_flag 行勾选被取消" "(function(){var r=[...document.querySelectorAll('.column-row')].find(r => r.querySelector('input')?.value === 'del_flag');var c=r?.querySelectorAll('.ant-checkbox-input');return !!c && !c[2].checked})()"
+check "互斥：原 del_flag 行勾选被取消" "(function(){var rows=[...document.querySelectorAll('.st-body-left .column-row')];var li=rows.findIndex(r => r.querySelector('.st-c-name input')?.value === 'del_flag');var c=document.querySelectorAll('.st-body-center .column-row')[li]?.querySelectorAll('.ant-checkbox-input');return !!c && !c[2].checked})()"
 check "互斥：转移 toast 提示出现" "(function(){return document.body.innerText.includes('每表最多一个')})()"
 check "按钮切换为「删除逻辑字段」" "!![...document.querySelectorAll('.audit-actions button')].find(b => b.textContent.includes('删除逻辑字段'))"
 
@@ -115,37 +115,39 @@ agent-browser eval "[...document.querySelectorAll('.ant-modal-footer button')].f
 poll_expr "document.body.innerText.includes('已更新') || document.body.innerText.includes('已创建')" 8
 check "表保存成功提示" "document.body.innerText.includes('已更新') || document.body.innerText.includes('已创建')"
 # 确认对话框真实隐藏（保存生效的硬证据；antd 关闭后 DOM 保留，需按可见性判断），再重开验证持久化
-poll_expr "(function(){var el=document.querySelector('.columns-head');return !el || el.getClientRects().length===0})()" 8
-check "保存后对话框已隐藏" "(function(){var el=document.querySelector('.columns-head');return !el || el.getClientRects().length===0})()"
+poll_expr "(function(){var el=document.querySelector('.sync-table');return !el || el.getClientRects().length===0})()" 8
+check "保存后对话框已隐藏" "(function(){var el=document.querySelector('.sync-table');return !el || el.getClientRects().length===0})()"
 sleep 0.5
 
 # 重开对话框 → 持久化勾选验证（可见性确认真实重开；勾选应在转移后的行而非 del_flag）
 agent-browser eval "document.querySelector('.table-card').dispatchEvent(new MouseEvent('dblclick', {bubbles: true}))" >/dev/null 2>&1
-poll_expr "!!(document.querySelector('.columns-head') && document.querySelector('.columns-head').getClientRects().length > 0)" 8
+poll_expr "!!(document.querySelector('.sync-table') && document.querySelector('.sync-table').getClientRects().length > 0)" 8
 sleep 0.8
-check "重开后逻辑删标记持久化（仅一个）" "(function(){var rows=[...document.querySelectorAll('.column-row')];var n=0;rows.forEach(r => {var c=r.querySelectorAll('.ant-checkbox-input');if(c.length>=3&&c[2].checked)n++});return n===1})()"
-check "持久化勾选在转移后的行（非 del_flag）" "(function(){var rows=[...document.querySelectorAll('.column-row')];var r=rows.find(r => {var c=r.querySelectorAll('.ant-checkbox-input');return c.length>=3&&c[2].checked});return !!r && r.querySelector('input')?.value !== 'del_flag'})()"
+check "重开后逻辑删标记持久化（仅一个）" "(function(){var cs=[...document.querySelectorAll('.st-body-center .column-row')];var n=0;cs.forEach(r => {var c=r.querySelectorAll('.ant-checkbox-input');if(c.length>=3&&c[2].checked)n++});return n===1})()"
+check "持久化勾选在转移后的行（非 del_flag）" "(function(){var rows=[...document.querySelectorAll('.st-body-left .column-row')];var li=-1;rows.forEach((r,i)=>{if(r.querySelector('.st-c-name input')?.value==='del_flag')li=i});var c=document.querySelectorAll('.st-body-center .column-row');var idx=[...c].findIndex(r => {var x=r.querySelectorAll('.ant-checkbox-input');return x.length>=3&&x[2].checked});return idx>=0 && idx!==li})()"
 
 agent-browser screenshot "$SHOTS/task36-logic-delete.png" >/dev/null 2>&1
 agent-browser eval "document.querySelector('.ant-modal .ant-modal-close')?.click()" >/dev/null 2>&1
 sleep 0.5
 
-# ---------- 4. 左右固定列（需求 1：窄视口横向滚动吸附） ----------
-echo "== 表编辑：左右固定列 =="
+# ---------- 4. 左右固定列（需求 1：多表同步滚动，窄视口横向滚动） ----------
+echo "== 表编辑：左右固定列（多表同步滚动） =="
 agent-browser set viewport 760 900 >/dev/null 2>&1
 sleep 0.5
 agent-browser eval "document.querySelector('.table-card').dispatchEvent(new MouseEvent('dblclick', {bubbles: true}))" >/dev/null 2>&1
-poll_expr "!!(document.querySelector('.columns-head') && document.querySelector('.columns-head').getClientRects().length > 0)" 8
-sleep 0.5
+poll_expr "!!(document.querySelector('.sync-table') && document.querySelector('.sync-table').getClientRects().length > 0)" 8
+sleep 0.8
 
-check "窄视口横向滚动出现" "(function(){var g=document.querySelector('.grid-scroll');return g && g.scrollWidth > g.clientWidth + 4})()"
-agent-browser eval "document.querySelector('.grid-scroll').scrollLeft = 999999" >/dev/null 2>&1
+check "窄视口横向滚动条出现（专用滚动源）" "(function(){var b=document.querySelector('.st-scrollbar-h');return b && b.scrollWidth > b.clientWidth + 4})()"
+agent-browser eval "window.__leftBefore = document.querySelector('.st-body-left').getBoundingClientRect().left; window.__rightBefore = document.querySelector('.st-body-right').getBoundingClientRect().right; 'ok'" >/dev/null 2>&1
+agent-browser eval "document.querySelector('.st-scrollbar-h').scrollLeft = 999999" >/dev/null 2>&1
 sleep 0.5
-check "排序手柄列吸附左缘" "(function(){var g=document.querySelector('.grid-scroll');var row=document.querySelector('.column-row');var c=row.children[0];return Math.abs(c.getBoundingClientRect().left - g.getBoundingClientRect().left) < 2})()"
-check "字段名列吸附左缘（偏移 34px）" "(function(){var g=document.querySelector('.grid-scroll');var row=document.querySelector('.column-row');var c=row.children[1];return Math.abs(c.getBoundingClientRect().left - g.getBoundingClientRect().left - 34) < 2})()"
-check "删除按钮吸附右缘（含滚动条带宽）" "(function(){var g=document.querySelector('.grid-scroll');var row=document.querySelector('.column-row');var c=row.children[row.children.length-1];var r=c.getBoundingClientRect().right,gr=g.getBoundingClientRect().right;return r<=gr+2 && r>=gr-20})()"
-check "中间列滚出可视区（滚动生效）" "(function(){var g=document.querySelector('.grid-scroll');var row=document.querySelector('.column-row');var c=row.children[4];return c.getBoundingClientRect().left < g.getBoundingClientRect().left - 4})()"
-check "表头字段名同步吸附" "(function(){var g=document.querySelector('.grid-scroll');var h=document.querySelector('.columns-head');var c=h.children[1];return Math.abs(c.getBoundingClientRect().left - g.getBoundingClientRect().left - 34) < 2})()"
+check "排序手柄列固定左缘（不随滚动平移）" "(function(){var root=document.querySelector('.sync-table');return Math.abs(document.querySelector('.st-body-left').getBoundingClientRect().left - root.getBoundingClientRect().left) < 2 && Math.abs(document.querySelector('.st-body-left').getBoundingClientRect().left - window.__leftBefore) < 1})()"
+check "字段名输入框仍可见于左壳" "(function(){var root=document.querySelector('.sync-table');var r=document.querySelector('.st-body-left .st-c-name input').getBoundingClientRect();var rt=root.getBoundingClientRect();return r.left >= rt.left && r.right <= document.querySelector('.st-body-left').getBoundingClientRect().right})()"
+check "删除按钮列固定右缘（不随滚动平移）" "(function(){var root=document.querySelector('.sync-table');var rr=document.querySelector('.st-body-right').getBoundingClientRect().right;return rr <= root.getBoundingClientRect().right + 2 && Math.abs(rr - window.__rightBefore) < 1})()"
+check "中间列随滚动平移（滚出可视区）" "(function(){var left=document.querySelector('.st-body-left');return document.querySelector('.st-body-center .st-c-propertyName').getBoundingClientRect().left < left.getBoundingClientRect().right - 4})()"
+check "表头与表体中间列同步滚动" "(function(){var b=document.querySelector('.st-scrollbar-h');var h=document.querySelector('.st-head-center');var c=document.querySelector('.st-body-center');return b.scrollLeft > 10 && h.scrollLeft === b.scrollLeft && c.scrollLeft === b.scrollLeft})()"
+check "左右壳不产生横向滚动（固定列恒在位）" "(function(){return document.querySelector('.st-body-left').scrollLeft === 0 && document.querySelector('.st-body-right').scrollLeft === 0})()"
 
 agent-browser screenshot "$SHOTS/task36-sticky-columns.png" >/dev/null 2>&1
 agent-browser set viewport 1440 900 >/dev/null 2>&1

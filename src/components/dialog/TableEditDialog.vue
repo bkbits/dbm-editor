@@ -3,6 +3,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import { message } from 'antdv-next'
 import { Plus, Trash2, GripVertical, Lock, ShieldCheck, Eraser } from '@lucide/vue'
 import type { AuditFieldRole, OptionSetting, TableColumn, TableIndex } from '@/types/model'
+import SyncTable, { type StColumn } from '@/components/common/SyncTable.vue'
 import { useUiStore } from '@/stores/ui'
 import { useModelStore } from '@/stores/model'
 import { useDictStore } from '@/stores/dict'
@@ -117,22 +118,80 @@ const templateCheckOptions = computed(() =>
 
 /** 表选项定义（来自应用设置） */
 const tableOptionDefs = computed(() => settingsStore.tableOptions)
-/** 列选项定义（来自应用设置，驱动字段表格动态选项列） */
-const columnOptionDefs = computed(() => settingsStore.columnOptions)
 
-/** 字段表格网格模板：基础列 + 列选项动态列（boolean=勾选列，其余=输入列） */
-const colsGridStyle = computed(() => {
-  const defs = settingsStore.columnOptions
-  if (!defs.length)
-    return {
-      gridTemplateColumns:
-        '28px minmax(96px, 1fr) minmax(84px, 1fr) 132px 118px 44px 44px 44px 108px minmax(72px, 1fr) 26px',
-    }
-  const extra = defs.map((d) => (d.type === 'boolean' ? '42px' : '96px')).join(' ')
-  return {
-    gridTemplateColumns: `28px minmax(96px, 1fr) minmax(84px, 1fr) 132px 118px 44px 44px 44px 108px minmax(72px, 1fr) ${extra} 26px`,
+/**
+ * 字段表格列定义（SyncTable 多表同步滚动结构）：
+ * - 排序手柄 / 字段名固定左侧，删除按钮固定右侧，其余为中间滚动列
+ * - 窄固定列（手柄 / 复选 / 删除）显式声明 minWidth，避免默认 80px 下限抬升
+ * - 字段名 / Java属性名 / 注释为弹性列（不指定宽度，minWidth 为下限参与剩余分配）
+ */
+const fieldColumns = computed<StColumn[]>(() => {
+  const cols: StColumn[] = [
+    { key: 'sort', title: '排序', width: 32, minWidth: 32, fixed: 'left', align: 'center' },
+    { key: 'name', title: '字段名', minWidth: 100, fixed: 'left' },
+    { key: 'propertyName', title: 'Java属性名', minWidth: 88 },
+    { key: 'type', title: '数据库类型', width: 136, minWidth: 136 },
+    { key: 'javaType', title: 'Java类型', width: 122, minWidth: 122 },
+    { key: 'notNull', title: '非空', width: 48, minWidth: 48, align: 'center' },
+    { key: 'primaryKey', title: '主键', width: 48, minWidth: 48, align: 'center' },
+    {
+      key: 'logicDelete',
+      title: '逻辑删',
+      width: 48,
+      minWidth: 48,
+      align: 'center',
+      thTitle: '逻辑删除字段（软删除标记，每表最多一个）',
+    },
+    { key: 'dict', title: '字典', width: 112, minWidth: 112 },
+    { key: 'comment', title: '注释', minWidth: 76 },
+  ]
+  // 列选项动态列（boolean=勾选列，其余=输入列），键以 opt: 前缀避免与基础列冲突
+  for (const def of settingsStore.columnOptions) {
+    cols.push(
+      def.type === 'boolean'
+        ? {
+            key: `opt:${def.name}`,
+            title: def.label,
+            width: 48,
+            minWidth: 48,
+            align: 'center',
+            thTitle: `${def.label}：${def.remark || def.name}`,
+            thClass: 'opt-head',
+          }
+        : {
+            key: `opt:${def.name}`,
+            title: def.label,
+            width: 100,
+            minWidth: 100,
+            thTitle: `${def.label}：${def.remark || def.name}`,
+            thClass: 'opt-head',
+          },
+    )
   }
+  cols.push({ key: 'del', title: '', width: 32, minWidth: 32, fixed: 'right' })
+  return cols
 })
+
+/** 列选项定义反查（单元格插槽按 opt: 前缀键取回定义） */
+function optDefOf(key: string) {
+  const name = key.startsWith('opt:') ? key.slice(4) : ''
+  return settingsStore.columnOptions.find((d) => d.name === name)
+}
+
+/** 字段行键（列 id） */
+function fieldRowKey(idx: number) {
+  return draft.columns[idx]?.id ?? idx
+}
+
+/** 字段行附加类：拖拽指示 + 主键行标记（跨三表按 idx 统一驱动） */
+function fieldRowClass(idx: number) {
+  return [columnDrag.rowClass(idx), { 'pk-row': isPkRow(idx) }]
+}
+
+/** 行可拖拽：拖拽手柄按下的瞬间（三张表体表同行一并置 draggable，任一处可发起） */
+function fieldDraggable(idx: number) {
+  return columnDrag.state.from === idx
+}
 
 /** 树形表开关：开启时父ID字段默认 parent_id，关闭时清空 */
 const treeEnabled = computed({
@@ -779,172 +838,154 @@ async function save() {
     </div>
 
     <a-tabs v-model:active-key="draft.activeTab" size="small" class="edit-tabs">
-      <!-- ========== 字段（窄屏整体横向滚动：表头与行同滚） ========== -->
+      <!-- ========== 字段（多表同步滚动：表头 / 左右固定列 / 中间列分表 + 专用滚动条） ========== -->
       <a-tab-pane key="columns" :tab="`字段（${draft.columns.length}）`">
-        <div class="grid-scroll">
-          <div class="columns-head cols-grid" :style="colsGridStyle">
-            <span class="h-sort">排序</span>
-            <span>字段名</span>
-            <span>Java属性名</span>
-            <span>数据库类型</span>
-            <span>Java类型</span>
-            <span class="h-center">非空</span>
-            <span class="h-center">主键</span>
-            <span class="h-center" title="逻辑删除字段（软删除标记，每表最多一个）">逻辑删</span>
-            <span>字典</span>
-            <span>注释</span>
+        <SyncTable
+          class="fields-table"
+          :columns="fieldColumns"
+          :row-count="draft.columns.length"
+          :row-key="fieldRowKey"
+          :row-class="fieldRowClass"
+          :draggable="fieldDraggable"
+          @row-dragstart="columnDrag.onDragStart"
+          @row-dragend="columnDrag.onDragEnd"
+          @row-dragover="columnDrag.onDragOver"
+          @row-drop="columnDrag.onDrop"
+        >
+          <template #cell="{ col, idx }">
+            <!-- 左固定列：排序手柄（主键首行锁定图标） -->
             <span
-              v-for="def in columnOptionDefs"
-              :key="def.name"
-              class="h-center opt-head"
-              :title="`${def.label}：${def.remark || def.name}`"
+              v-if="col.key === 'sort' && isPkRow(idx)"
+              class="drag-handle pk-lock"
+              title="主键字段（依设置约定固定为第一个字段，不可修改、不可排序）"
             >
-              {{ def.label }}
+              <Lock :size="12" />
             </span>
-            <span></span>
-          </div>
-          <div class="columns-body">
-            <div
-              v-for="(col, idx) in draft.columns"
-              :key="col.id"
-              class="column-row cols-grid"
-              :class="[columnDrag.rowClass(idx), { 'pk-row': isPkRow(idx) }]"
-              :data-idx="idx"
-              :style="colsGridStyle"
-              :draggable="columnDrag.state.from === idx"
-              @dragstart="columnDrag.onDragStart(idx, $event)"
-              @dragend="columnDrag.onDragEnd()"
-              @dragover.prevent="columnDrag.onDragOver(idx, $event)"
-              @drop.prevent="columnDrag.onDrop()"
+            <span
+              v-else-if="col.key === 'sort'"
+              class="drag-handle"
+              title="拖拽排序"
+              @pointerdown="columnDrag.handleDown(idx)"
             >
-              <!-- 固定列包裹层：sticky 吸附 + 纵向铺满行高（防滚动内容从格子上下空隙透出） -->
-              <div class="cell-pin cell-pin-sort">
-                <!-- 主键首行：锁定图标（不可拖拽排序）；其余行：拖拽手柄 -->
-                <span
-                  v-if="isPkRow(idx)"
-                  class="drag-handle pk-lock"
-                  title="主键字段（依设置约定固定为第一个字段，不可修改、不可排序）"
-                >
-                  <Lock :size="12" />
-                </span>
-                <span
-                  v-else
-                  class="drag-handle"
-                  title="拖拽排序"
-                  @pointerdown="columnDrag.handleDown(idx)"
-                >
-                  <GripVertical :size="13" />
-                </span>
-              </div>
-              <div class="cell-pin cell-pin-name">
-                <a-input
-                  v-model:value="col.columnName"
-                  size="small"
-                  class="mono"
-                  placeholder="字段名"
-                  :disabled="isPkRow(idx)"
-                  @change="onColumnName(col)"
-                />
-              </div>
+              <GripVertical :size="13" />
+            </span>
+            <!-- 左固定列：字段名 -->
+            <a-input
+              v-else-if="col.key === 'name'"
+              v-model:value="draft.columns[idx].columnName"
+              size="small"
+              class="mono"
+              placeholder="字段名"
+              :disabled="isPkRow(idx)"
+              @change="onColumnName(draft.columns[idx])"
+            />
+            <!-- 中间列 -->
+            <a-input
+              v-else-if="col.key === 'propertyName'"
+              v-model:value="draft.columns[idx].propertyName"
+              size="small"
+              class="mono"
+              placeholder="小驼峰"
+              :disabled="isPkRow(idx)"
+              @change="draft.columns[idx]._propTouched = true"
+            />
+            <a-auto-complete
+              v-else-if="col.key === 'type'"
+              v-model:value="draft.columns[idx].type"
+              :options="dbTypeOptions"
+              size="small"
+              class="mono"
+              placeholder="如 VARCHAR(50)"
+              :disabled="isPkRow(idx)"
+              :filter-option="
+                (input: string, option: any) =>
+                  String(option.value).toUpperCase().includes(input.toUpperCase())
+              "
+              @change="onTypeChange(draft.columns[idx])"
+            />
+            <a-auto-complete
+              v-else-if="col.key === 'javaType'"
+              v-model:value="draft.columns[idx].javaType"
+              :options="javaTypeOptions"
+              size="small"
+              class="mono"
+              placeholder="如 String"
+              :disabled="isPkRow(idx)"
+              :filter-option="
+                (input: string, option: any) =>
+                  String(option.value).toLowerCase().includes(input.toLowerCase())
+              "
+              @change="draft.columns[idx]._javaTouched = true"
+            />
+            <a-checkbox
+              v-else-if="col.key === 'notNull'"
+              v-model:checked="draft.columns[idx].notNull"
+              :disabled="isPkRow(idx)"
+            />
+            <span
+              v-else-if="col.key === 'primaryKey'"
+              title="主键标记锁定：首字段固定为主键（依设置约定）"
+            >
+              <a-checkbox v-model:checked="draft.columns[idx].primaryKey" disabled />
+            </span>
+            <a-checkbox
+              v-else-if="col.key === 'logicDelete'"
+              :checked="draft.columns[idx].logicDelete === true"
+              :disabled="isPkRow(idx)"
+              @change="onLogicDeleteToggle(draft.columns[idx], $event)"
+            />
+            <a-select
+              v-else-if="col.key === 'dict'"
+              v-model:value="draft.columns[idx].dict"
+              :options="dictOptions"
+              size="small"
+              placeholder="无"
+              allow-clear
+              show-search
+              option-filter-prop="label"
+              :disabled="isPkRow(idx)"
+            />
+            <a-input
+              v-else-if="col.key === 'comment'"
+              v-model:value="draft.columns[idx].comment"
+              size="small"
+              placeholder="选填"
+              :disabled="isPkRow(idx)"
+            />
+            <!-- 列选项动态列（boolean=勾选，其余=输入） -->
+            <template v-else-if="col.key.startsWith('opt:')">
+              <a-checkbox
+                v-if="optDefOf(col.key)?.type === 'boolean'"
+                v-model:checked="draft.columns[idx]._optVals[optDefOf(col.key)!.name]"
+                :disabled="isPkRow(idx)"
+              />
               <a-input
-                v-model:value="col.propertyName"
+                v-else
+                v-model:value="draft.columns[idx]._optVals[optDefOf(col.key)!.name]"
                 size="small"
-                class="mono"
-                placeholder="小驼峰"
-                :disabled="isPkRow(idx)"
-                @change="col._propTouched = true"
-              />
-              <a-auto-complete
-                v-model:value="col.type"
-                :options="dbTypeOptions"
-                size="small"
-                class="mono"
-                placeholder="如 VARCHAR(50)"
-                :disabled="isPkRow(idx)"
-                :filter-option="
-                  (input: string, option: any) =>
-                    String(option.value).toUpperCase().includes(input.toUpperCase())
-                "
-                @change="onTypeChange(col)"
-              />
-              <a-auto-complete
-                v-model:value="col.javaType"
-                :options="javaTypeOptions"
-                size="small"
-                class="mono"
-                placeholder="如 String"
-                :disabled="isPkRow(idx)"
-                :filter-option="
-                  (input: string, option: any) =>
-                    String(option.value).toLowerCase().includes(input.toLowerCase())
-                "
-                @change="col._javaTouched = true"
-              />
-              <div class="center-cell">
-                <a-checkbox v-model:checked="col.notNull" :disabled="isPkRow(idx)" />
-              </div>
-              <div class="center-cell" title="主键标记锁定：首字段固定为主键（依设置约定）">
-                <a-checkbox v-model:checked="col.primaryKey" disabled />
-              </div>
-              <div
-                class="center-cell"
-                title="逻辑删除字段（软删除标记，每表最多一个；勾选新的会自动转移标记）"
-              >
-                <a-checkbox
-                  :checked="col.logicDelete === true"
-                  :disabled="isPkRow(idx)"
-                  @change="onLogicDeleteToggle(col, $event)"
-                />
-              </div>
-              <a-select
-                v-model:value="col.dict"
-                :options="dictOptions"
-                size="small"
-                placeholder="无"
-                allow-clear
-                show-search
-                option-filter-prop="label"
+                class="mono opt-col-input"
+                :placeholder="optDefOf(col.key)!.name"
+                :title="optDefOf(col.key)!.remark || optDefOf(col.key)!.label"
                 :disabled="isPkRow(idx)"
               />
-              <a-input
-                v-model:value="col.comment"
-                size="small"
-                placeholder="选填"
-                :disabled="isPkRow(idx)"
-              />
-              <template v-for="def in columnOptionDefs" :key="def.name">
-                <div
-                  v-if="def.type === 'boolean'"
-                  class="center-cell"
-                  :title="def.remark || def.label"
-                >
-                  <a-checkbox v-model:checked="col._optVals[def.name]" :disabled="isPkRow(idx)" />
-                </div>
-                <a-input
-                  v-else
-                  v-model:value="col._optVals[def.name]"
-                  size="small"
-                  class="mono opt-col-input"
-                  :placeholder="def.name"
-                  :title="def.remark || def.label"
-                  :disabled="isPkRow(idx)"
-                />
-              </template>
-              <div class="cell-pin cell-pin-del">
-                <button
-                  v-if="!isPkRow(idx)"
-                  class="row-del"
-                  type="button"
-                  title="删除字段"
-                  @click="removeColumn(idx)"
-                >
-                  <Trash2 :size="12" />
-                </button>
-                <span v-else class="row-del-placeholder" title="主键字段不可删除"></span>
-              </div>
-            </div>
-          </div>
-        </div>
+            </template>
+            <!-- 右固定列：删除按钮（主键行占位） -->
+            <button
+              v-else-if="col.key === 'del' && !isPkRow(idx)"
+              class="row-del"
+              type="button"
+              title="删除字段"
+              @click="removeColumn(idx)"
+            >
+              <Trash2 :size="12" />
+            </button>
+            <span
+              v-else-if="col.key === 'del'"
+              class="row-del-placeholder"
+              title="主键字段不可删除"
+            ></span>
+          </template>
+        </SyncTable>
         <a-button size="small" type="dashed" block class="add-btn" @click="addColumn">
           <template #icon><Plus :size="12" /></template>
           添加字段
@@ -1213,160 +1254,34 @@ async function save() {
   }
 }
 
-.cols-grid {
-  display: grid;
-  grid-template-columns:
-    28px minmax(96px, 1fr) minmax(84px, 1fr)
-    132px 118px 44px 44px 44px 108px minmax(72px, 1fr) 26px;
-  /*
-   * 盒宽下限 = 轨道最小宽之和（min-content）：列选项等动态列使轨道总最小宽超出容器时，
-   * 盒子随轨道加宽而非仅轨道溢出盒子——否则表头 border-bottom / 行悬停背景 /
-   * 拖拽指示线只画到盒子宽（=容器宽），滚动后新露出的表头段下边框缺失一截。
-   */
-  min-width: min-content;
-  gap: 4px 6px;
-  align-items: center;
-}
-
 /*
- * 左右固定列（横向滚动时吸附视口两缘，不随滚动条移动）：
- * - 行内三个固定位置（排序手柄 / 字段名 / 删除按钮）包 .cell-pin 包裹层承担
- *   sticky + 不透明背景，并 align-self: stretch 纵向铺满行轨——
- *   行高由行内最高格子决定（如复选框列），格子本身若按内容高度居中（align-items: center）
- *   会上下留空，横向滚动时中间列内容即从这些空隙透过（排序/字段名缝隙、删除按钮底部透色）；
- *   包裹层铺满行高后，连同遮缝伪元素一起实现纵向全覆盖，内部控件 flex 居中不变形。
- * - 表头 .columns-head 的格子仍是 span 直接 sticky + stretch 铺满行轨
- *   （末格为空 span，不拉伸则高度 0 遮不住滚过的表头文字），并共用下方的
- *   遮缝伪元素规则；表头容器另有不透明背景与 sticky top，竖横双向均吸附。
+ * 字段表格（SyncTable 多表同步滚动结构）的领域样式：
+ * 行悬停 / 拖拽指示 / 行圆角 / 行高由组件内通用规则承担（按行级状态跨三表统一驱动），
+ * 这里仅补充主键首行的领域底色（跨三表同行同步着色）。
  */
-.columns-head.cols-grid > :nth-child(1),
-.columns-head.cols-grid > :nth-child(2),
-.columns-head.cols-grid > :last-child {
-  position: sticky;
-  z-index: 1;
-  /*
-   * 纵向铺满表头行轨：末格是无内容的空 span（内容高度为 0，背景与遮缝伪元素
-   * 高度同为 0，滚动的表头文字直接从删除列表头位置穿过）；
-   * stretch 拉伸补齐高度，文字格 flex 纵向居中保持原视觉。
-   */
-  align-self: stretch;
-  display: flex;
-  align-items: center;
-  background: var(--dbm-bg-raise);
-}
+.fields-table {
+  :deep(tr.pk-row > td) {
+    background: var(--dbm-bg-hover);
+  }
 
-.columns-head.cols-grid > :nth-child(1) {
-  left: 0;
-  /* 「排序」文字在 28px 轨内水平居中（flex 化后 text-align 不再作用于匿名文字项） */
-  justify-content: center;
-}
-
-.columns-head.cols-grid > :nth-child(2) {
-  left: 34px;
-}
-
-.columns-head.cols-grid > :last-child {
-  right: 0;
-}
-
-/* 行内固定列包裹层：sticky 吸附两缘 + 纵向 stretch 铺满行轨（根因修复） */
-.cell-pin {
-  position: sticky;
-  z-index: 1;
-  align-self: stretch;
-  display: flex;
-  align-items: center;
-  background: var(--dbm-bg-raise);
-}
-
-/* 排序手柄 / 删除按钮为定宽小控件，水平居中即可 */
-.cell-pin-sort,
-.cell-pin-del {
-  justify-content: center;
-}
-
-.cell-pin-sort {
-  left: 0;
-}
-
-.cell-pin-name {
-  left: 34px;
-}
-
-.cell-pin-del {
-  right: 0;
-}
-
-/* 字段名输入框撑满包裹层宽（flex 子项不再自动占满轨道宽） */
-.cell-pin-name > :deep(*) {
-  width: 100%;
-}
-
-/*
- * 行悬停 / 主键行底色同步到固定列。
- * --dbm-bg-hover 为半透明色（亮 rgba(15,23,32,0.05) / 暗 rgba(255,255,255,0.06)），
- * 直接用作固定列背景会透出下方滚过的内容（id 行删除位无输入框遮挡最明显，
- * 排序/字段名遮缝伪元素同样继承半透明色而透缝）；
- * 改为「悬停色叠在不透明 --dbm-bg-raise 之上」——与行底色在弹窗表面上的
- * 合成结果完全一致，且不透底。::before/::after 的 background:inherit
- * 会一并继承图像层与颜色层，遮缝带同步不透明。
- */
-.column-row:hover > .cell-pin,
-.column-row.pk-row > .cell-pin {
-  background-color: var(--dbm-bg-raise);
-  background-image: linear-gradient(var(--dbm-bg-hover), var(--dbm-bg-hover));
-}
-
-/*
- * 间隙遮缝：固定列向相邻列方向延伸 7px（覆盖 6px 列距 + 1px 抗锯齿），
- * 背景随宿主 inherit（行包裹层 / 表头格子，悬停/主键行同步变色），
- * 滚动内容从延伸带下方穿过；行包裹层已铺满行高、表头格子已 stretch，
- * 伪元素 top/bottom 同步铺满，纵向不再有透出空隙。
- * 表头格子与行包裹层共用同一组遮缝规则（表头第 2 格左右两侧、末格左侧）。
- */
-.cell-pin-name::before,
-.cell-pin-name::after,
-.cell-pin-del::before,
-.columns-head.cols-grid > :nth-child(2)::before,
-.columns-head.cols-grid > :nth-child(2)::after,
-.columns-head.cols-grid > :last-child::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 7px;
-  background: inherit;
-}
-
-.cell-pin-name::before,
-.columns-head.cols-grid > :nth-child(2)::before {
-  left: -7px;
-}
-
-.cell-pin-name::after,
-.columns-head.cols-grid > :nth-child(2)::after {
-  right: -7px;
-}
-
-.cell-pin-del::before,
-.columns-head.cols-grid > :last-child::before {
-  left: -7px;
+  /* 列选项表头（动态列）窄字号省略号 */
+  :deep(th.opt-head) {
+    font-size: 10.5px;
+  }
 }
 
 .idx-grid {
   display: grid;
   grid-template-columns: minmax(120px, 1fr) 128px minmax(200px, 1.6fr) minmax(80px, 1fr) 26px;
-  /* 同 .cols-grid：盒宽跟随轨道最小宽，表头下边框覆盖全部列 */
+  /* 盒宽跟随轨道最小宽，表头下边框覆盖全部列 */
   min-width: min-content;
   gap: 4px 6px;
   align-items: center;
 }
 
 /*
- * 字段/索引表唯一滚动容器（横向 + 纵向都在此滚动）。
- * 表头 sticky 吸顶（随纵向滚动悬浮、随横向滚动平移），列对齐不漂移；
- * 列选项等动态列使网格最小宽度超出弹窗时仅此容器出现横向滚动条。
- * 纵向限高原在 .columns-body（320px），随滚动容器归一上移至此（320px + 26px 表头）。
+ * 索引表唯一滚动容器（横向 + 纵向都在此滚动，表头 sticky 吸顶）。
+ * 字段表已改为 SyncTable 多表同步滚动结构，不再使用本容器。
  */
 .grid-scroll {
   overflow: auto;
@@ -1382,11 +1297,13 @@ async function save() {
     gap: 8px 10px;
   }
 
-  /* 字段/索引表盒宽下限已由 .cols-grid/.idx-grid 的 min-width: min-content 按轨道最小宽
-     动态保证（含列选项动态列，随设置增减自适应），无需再按断点硬编码 780/560 */
-  /* 纵向限高上移至 .grid-scroll（44vh 表体 + 28px 表头） */
+  /* 索引表纵向限高（44vh 表体 + 28px 表头）；字段表高度上限经 --st-max-h 传入 SyncTable */
   .grid-scroll {
     max-height: calc(44vh + 28px);
+  }
+
+  .fields-table {
+    --st-max-h: calc(44vh + 36px);
   }
 }
 
@@ -1502,10 +1419,6 @@ async function save() {
   &:active {
     cursor: grabbing;
   }
-}
-
-.center-cell {
-  text-align: center;
 }
 
 .row-del {
