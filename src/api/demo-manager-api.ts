@@ -23,6 +23,7 @@ import type {
   ChatCompletionDelta,
   ChatCompletionRequest,
   ChatCompletionResult,
+  ChatUsage,
   ChatMessage,
   DBTable,
   Dict,
@@ -353,6 +354,8 @@ export class DemoManagerApi implements ManagerApi {
       model,
       messages: (request?.messages || []).map(toWireMessage),
       stream: true,
+      // 请求末尾 usage 分片（openai compatible 标准方式；不支持的服务静默忽略）
+      stream_options: { include_usage: true },
     }
     if (request?.tools?.length) body.tools = request.tools
     if (request?.reasoningEffort) body.reasoning_effort = request.reasoningEffort
@@ -389,12 +392,13 @@ export class DemoManagerApi implements ManagerApi {
     const reader = res.body?.getReader()
     if (!reader) throw new Error('AI 服务未返回流式响应（响应体为空）')
 
-    // SSE 逐行解析：data: {chunk} 与 [DONE] 哨兵；三类增量聚合
+    // SSE 逐行解析：data: {chunk} 与 [DONE] 哨兵；四类增量聚合（正文/思考/工具调用/用量）
     const decoder = new TextDecoder()
     const contentParts: string[] = []
     const reasoningParts: string[] = []
     const toolSlots = new Map<number, { id: string; name: string; args: string }>()
     let finishReason: string | undefined
+    let usage: ChatUsage | undefined
     let doneSentinel = false
     const emit = (delta: ChatCompletionDelta) => {
       if (!onDelta) return
@@ -421,6 +425,11 @@ export class DemoManagerApi implements ManagerApi {
           break
         }
         let chunk: {
+          usage?: {
+            prompt_tokens?: number
+            completion_tokens?: number
+            total_tokens?: number
+          } | null
           choices?: Array<{
             finish_reason?: string | null
             delta?: {
@@ -439,6 +448,18 @@ export class DemoManagerApi implements ManagerApi {
           chunk = JSON.parse(payload)
         } catch {
           continue // 非完整 JSON 分片（粘包残留）跳过
+        }
+        // usage 分片（include_usage 时末尾携带，choices 可为空数组）：归一后 emit + 落结果
+        const rawUsage = chunk.usage
+        if (rawUsage && typeof rawUsage === 'object') {
+          usage = {
+            promptTokens: Math.max(0, Math.floor(Number(rawUsage.prompt_tokens) || 0)),
+            completionTokens: Math.max(0, Math.floor(Number(rawUsage.completion_tokens) || 0)),
+            totalTokens: Math.max(0, Math.floor(Number(rawUsage.total_tokens) || 0)),
+          }
+          if (usage.totalTokens || usage.promptTokens || usage.completionTokens) {
+            emit({ usage })
+          }
         }
         const choice = chunk.choices?.[0]
         if (choice?.finish_reason) finishReason = String(choice.finish_reason)
@@ -495,6 +516,7 @@ export class DemoManagerApi implements ManagerApi {
           function: { name: t.name, arguments: t.args || '{}' },
         })),
       finishReason,
+      ...(usage ? { usage } : {}),
     }
   }
 

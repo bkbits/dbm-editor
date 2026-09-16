@@ -62,7 +62,7 @@ const server = http.createServer((req, res) => {
     }
     const toolCount = (parsed.messages || []).filter((m) => m.role === 'tool').length
     console.log(
-      `[mock] model=${parsed.model} messages=${(parsed.messages || []).length} tools=${(parsed.tools || []).length} toolResults=${toolCount} reasoning_effort=${parsed.reasoning_effort ?? '-'}`,
+      `[m[m[mock] model=${parsed.model} messages=${(parsed.messages || []).length} tools=${(parsed.tools || []).length} toolResults=${toolCount} reasoning_effort=${parsed.reasoning_effort ?? '-'}`,
     )
     if (toolCount === 0) {
       // 第一轮：思考 + 短正文 + 代码生成工具调用
@@ -98,8 +98,12 @@ const server = http.createServer((req, res) => {
             ],
           },
           { choices: [{ delta: {}, finish_reason: 'tool_calls' }] },
+          {
+            choices: [],
+            usage: { prompt_tokens: 1024, completion_tokens: 256, total_tokens: 1280 },
+          },
         ],
-        () => console.log('[mock] round 1 done'),
+        () => console.log('[m[m[mock] round 1 done'),
       )
     } else if (toolCount === 1) {
       // 第二轮：思考 + 代码替换工具调用（前端应弹出文件清单确认框）
@@ -130,8 +134,12 @@ const server = http.createServer((req, res) => {
             ],
           },
           { choices: [{ delta: {}, finish_reason: 'tool_calls' }] },
+          {
+            choices: [],
+            usage: { prompt_tokens: 2048, completion_tokens: 128, total_tokens: 2176 },
+          },
         ],
-        () => console.log('[mock] round 2 done'),
+        () => console.log('[m[m[mock] round 2 done'),
       )
     } else {
       // 第三轮：思考 + Markdown 总结（首尾空白字符用于验证去空白收口）
@@ -151,13 +159,17 @@ const server = http.createServer((req, res) => {
             ],
           },
           { choices: [{ delta: {}, finish_reason: 'stop' }] },
+          {
+            choices: [],
+            usage: { prompt_tokens: 4096, completion_tokens: 512, total_tokens: 4608 },
+          },
         ],
-        () => console.log('[mock] round 3 done'),
+        () => console.log('[m[m[mock] round 3 done'),
       )
     }
   })
 })
 
 server.listen(port, () => {
-  console.log(`[mock] openai compatible SSE server at http://localhost:${port}/v1`)
+  console.log(`[m[m[mock] openai compatible SSE server at http://localhost:${port}/v1`)
 })

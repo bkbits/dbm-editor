@@ -55,6 +55,10 @@ export interface AiChatMessage {
   status: 'streaming' | 'done' | 'error' | 'aborted'
   error?: string
   createdAt: number
+  /** token 用量：user 消息 = 该问题全部轮次输入/输出合计；assistant 消息 = 本轮 usage */
+  tokens?: { input: number; output: number }
+  /** 输出速度（tok/s；assistant 消息本轮真实速度，usage 到达时计算） */
+  speedTokSec?: number
 }
 
 /** 能力调用记录（右侧面板展示形态） */
@@ -357,7 +361,7 @@ function buildSystemPrompt(globalRules: string): string {
 - 导航关系：getNavigates / addNavigate / updateNavigate / removeNavigate
 - 字典：getDictCategories / addDictCategory / updateDictCategory / removeDictCategory / getDicts / addDict / updateDict / removeDict
 - 模板：getTemplates / addTemplate / updateTemplate / removeTemplate / getDictCategoryTemplate / updateDictCategoryTemplate
-- 设置与数据：getSettings / saveSettings / importFromDB / load / save / resetDemo
+- 设置与数据：getSettings / saveSettings / importFromDB / load / save / refresh / resetDemo
 - 代码生成：generateCode（按模板生成产物并打包 zip 供用户下载，返回文件清单）
 - 代码替换：replaceCode（生成并写回源码文件，执行前需经用户确认，属危险操作）
 
@@ -471,6 +475,46 @@ function buildAgentTools(deps: AiDeps, hooks: AgentHooks): AgentTool[] {
   tools.push(
     plainTool('save', '全量保存模型（确认全部修改落盘时使用）', NO_ARGS, [], async () =>
       api.save(),
+    ),
+  )
+  tools.push(
+    plainTool(
+      'refresh',
+      '刷新数据：重新加载画布模型 / 字典 / 模板 / 应用设置（界面数据可能已过期、用户要求刷新、或需要以最新数据为准重新执行任务时使用）',
+      NO_ARGS,
+      [],
+      async () => {
+        const [modelStore, dictStore, tplStore, settingsStore] = [
+          deps.getModel(),
+          deps.getDict(),
+          deps.getTemplate(),
+          deps.getSettings(),
+        ]
+        const errors: string[] = []
+        await Promise.all([
+          modelStore.refresh().catch((e: unknown) => errors.push(`画布：${errorMessageOf(e)}`)),
+          (async () => {
+            dictStore.loaded = false
+            dictStore.loading = false
+            await dictStore.init().catch((e: unknown) => errors.push(`字典：${errorMessageOf(e)}`))
+          })(),
+          (async () => {
+            tplStore.loaded = false
+            tplStore.loading = false
+            await tplStore.init().catch((e: unknown) => errors.push(`模板：${errorMessageOf(e)}`))
+          })(),
+          (async () => {
+            settingsStore.loaded = false
+            settingsStore.loading = false
+            await settingsStore
+              .init()
+              .catch((e: unknown) => errors.push(`设置：${errorMessageOf(e)}`))
+          })(),
+        ])
+        return errors.length
+          ? { refreshed: true, partial: true, errors }
+          : { refreshed: true, note: '画布 / 字典 / 模板 / 设置已重新加载为最新数据' }
+      },
     ),
   )
 
@@ -840,6 +884,14 @@ export function createAiStore(deps: AiDeps) {
     /** 待确认的代码替换（弹窗展示文件清单，用户确认/取消后 resolve） */
     pendingReplace: null as AiPendingReplace | null,
 
+    /* ---------- token 用量统计 ---------- */
+    /** 上下文已用 token（最近一轮 usage 的 total；流式期间含当轮输出估算增长） */
+    contextUsed: 0,
+    /** 当前任务实时输出速度（tok/s；running 期间持续更新，结束归零） */
+    currentSpeedTokSec: 0,
+    /** 上一次任务的输出速度（tok/s；任务结束后保留，供空闲时展示） */
+    lastSpeedTokSec: 0,
+
     /** 模型下拉选项 */
     get modelOptions(): Array<{ value: string; label: string }> {
       return this.aiSettings.models.map((m) => ({ value: m.id, label: m.name || m.id }))
@@ -911,7 +963,21 @@ export function createAiStore(deps: AiDeps) {
       if (this.running) this.stop()
       this.messages = []
       this.toolRecords = []
+      this.contextUsed = 0
       this.releaseZipDownloads()
+    },
+
+    /** 仅清空能力调用记录（聊天消息保留；释放被清记录关联的 zip 下载缓存） */
+    clearToolRecords() {
+      if (this.running) return
+      for (const r of this.toolRecords) {
+        const zip = this.zipDownloads[r.callId]
+        if (zip) {
+          URL.revokeObjectURL(zip.url)
+          delete this.zipDownloads[r.callId]
+        }
+      }
+      this.toolRecords = []
     },
 
     /** api 切换时重置会话与加载态（由 DBManagerView 调用） */
@@ -919,6 +985,9 @@ export function createAiStore(deps: AiDeps) {
       if (this.running) this.stop()
       this.messages = []
       this.toolRecords = []
+      this.contextUsed = 0
+      this.currentSpeedTokSec = 0
+      this.lastSpeedTokSec = 0
       this.loaded = false
       this.loading = false
       this.releaseZipDownloads()
@@ -1001,16 +1070,30 @@ export function createAiStore(deps: AiDeps) {
       const tools = buildAgentTools(deps, hooks)
       const dirtyDomains = new Set<string>()
 
-      this.messages.push({
+      const userMsg: AiChatMessage = reactive({
         id: uid('ai-'),
         role: 'user',
         content,
         status: 'done',
         createdAt: Date.now(),
       })
+      this.messages.push(userMsg)
       this.running = true
       const controller = new AbortController()
       this.abortController = controller
+
+      /* ---------- token 采集：实时速度（估算）与轮末真实值 ---------- */
+      this.currentSpeedTokSec = 0
+      /** 粗略 token 估算（中文 ~2 字符/token；仅流式期间的瞬时展示，轮末以真实 usage 覆盖） */
+      const estTokens = (chars: number) => Math.max(1, Math.round(chars / 2))
+      let roundFirstDeltaAt = 0 // 本轮首个增量到达时刻（0 = 尚无输出）
+      let roundDeltaChars = 0 // 本轮增量字符数（正文 + 思考）
+      let roundBaseTotal = this.contextUsed // 本轮开始时的上下文基准（流式期间估算叠加）
+      const speedTicker = window.setInterval(() => {
+        if (!roundFirstDeltaAt) return
+        const elapsed = (Date.now() - roundFirstDeltaAt) / 1000
+        if (elapsed > 0) this.currentSpeedTokSec = estTokens(roundDeltaChars) / elapsed
+      }, 500)
 
       // 重建 openai 形态消息序列：系统提示 + 本会话历史（跳过失败/中止消息）
       const chatMsgs: ChatMessage[] = [
@@ -1055,6 +1138,11 @@ export function createAiStore(deps: AiDeps) {
       try {
         let reachedFinal = false
         for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+          // 轮级 token 采集重置（速度按单轮计算，避免工具执行间隙拉低均值）
+          roundFirstDeltaAt = 0
+          roundDeltaChars = 0
+          roundBaseTotal = this.contextUsed
+          const roundRequestedAt = Date.now()
           // reactive 包裹：流式增量经代理变更触发视图更新（原始对象直改不触发）
           const asst: AiChatMessage = reactive({
             id: uid('ai-'),
@@ -1075,6 +1163,25 @@ export function createAiStore(deps: AiDeps) {
               signal: controller.signal,
             },
             (delta) => {
+              if (delta.usage) {
+                // usage 分片（末尾一次）：真实速度 + 上下文占用（估算法不再接管）
+                const outTok = delta.usage.completionTokens
+                const span = (Date.now() - (roundFirstDeltaAt || roundRequestedAt)) / 1000
+                if (outTok > 0 && span > 0) {
+                  this.currentSpeedTokSec = outTok / span
+                  this.lastSpeedTokSec = this.currentSpeedTokSec
+                  asst.speedTokSec = Math.round(outTok / span)
+                }
+                this.contextUsed = delta.usage.totalTokens
+                return
+              }
+              const piece = delta.content || delta.reasoning || ''
+              if (piece) {
+                if (!roundFirstDeltaAt) roundFirstDeltaAt = Date.now()
+                roundDeltaChars += piece.length
+                // 上下文实时估算：基准 + 当轮已输出（usage 到达后被真实值覆盖）
+                this.contextUsed = roundBaseTotal + estTokens(roundDeltaChars)
+              }
               if (delta.content) asst.content += delta.content
               if (delta.reasoning) {
                 asst.reasoning = (asst.reasoning || '') + delta.reasoning
@@ -1089,6 +1196,27 @@ export function createAiStore(deps: AiDeps) {
           // 展示文本去头尾空白（流式期间的中间态不做处理，完成时统一收口）
           asst.content = String(asst.content ?? '').trim()
           asst.reasoning = String(asst.reasoning ?? '').trim()
+          // 轮末 usage 收口（个别服务只在结果携带而不发 usage 分片）：速度 + 上下文 + 消息/问题级用量
+          if (result.usage) {
+            // 速度若已由 usage 分片计算（asst.speedTokSec 已存在）则不重复计算
+            if (!asst.speedTokSec && result.usage.completionTokens > 0) {
+              const span = (Date.now() - (roundFirstDeltaAt || roundRequestedAt)) / 1000
+              if (span > 0) {
+                this.currentSpeedTokSec = result.usage.completionTokens / span
+                this.lastSpeedTokSec = this.currentSpeedTokSec
+                asst.speedTokSec = Math.round(this.currentSpeedTokSec)
+              }
+            }
+            this.contextUsed = result.usage.totalTokens
+            asst.tokens = {
+              input: result.usage.promptTokens,
+              output: result.usage.completionTokens,
+            }
+            userMsg.tokens = {
+              input: (userMsg.tokens?.input ?? 0) + result.usage.promptTokens,
+              output: (userMsg.tokens?.output ?? 0) + result.usage.completionTokens,
+            }
+          }
 
           if (!result.toolCalls.length) {
             reachedFinal = true
@@ -1170,6 +1298,10 @@ export function createAiStore(deps: AiDeps) {
           message.error(errorMessageOf(e, 'AI 调用失败'))
         }
       } finally {
+        window.clearInterval(speedTicker)
+        // 任务结束：上一次速度保留（本次有输出则更新）；当前速度归零，界面切到展示上一次
+        if (this.currentSpeedTokSec > 0) this.lastSpeedTokSec = this.currentSpeedTokSec
+        this.currentSpeedTokSec = 0
         this.running = false
         this.abortController = null
       }

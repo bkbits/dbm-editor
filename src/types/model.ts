@@ -409,6 +409,13 @@ export interface ChatCompletionRequest {
   signal?: AbortSignal
 }
 
+/** 用量统计（openai usage 归一形态；流式需 stream_options.include_usage 请求，末尾分片携带） */
+export interface ChatUsage {
+  promptTokens: number // 输入 token（含系统提示与历史）
+  completionTokens: number // 输出 token（正文 + 思考）
+  totalTokens: number // 合计
+}
+
 /** 流式增量（SSE 每个分片解析出的增量；三类内容互斥到达） */
 export interface ChatCompletionDelta {
   content?: string // 正文增量
@@ -420,6 +427,8 @@ export interface ChatCompletionDelta {
     name?: string
     arguments?: string
   }
+  /** 用量统计（仅末尾 usage 分片携带一次，此时其他字段为空） */
+  usage?: ChatUsage
 }
 
 /** chatComplete 结果（流结束后的聚合） */
@@ -428,6 +437,8 @@ export interface ChatCompletionResult {
   reasoning?: string // 思考内容
   toolCalls: ChatToolCall[] // 本轮流到的工具调用（按 index 序）
   finishReason?: string // stop / tool_calls / length 等
+  /** 用量统计（服务端返回 usage 时携带） */
+  usage?: ChatUsage
 }
 
 /* ==================== 数据库导入（ManagerApi 契约形态） ==================== */

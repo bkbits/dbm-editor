@@ -23,6 +23,7 @@ import {
   Send,
   Settings2,
   Square,
+  Trash2,
   User,
   Wrench,
   XCircle,
@@ -131,6 +132,23 @@ watch(
   },
 )
 
+/* ==================== token 用量统计 ==================== */
+
+/** 当前模型上下文长度（未配置为 0：界面只显示已用量不显示分母） */
+const ctxLimit = computed(() => ai.currentModel?.inputContextLength ?? 0)
+
+/** 展示用 token 数：<10000 原样，≥10000 用 k/M 缩写 */
+function fmtTok(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 10_000) return `${(n / 1000).toFixed(1)}k`
+  return String(Math.round(n))
+}
+
+/** 展示速度：任务进行中显示当前实时速度，停止后显示上一次任务速度 */
+const speedTokSec = computed(() =>
+  ai.running ? Math.round(ai.currentSpeedTokSec) : Math.round(ai.lastSpeedTokSec),
+)
+
 /* ==================== 空态引导 ==================== */
 
 const unconfigured = computed(() => !ai.aiSettings.baseUrl || !ai.aiSettings.models.length)
@@ -157,6 +175,12 @@ function gotoSettings() {
 
 /** 展开的记录 id 集合（默认收起） */
 const expandedRecords = ref(new Set<string>())
+
+/** 清空能力调用记录（仅右侧面板；聊天消息保留，同步清理本地展开态） */
+function onClearRecords() {
+  ai.clearToolRecords()
+  expandedRecords.value = new Set()
+}
 
 function toggleRecord(id: string) {
   const next = new Set(expandedRecords.value)
@@ -319,6 +343,18 @@ const runningCount = computed(() => ai.toolRecords.filter((r) => r.status === 'r
                 </button>
               </div>
 
+              <!-- token 用量：问题花费（user）/ 本轮输出与速度（assistant） -->
+              <div v-if="m.tokens" class="msg-tokens">
+                <template v-if="m.role === 'user'">
+                  输入 {{ fmtTok(m.tokens.input) }} · 回答 {{ fmtTok(m.tokens.output) }} tok
+                </template>
+                <template v-else>
+                  输出 {{ fmtTok(m.tokens.output) }} tok<template v-if="m.speedTokSec">
+                    · {{ m.speedTokSec }} tok/s</template
+                  >
+                </template>
+              </div>
+
               <!-- 错误 / 中止 -->
               <div v-if="m.status === 'error' && m.error" class="msg-error">{{ m.error }}</div>
               <div v-else-if="m.status === 'aborted'" class="msg-aborted">（已中止生成）</div>
@@ -338,6 +374,25 @@ const runningCount = computed(() => ai.toolRecords.filter((r) => r.status === 'r
               :disabled="!ai.modelOptions.length"
             />
             <span class="input-hint">Enter 发送 · Shift+Enter 换行</span>
+            <!-- token 用量：上下文占用 + 输出速度（任务中实时 / 停止后上次） -->
+            <span class="tok-stats">
+              <span
+                v-if="ai.contextUsed"
+                class="ctx-meter"
+                :class="{ warn: ctxLimit && ai.contextUsed / ctxLimit > 0.8 }"
+                :title="
+                  `上下文已用 ${ai.contextUsed} token` +
+                  (ctxLimit
+                    ? `（上限 ${ctxLimit}，超出 80% 时高亮）`
+                    : '（模型未配置输入上下文长度，设置后可显示上限）')
+                "
+              >
+                上下文 {{ fmtTok(ai.contextUsed) }}{{ ctxLimit ? `/${fmtTok(ctxLimit)}` : '' }}
+              </span>
+              <span v-if="speedTokSec" class="tok-speed" :class="{ live: ai.running }">
+                {{ speedTokSec }} tok/s{{ ai.running ? '' : '（上次）' }}
+              </span>
+            </span>
             <a-tooltip title="开启新会话（清空当前对话与调用记录）">
               <button
                 class="input-icon-btn"
@@ -391,6 +446,16 @@ const runningCount = computed(() => ai.toolRecords.filter((r) => r.status === 'r
             {{ runningCount }} 执行中
           </span>
           <span v-else class="tools-count">{{ ai.toolRecords.length || '' }}</span>
+          <a-tooltip title="清空能力调用记录（不影响对话内容）">
+            <button
+              class="tools-clear"
+              type="button"
+              :disabled="!ai.toolRecords.length || ai.running"
+              @click="onClearRecords"
+            >
+              <Trash2 :size="12" />
+            </button>
+          </a-tooltip>
         </div>
         <div ref="toolsScrollEl" class="tools-list" @scroll="onToolsScroll">
           <div v-if="!ai.toolRecords.length" class="tools-empty">
@@ -753,6 +818,17 @@ const runningCount = computed(() => ai.toolRecords.filter((r) => r.status === 'r
   }
 }
 
+/* ---------- token 用量标签（消息级） ---------- */
+.msg-tokens {
+  margin-top: 3px;
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--dbm-text-3);
+  font-family: var(--dbm-font-mono);
+  opacity: 0.92;
+  user-select: none;
+}
+
 /* ---------- markstream 流式 Markdown 渲染（主题令牌对接） ----------
    注：MarkdownRender 根元素同时携带 markstream-vue / markdown-renderer / md-render
    类（同一元素），变量需用复合选择器提升特异性覆盖内置主题 */
@@ -885,6 +961,31 @@ const runningCount = computed(() => ai.toolRecords.filter((r) => r.status === 'r
     color: var(--dbm-text-3);
   }
 
+  /* token 用量：上下文占用 + 输出速度（紧凑状态条，等宽字体对齐） */
+  .tok-stats {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    font-family: var(--dbm-font-mono);
+    color: var(--dbm-text-3);
+    white-space: nowrap;
+    overflow: hidden;
+
+    .ctx-meter {
+      &.warn {
+        color: var(--dbm-warning);
+        font-weight: 600;
+      }
+    }
+
+    .tok-speed {
+      &.live {
+        color: var(--dbm-primary);
+      }
+    }
+  }
+
   .input-icon-btn {
     margin-left: auto;
     display: inline-flex;
@@ -1011,6 +1112,31 @@ const runningCount = computed(() => ai.toolRecords.filter((r) => r.status === 'r
     font-size: 11px;
     color: var(--dbm-text-3);
     font-family: var(--dbm-font-mono);
+  }
+
+  /* 清空能力调用记录（仅右侧面板；running 与空列表时禁用） */
+  .tools-clear {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border: 1px solid var(--dbm-border);
+    border-radius: var(--dbm-radius-s);
+    background: transparent;
+    color: var(--dbm-text-3);
+    cursor: pointer;
+    flex-shrink: 0;
+
+    &:hover:not(:disabled) {
+      color: var(--dbm-danger);
+      border-color: var(--dbm-danger);
+    }
+
+    &:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+    }
   }
 
   .running-badge {
