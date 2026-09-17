@@ -12,76 +12,76 @@
  * - 全局样式（CSS 变量/基础样式/高亮主题）随组件包内引入，
  *   宿主项目无需额外导入即可获得与演示一致的外观
  */
-import { computed, provide, watch } from 'vue'
-import { theme as antdTheme } from 'antdv-next'
-import type { ManagerApi } from '@/types/model'
-import '@/styles/index.scss'
-import { MANAGER_API_KEY, sharedDemoApi } from '@/api/manager-api'
-import { createDBManagerState, DBMANAGER_STATE_KEY } from '@/stores/context'
-import AppHeader from '@/components/layout/AppHeader.vue'
-import EditorView from '@/views/EditorView.vue'
-import DictView from '@/views/DictView.vue'
-import TemplateView from '@/views/TemplateView.vue'
-import SettingsView from '@/views/SettingsView.vue'
-import AiView from '@/views/AiView.vue'
+import { computed, provide, watch } from "vue";
+import { theme as antdTheme } from "antdv-next";
+import type { ManagerApi } from "@/types/model";
+import "@/styles/index.scss";
+import { MANAGER_API_KEY, sharedDemoApi } from "@/api/manager-api";
+import { createDBManagerState, DBMANAGER_STATE_KEY } from "@/stores/context";
+import AppHeader from "@/components/layout/AppHeader.vue";
+import EditorView from "@/views/EditorView.vue";
+import DictView from "@/views/DictView.vue";
+import TemplateView from "@/views/TemplateView.vue";
+import SettingsView from "@/views/SettingsView.vue";
+import AiView from "@/views/AiView.vue";
 
-const props = defineProps<{ api?: ManagerApi }>()
+const props = defineProps<{ api?: ManagerApi }>();
 
 /** 当前生效的 api（响应式：随 prop 切换更新，缺省共享 demo 单例） */
-const apiRef = computed<ManagerApi>(() => props.api ?? sharedDemoApi)
-provide(MANAGER_API_KEY, apiRef)
+const apiRef = computed<ManagerApi>(() => props.api ?? sharedDemoApi);
+provide(MANAGER_API_KEY, apiRef);
 
 // 创建整套全局状态并注入子树（每实例一套；api 惰性读取，prop 切换后自动走新实例）
-const state = createDBManagerState(() => apiRef.value)
-provide(DBMANAGER_STATE_KEY, state)
+const state = createDBManagerState(() => apiRef.value);
+provide(DBMANAGER_STATE_KEY, state);
 
 // 应用主题（setup 同步执行，早于子树首次渲染，避免闪烁；原先由 main.ts 预挂载初始化）
-state.theme.init()
+state.theme.init();
 
 const antdThemeConfig = computed(() => ({
   algorithm: state.theme.isDark ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
   // 启用 antd CSS 变量模式：antd 令牌以 --ant-* 变量挂载到 css-var-* 类元素上，
   // antd-theme.scss 据此把 --dbm-* 设计令牌映射为 antd 令牌，实现主题联动
   cssVar: true,
-}))
+}));
 
 // api 切换时全量重载各仓库数据（不重置 UI 页面）；隐藏态随模型数据（Table.hidden）恢复
 watch(apiRef, (api, old) => {
   if (old && api !== old) {
     const stores = [state.model, state.dict, state.template, state.settings] as Array<{
-      loaded: boolean
-      loading: boolean
-      init: () => Promise<void>
-    }>
+      loaded: boolean;
+      loading: boolean;
+      init: () => Promise<void>;
+    }>;
     for (const s of stores) {
-      s.loaded = false
-      s.loading = false
+      s.loaded = false;
+      s.loading = false;
     }
-    state.ai.resetForApiSwitch()
-    state.ai.resetForApiSwitch()
-    state.history.clear()
-    state.canvas.setSelection([])
-    initPage(state.ui.page)
+    state.ai.resetForApiSwitch();
+    state.ai.resetForApiSwitch();
+    state.history.clear();
+    state.canvas.setSelection([]);
+    initPage(state.ui.page);
   }
-})
+});
 
 // 页面切换使用 v-if（不使用 vue-router），进入页面时按需加载数据
 watch(
   () => state.ui.page,
   (page) => initPage(page),
   { immediate: true },
-)
+);
 
 function initPage(page: string) {
   // 设置（索引类型列表 + 列类型映射）是编辑器/导入能力共用的全局配置：
   // 视图启动即预载（init 幂等）。此前仅惰性触发（打开表编辑/导入对话框、
   // 进入设置页时才调 getSettings），应用启动阶段契约方法从未被调用。
-  state.settings.init()
-  if (page === 'editor') state.model.init()
-  else if (page === 'dict') state.dict.init()
-  else if (page === 'template') state.template.init()
+  state.settings.init();
+  if (page === "editor") state.model.init();
+  else if (page === "dict") state.dict.init();
+  else if (page === "template") state.template.init();
   // AI 设置供 AI 工具页与设置页 AI 区块共用（幂等预载）
-  else if (page === 'ai' || page === 'settings') state.ai.init()
+  else if (page === "ai" || page === "settings") state.ai.init();
 }
 </script>
 

@@ -1,30 +1,30 @@
-import { fileURLToPath, URL } from 'node:url'
-import { defineConfig, lazyPlugins } from 'vite-plus'
-import vue from '@vitejs/plugin-vue'
-import dts from 'vite-plugin-dts'
-import { libInjectCss } from 'vite-plugin-lib-inject-css'
+import { fileURLToPath, URL } from "node:url";
+import { defineConfig, lazyPlugins } from "vite-plus";
+import vue from "@vitejs/plugin-vue";
+import dts from "vite-plugin-dts";
+import { libInjectCss } from "vite-plugin-lib-inject-css";
 
 // 库模式外部依赖：宿主项目通过自身依赖提供（vue / antdv-next / @lucide/vue）
-const EXTERNAL_RE = /^(vue|antdv-next|@lucide\/vue)(\/|$)/
+const EXTERNAL_RE = /^(vue|antdv-next|@lucide\/vue)(\/|$)/;
 
 // https://vite.dev/config/
 export default defineConfig({
   staged: {
-    '*': 'vp check --fix',
+    "*": "vp check --fix",
   },
   // 代码风格与项目既有约定一致：单引号、无分号
   fmt: {
-    singleQuote: true,
-    semi: false,
+    singleQuote: false,
+    semi: true,
     ignorePatterns: [
-      'dist/**',
-      'tool-results/**',
-      'skills/**',
-      'docs/**',
-      'download/**',
-      'upload/**',
-      'worklog.md',
-      'AGENTS.md',
+      "dist/**",
+      "tool-results/**",
+      "skills/**",
+      "docs/**",
+      "download/**",
+      "upload/**",
+      "worklog.md",
+      "AGENTS.md",
     ],
   },
   lint: {
@@ -40,33 +40,33 @@ export default defineConfig({
     libInjectCss(),
     // 类型声明：由入口 src/index.ts 滚动生成单一 dist/DBManager.d.ts
     dts({
-      entryRoot: 'src',
-      outDirs: ['dist'],
+      entryRoot: "src",
+      outDirs: ["dist"],
       // 滚动合并为单一声明文件（dist/DBManager.d.ts，名称取 package.json types 字段）
       bundleTypes: true,
     }),
   ]),
   resolve: {
     alias: {
-      '@': fileURLToPath(new URL('./src', import.meta.url)),
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
     },
   },
   // 限定依赖扫描入口，避免把 skills/ 等非源码目录中的 html 参考文件卷入预打包
   optimizeDeps: {
-    entries: ['index.html'],
+    entries: ["index.html"],
   },
   server: {
     port: 3000,
-    host: '0.0.0.0',
+    host: "0.0.0.0",
     allowedHosts: true,
     // E2E 专用（AI_MOCK_PROXY=1 时生效）：把 openai compatible 模拟服务挂到同源路径，
     // 规避浏览器跨域/跨命名空间限制；正常开发不设置该环境变量，不产生任何影响
     ...(process.env.AI_MOCK_PROXY
       ? {
           proxy: {
-            '/__ai-mock': {
-              target: 'http://localhost:4833',
-              rewrite: (path) => path.replace(/^\/__ai-mock/, ''),
+            "/__ai-mock": {
+              target: "http://localhost:4833",
+              rewrite: (path) => path.replace(/^\/__ai-mock/, ""),
             },
           },
         }
@@ -76,10 +76,10 @@ export default defineConfig({
     // 库模式：入口仅导出 DBManagerView 组件 + ManagerApi 契约类型，
     // 产物为 dist/DBManager.js（ES 单文件）与 dist/DBManager.d.ts
     lib: {
-      entry: fileURLToPath(new URL('./src/index.ts', import.meta.url)),
-      name: 'DBManager',
-      formats: ['es'],
-      fileName: () => 'DBManager.js',
+      entry: fileURLToPath(new URL("./src/index.ts", import.meta.url)),
+      name: "DBManager",
+      formats: ["es"],
+      fileName: () => "DBManager.js",
     },
     rollupOptions: {
       external: (id: string) => EXTERNAL_RE.test(id),
@@ -95,4 +95,4 @@ export default defineConfig({
     // 库产物不拷贝 public 目录（favicon 等属于演示应用资源）
     copyPublicDir: false,
   },
-})
+});

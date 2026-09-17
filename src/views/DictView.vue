@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
-import { message, Modal } from 'antdv-next'
+import { computed, reactive, ref, watch } from "vue";
+import { message, Modal } from "antdv-next";
 import {
   Plus,
   Trash2,
@@ -10,170 +10,170 @@ import {
   Pencil,
   ChevronRight,
   ChevronDown,
-} from '@lucide/vue'
-import type { Dict, DictCategory, DictValue, DictValueLabelType } from '@/types/model'
-import { useDictStore } from '@/stores/dict'
-import { toCamelCase } from '@/utils/string'
-import { uid } from '@/utils/id'
+} from "@lucide/vue";
+import type { Dict, DictCategory, DictValue, DictValueLabelType } from "@/types/model";
+import { useDictStore } from "@/stores/dict";
+import { toCamelCase } from "@/utils/string";
+import { uid } from "@/utils/id";
 
-const dictStore = useDictStore()
+const dictStore = useDictStore();
 
 /* ==================== 列表侧 ==================== */
 
 const keyword = computed({
   get: () => dictStore.keyword,
   set: (v: string) => {
-    dictStore.keyword = v
+    dictStore.keyword = v;
   },
-})
+});
 
 const selectedId = computed({
   get: () => dictStore.selectedDictId,
   set: (v: string) => {
-    dictStore.selectedDictId = v
+    dictStore.selectedDictId = v;
   },
-})
+});
 
 function newList() {
   draft.value = {
-    id: '',
-    categoryId: '',
-    dictKey: '',
-    label: '',
-    comment: '',
+    id: "",
+    categoryId: "",
+    dictKey: "",
+    label: "",
+    comment: "",
     values: [],
-  }
-  selectedId.value = ''
+  };
+  selectedId.value = "";
 }
 
 /* ==================== 编辑侧 ==================== */
 
-const draft = ref<Dict>({ id: '', dictKey: '', label: '', comment: '', values: [] })
-const dirty = reactive({ saving: false })
+const draft = ref<Dict>({ id: "", dictKey: "", label: "", comment: "", values: [] });
+const dirty = reactive({ saving: false });
 
 watch(
   selectedId,
   (id) => {
-    const dict = dictStore.dicts.find((d) => d.id === id)
+    const dict = dictStore.dicts.find((d) => d.id === id);
     if (dict) {
-      draft.value = JSON.parse(JSON.stringify(dict))
+      draft.value = JSON.parse(JSON.stringify(dict));
     }
   },
   // immediate：页面以 v-if 切换时组件会重新挂载，selectedId 来自 store 不会变化，
   // 普通 watch 不会触发，导致编辑区停留在空白草稿（显示「暂无字典值」）——挂载时立即同步一次
   { immediate: true },
-)
+);
 
 watch(
   () => dictStore.loaded,
   (loaded) => {
     if (loaded) {
-      const dict = dictStore.dicts.find((d) => d.id === selectedId.value)
-      if (dict) draft.value = JSON.parse(JSON.stringify(dict))
+      const dict = dictStore.dicts.find((d) => d.id === selectedId.value);
+      if (dict) draft.value = JSON.parse(JSON.stringify(dict));
     }
   },
-)
+);
 
-const isEdit = computed(() => Boolean(draft.value.id))
+const isEdit = computed(() => Boolean(draft.value.id));
 
 const labelTypeOptions: Array<{ value: DictValueLabelType; label: string; color: string }> = [
-  { value: 'I', label: 'I · Info', color: 'var(--dbm-info)' },
-  { value: 'S', label: 'S · Success', color: 'var(--dbm-success)' },
-  { value: 'W', label: 'W · Warning', color: 'var(--dbm-warning)' },
-  { value: 'D', label: 'D · Danger', color: 'var(--dbm-danger)' },
-]
+  { value: "I", label: "I · Info", color: "var(--dbm-info)" },
+  { value: "S", label: "S · Success", color: "var(--dbm-success)" },
+  { value: "W", label: "W · Warning", color: "var(--dbm-warning)" },
+  { value: "D", label: "D · Danger", color: "var(--dbm-danger)" },
+];
 
 const typeColor = (t: DictValueLabelType) =>
   ({
-    I: 'var(--dbm-info)',
-    S: 'var(--dbm-success)',
-    W: 'var(--dbm-warning)',
-    D: 'var(--dbm-danger)',
-  })[t]
+    I: "var(--dbm-info)",
+    S: "var(--dbm-success)",
+    W: "var(--dbm-warning)",
+    D: "var(--dbm-danger)",
+  })[t];
 
 function typeStyle(v: DictValue) {
   return {
     background: v.color || `color-mix(in srgb, ${typeColor(v.labelType)} 15%, transparent)`,
     color: v.color || typeColor(v.labelType),
-  }
+  };
 }
 
 function addValue() {
   draft.value.values.push({
-    id: uid('dv-'),
+    id: uid("dv-"),
     dictId: draft.value.id,
-    valueKey: '',
-    propertyName: '',
-    label: '',
-    labelType: 'I',
-    comment: '',
-    color: '',
-  })
+    valueKey: "",
+    propertyName: "",
+    label: "",
+    labelType: "I",
+    comment: "",
+    color: "",
+  });
 }
 
 /** 常量属性名输入即转大写（仅允许全大写，小写输入自动变为大写） */
 function onPropertyNameInput(v: DictValue, val: string) {
-  v.propertyName = String(val || '').toUpperCase()
+  v.propertyName = String(val || "").toUpperCase();
 }
 
 function removeValue(idx: number) {
-  draft.value.values.splice(idx, 1)
+  draft.value.values.splice(idx, 1);
 }
 
 function validate(): string | null {
-  if (!draft.value.dictKey.trim()) return '字典键不能为空'
-  if (!draft.value.label.trim()) return '字典标签不能为空'
-  const keys = new Set<string>()
-  const propNames = new Set<string>()
+  if (!draft.value.dictKey.trim()) return "字典键不能为空";
+  if (!draft.value.label.trim()) return "字典标签不能为空";
+  const keys = new Set<string>();
+  const propNames = new Set<string>();
   for (const v of draft.value.values) {
-    if (!v.valueKey.trim()) return '存在空值键'
-    if (keys.has(v.valueKey)) return `值键重复：${v.valueKey}`
-    keys.add(v.valueKey)
+    if (!v.valueKey.trim()) return "存在空值键";
+    if (keys.has(v.valueKey)) return `值键重复：${v.valueKey}`;
+    keys.add(v.valueKey);
     // 常量属性名非空时查重（同名常量在生成代码中会冲突）
-    const pn = (v.propertyName || '').trim()
+    const pn = (v.propertyName || "").trim();
     if (pn) {
-      if (propNames.has(pn)) return `常量属性名重复：${pn}`
-      propNames.add(pn)
+      if (propNames.has(pn)) return `常量属性名重复：${pn}`;
+      propNames.add(pn);
     }
   }
-  return null
+  return null;
 }
 
 async function saveDict() {
-  const err = validate()
+  const err = validate();
   if (err) {
-    message.warning(err)
-    return
+    message.warning(err);
+    return;
   }
-  dirty.saving = true
+  dirty.saving = true;
   try {
-    const saved = await dictStore.saveDict(JSON.parse(JSON.stringify(draft.value)))
-    draft.value = JSON.parse(JSON.stringify(saved))
-    message.success(isEdit.value ? '字典已更新' : '字典已创建')
+    const saved = await dictStore.saveDict(JSON.parse(JSON.stringify(draft.value)));
+    draft.value = JSON.parse(JSON.stringify(saved));
+    message.success(isEdit.value ? "字典已更新" : "字典已创建");
   } catch {
     /* store 已提示 */
   } finally {
-    dirty.saving = false
+    dirty.saving = false;
   }
 }
 
 function deleteDict() {
   if (!draft.value.id) {
-    newList()
-    return
+    newList();
+    return;
   }
   Modal.confirm({
     title: `删除字典「${draft.value.label}」？`,
-    content: '已关联该字典的字段将失去参照（关联键保留，不再解析）。',
-    okText: '删除',
-    okType: 'danger',
-    cancelText: '取消',
+    content: "已关联该字典的字段将失去参照（关联键保留，不再解析）。",
+    okText: "删除",
+    okType: "danger",
+    cancelText: "取消",
     onOk: async () => {
-      await dictStore.removeDict(draft.value.id)
-      message.success('字典已删除')
-      newList()
+      await dictStore.removeDict(draft.value.id);
+      message.success("字典已删除");
+      newList();
     },
-  })
+  });
 }
 
 /* ==================== 分类管理 ==================== */
@@ -182,86 +182,86 @@ function deleteDict() {
 const catModal = reactive({
   open: false,
   saving: false,
-})
-const catDraft = ref<DictCategory>({ id: '', name: '', basePackage: '', className: '' })
+});
+const catDraft = ref<DictCategory>({ id: "", name: "", basePackage: "", className: "" });
 
 function newCategory() {
-  catDraft.value = { id: '', name: '', basePackage: '', className: '' }
-  catModal.open = true
+  catDraft.value = { id: "", name: "", basePackage: "", className: "" };
+  catModal.open = true;
 }
 
 function editCategory(category: DictCategory) {
   catDraft.value = {
     id: category.id,
     name: category.name,
-    basePackage: category.basePackage || '',
-    className: category.className || '',
-  }
-  catModal.open = true
+    basePackage: category.basePackage || "",
+    className: category.className || "",
+  };
+  catModal.open = true;
 }
 
 /** 类名称失活时归一为大驼峰（小驼峰/下划线/中划线自动转换，如 sys_dict → SysDict） */
 function normalizeClassNameDraft() {
-  const raw = (catDraft.value.className || '').trim()
-  catDraft.value.className = raw ? toCamelCase(raw) : ''
+  const raw = (catDraft.value.className || "").trim();
+  catDraft.value.className = raw ? toCamelCase(raw) : "";
 }
 
 /** 分类分组头悬停提示：字典代码默认产物路径 */
 function catFileHint(c: DictCategory): string {
-  const pkg = (c.basePackage || '').trim()
-  const cls = (c.className || '').trim() || `${toCamelCase(c.name)}DictConstants`
-  const pkgPath = pkg ? pkg.replace(/\./g, '/') : ''
-  return `字典代码默认产物：${(pkgPath ? `src/main/java/${pkgPath}/` : '') + cls}.java`
+  const pkg = (c.basePackage || "").trim();
+  const cls = (c.className || "").trim() || `${toCamelCase(c.name)}DictConstants`;
+  const pkgPath = pkg ? pkg.replace(/\./g, "/") : "";
+  return `字典代码默认产物：${(pkgPath ? `src/main/java/${pkgPath}/` : "") + cls}.java`;
 }
 
 async function saveCategory() {
   if (!catDraft.value.name.trim()) {
-    message.warning('分类名称不能为空')
-    return
+    message.warning("分类名称不能为空");
+    return;
   }
-  const cls = (catDraft.value.className || '').trim()
+  const cls = (catDraft.value.className || "").trim();
   if (cls && !/^[A-Z][A-Za-z0-9]*$/.test(cls)) {
-    message.warning('类名称必须为大驼峰结构（如 SysDictConstants）')
-    return
+    message.warning("类名称必须为大驼峰结构（如 SysDictConstants）");
+    return;
   }
-  catModal.saving = true
+  catModal.saving = true;
   try {
-    await dictStore.saveDictCategory({ ...catDraft.value })
-    catModal.open = false
-    message.success(catDraft.value.id ? '字典分类已更新' : '字典分类已创建')
+    await dictStore.saveDictCategory({ ...catDraft.value });
+    catModal.open = false;
+    message.success(catDraft.value.id ? "字典分类已更新" : "字典分类已创建");
   } catch {
     /* store 已提示 */
   } finally {
-    catModal.saving = false
+    catModal.saving = false;
   }
 }
 
 function removeCategory(category: DictCategory) {
   Modal.confirm({
     title: `删除字典分类「${category.name}」？`,
-    content: '分类下仍有字典时将无法删除（请先移动或删除其下字典）。',
-    okText: '删除',
-    okType: 'danger',
-    cancelText: '取消',
+    content: "分类下仍有字典时将无法删除（请先移动或删除其下字典）。",
+    okText: "删除",
+    okType: "danger",
+    cancelText: "取消",
     onOk: async () => {
-      await dictStore.removeDictCategory(category.id)
-      message.success('字典分类已删除')
+      await dictStore.removeDictCategory(category.id);
+      message.success("字典分类已删除");
     },
-  })
+  });
 }
 
 /** 折叠的分组（分类 id；「未分类」用 __uncat） */
-const collapsedCats = reactive(new Set<string>())
+const collapsedCats = reactive(new Set<string>());
 
 function toggleCat(key: string) {
-  if (collapsedCats.has(key)) collapsedCats.delete(key)
-  else collapsedCats.add(key)
+  if (collapsedCats.has(key)) collapsedCats.delete(key);
+  else collapsedCats.add(key);
 }
 
 /** 字典表单的分类选项 */
 const categoryOptions = computed(() =>
   dictStore.categories.map((c) => ({ value: c.id, label: c.name })),
-)
+);
 
 /* 搜索命中高亮 */
 
@@ -270,47 +270,47 @@ watch(
   () => dictStore.filteredDicts,
   (list) => {
     if (list.length && !list.some((d) => d.id === selectedId.value)) {
-      selectedId.value = list[0].id
+      selectedId.value = list[0].id;
     }
   },
-)
+);
 function escapeHtml(s: string): string {
-  return String(s ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
+  return String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
 
 function hl(text: string): string {
-  const safe = escapeHtml(text)
-  const kw = keyword.value.trim()
-  if (!kw) return safe
-  const k = escapeHtml(kw).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  return safe.replace(new RegExp(`(${k})`, 'gi'), '<mark class="search-hit">$1</mark>')
+  const safe = escapeHtml(text);
+  const kw = keyword.value.trim();
+  if (!kw) return safe;
+  const k = escapeHtml(kw).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return safe.replace(new RegExp(`(${k})`, "gi"), '<mark class="search-hit">$1</mark>');
 }
 
 const selectedHitCount = computed(() => {
-  const kw = keyword.value.trim().toLowerCase()
-  if (!kw || !draft.value.id) return 0
-  const d = dictStore.dicts.find((x) => x.id === draft.value.id)
-  if (!d) return 0
+  const kw = keyword.value.trim().toLowerCase();
+  if (!kw || !draft.value.id) return 0;
+  const d = dictStore.dicts.find((x) => x.id === draft.value.id);
+  if (!d) return 0;
   return d.values.filter(
     (v) =>
       v.valueKey.toLowerCase().includes(kw) ||
       v.label.toLowerCase().includes(kw) ||
-      (v.comment || '').toLowerCase().includes(kw),
-  ).length
-})
+      (v.comment || "").toLowerCase().includes(kw),
+  ).length;
+});
 
 const isValueHit = (v: DictValue) => {
-  const kw = keyword.value.trim().toLowerCase()
-  if (!kw) return false
+  const kw = keyword.value.trim().toLowerCase();
+  if (!kw) return false;
   return (
     v.valueKey.toLowerCase().includes(kw) ||
     v.label.toLowerCase().includes(kw) ||
-    (v.comment || '').toLowerCase().includes(kw)
-  )
-}
+    (v.comment || "").toLowerCase().includes(kw)
+  );
+};
 </script>
 
 <template>
@@ -358,7 +358,7 @@ const isValueHit = (v: DictValue) => {
               class="cat-name"
               :title="group.category ? catFileHint(group.category) : '未分类字典不参与字典代码生成'"
             >
-              {{ group.category?.name || '未分类' }}
+              {{ group.category?.name || "未分类" }}
             </span>
             <span class="cat-count">{{ group.dicts.length }}</span>
             <template v-if="group.category">
@@ -398,7 +398,7 @@ const isValueHit = (v: DictValue) => {
           </template>
         </template>
         <div v-if="!dictStore.filteredDicts.length" class="list-empty">
-          {{ keyword ? '无匹配字典' : '暂无字典，点击右上角新增' }}
+          {{ keyword ? "无匹配字典" : "暂无字典，点击右上角新增" }}
         </div>
       </div>
       <div class="list-foot">

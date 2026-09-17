@@ -1,98 +1,98 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { Modal } from 'antdv-next'
-import { useCanvasStore } from '@/stores/canvas'
-import { useModelStore } from '@/stores/model'
-import { useHistoryStore } from '@/stores/history'
-import { useThemeStore } from '@/stores/theme'
-import { useUiStore } from '@/stores/ui'
-import NavigateEdge from './NavigateEdge.vue'
-import TableCard from './TableCard.vue'
-import Minimap from './Minimap.vue'
-import CanvasContextMenu from './CanvasContextMenu.vue'
-import ConnectionDraft from './ConnectionDraft.vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { Modal } from "antdv-next";
+import { useCanvasStore } from "@/stores/canvas";
+import { useModelStore } from "@/stores/model";
+import { useHistoryStore } from "@/stores/history";
+import { useThemeStore } from "@/stores/theme";
+import { useUiStore } from "@/stores/ui";
+import NavigateEdge from "./NavigateEdge.vue";
+import TableCard from "./TableCard.vue";
+import Minimap from "./Minimap.vue";
+import CanvasContextMenu from "./CanvasContextMenu.vue";
+import ConnectionDraft from "./ConnectionDraft.vue";
 
-const canvas = useCanvasStore()
-const model = useModelStore()
-const history = useHistoryStore()
-const theme = useThemeStore()
-const ui = useUiStore()
+const canvas = useCanvasStore();
+const model = useModelStore();
+const history = useHistoryStore();
+const theme = useThemeStore();
+const ui = useUiStore();
 
-const rootRef = ref<HTMLElement>()
-const gridRef = ref<HTMLCanvasElement>()
-const worldRef = ref<HTMLElement>()
+const rootRef = ref<HTMLElement>();
+const gridRef = ref<HTMLCanvasElement>();
+const worldRef = ref<HTMLElement>();
 
 /** 可渲染的导航（任一端表隐藏则整线不渲染） */
 const visibleNavigates = computed(() =>
   model.navigates.filter(
     (n) => !canvas.hiddenTableIds.includes(n.self) && !canvas.hiddenTableIds.includes(n.target),
   ),
-)
+);
 
 /** 视口内的卡片（渲染范围裁剪，保证 100+ 卡片流畅） */
-const viewportWorld = computed(() => canvas.viewportWorldRect)
+const viewportWorld = computed(() => canvas.viewportWorldRect);
 const visibleCards = computed(() => {
   // 布局动画期间放宽裁剪缓冲：卡片滑向新位置途中不因离开视口而被卸载
-  const margin = (canvas.layoutAnimating ? 2400 : 400) / canvas.zoom
-  const rect = viewportWorld.value
+  const margin = (canvas.layoutAnimating ? 2400 : 400) / canvas.zoom;
+  const rect = viewportWorld.value;
   return canvas.visibleTableIds.filter((id) => {
-    const t = model.tableById(id)
-    if (!t) return false
-    const size = canvas.cardSizes[id] || { w: 268, h: 120 }
-    const x = t.x ?? 0
-    const y = t.y ?? 0
+    const t = model.tableById(id);
+    if (!t) return false;
+    const size = canvas.cardSizes[id] || { w: 268, h: 120 };
+    const x = t.x ?? 0;
+    const y = t.y ?? 0;
     return (
       x + size.w > rect.x - margin &&
       x < rect.x + rect.w + margin &&
       y + size.h > rect.y - margin &&
       y < rect.y + rect.h + margin
-    )
-  })
-})
+    );
+  });
+});
 
 /* ==================== 网格绘制 ==================== */
-let gridFrame = 0
+let gridFrame = 0;
 function scheduleGrid() {
-  if (gridFrame) return
+  if (gridFrame) return;
   gridFrame = requestAnimationFrame(() => {
-    gridFrame = 0
-    drawGrid()
-  })
+    gridFrame = 0;
+    drawGrid();
+  });
 }
 
 function cssVar(name: string): string {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
 function drawGrid() {
-  const cv = gridRef.value
-  const root = rootRef.value
-  if (!cv || !root) return
-  const w = canvas.viewportW
-  const h = canvas.viewportH
-  if (w <= 0 || h <= 0) return
-  const dpr = window.devicePixelRatio || 1
+  const cv = gridRef.value;
+  const root = rootRef.value;
+  if (!cv || !root) return;
+  const w = canvas.viewportW;
+  const h = canvas.viewportH;
+  if (w <= 0 || h <= 0) return;
+  const dpr = window.devicePixelRatio || 1;
   if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) {
-    cv.width = Math.round(w * dpr)
-    cv.height = Math.round(h * dpr)
-    cv.style.width = `${w}px`
-    cv.style.height = `${h}px`
+    cv.width = Math.round(w * dpr);
+    cv.height = Math.round(h * dpr);
+    cv.style.width = `${w}px`;
+    cv.style.height = `${h}px`;
   }
-  const ctx = cv.getContext('2d')
-  if (!ctx) return
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-  ctx.clearRect(0, 0, w, h)
+  const ctx = cv.getContext("2d");
+  if (!ctx) return;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
 
-  const BASE = 20 // 世界坐标网格间距
-  let minor = BASE * canvas.zoom
-  while (minor < 9) minor *= 5 // 缩放过小时隐藏细网格
-  const major = minor * 5
+  const BASE = 20; // 世界坐标网格间距
+  let minor = BASE * canvas.zoom;
+  while (minor < 9) minor *= 5; // 缩放过小时隐藏细网格
+  const major = minor * 5;
 
-  ctx.lineWidth = 1 // 网格线粗细固定 1px，不随缩放变化
-  ctx.strokeStyle = cssVar('--dbm-grid-minor')
-  drawGridLines(ctx, w, h, minor, canvas.panX, canvas.panY)
-  ctx.strokeStyle = cssVar('--dbm-grid-major')
-  drawGridLines(ctx, w, h, major, canvas.panX, canvas.panY)
+  ctx.lineWidth = 1; // 网格线粗细固定 1px，不随缩放变化
+  ctx.strokeStyle = cssVar("--dbm-grid-minor");
+  drawGridLines(ctx, w, h, minor, canvas.panX, canvas.panY);
+  ctx.strokeStyle = cssVar("--dbm-grid-major");
+  drawGridLines(ctx, w, h, major, canvas.panX, canvas.panY);
 }
 
 function drawGridLines(
@@ -103,204 +103,204 @@ function drawGridLines(
   panX: number,
   panY: number,
 ) {
-  if (step <= 0) return
-  ctx.beginPath()
-  const startX = ((panX % step) + step) % step
+  if (step <= 0) return;
+  ctx.beginPath();
+  const startX = ((panX % step) + step) % step;
   for (let x = startX; x <= w; x += step) {
-    const px = Math.round(x) + 0.5
-    ctx.moveTo(px, 0)
-    ctx.lineTo(px, h)
+    const px = Math.round(x) + 0.5;
+    ctx.moveTo(px, 0);
+    ctx.lineTo(px, h);
   }
-  const startY = ((panY % step) + step) % step
+  const startY = ((panY % step) + step) % step;
   for (let y = startY; y <= h; y += step) {
-    const py = Math.round(y) + 0.5
-    ctx.moveTo(0, py)
-    ctx.lineTo(w, py)
+    const py = Math.round(y) + 0.5;
+    ctx.moveTo(0, py);
+    ctx.lineTo(w, py);
   }
-  ctx.stroke()
+  ctx.stroke();
 }
 
 watch(
   () => [canvas.zoom, canvas.panX, canvas.panY, canvas.viewportW, canvas.viewportH, theme.theme],
   scheduleGrid,
   { immediate: true },
-)
+);
 
 /* ==================== 事件绑定 ==================== */
-let resizeObserver: ResizeObserver | null = null
+let resizeObserver: ResizeObserver | null = null;
 const boundWheel = (e: WheelEvent) => {
-  e.preventDefault()
-  canvas.onWheel(e)
-}
+  e.preventDefault();
+  canvas.onWheel(e);
+};
 
 /* window 级 pointerup/pointercancel 兜底：
    延迟指针捕获后，无位移的单击不再捕获指针，
    若指针在画布外（大纲/头部）释放，根元素的 @pointerup 收不到事件，
    会导致交互模式卡死；onPointerUp 为幂等早退设计，重复调用安全 */
-const boundWindowPointerUp = (e: PointerEvent) => canvas.onPointerUp(e)
-const boundWindowPointerCancel = (e: PointerEvent) => canvas.onPointerUp(e)
+const boundWindowPointerUp = (e: PointerEvent) => canvas.onPointerUp(e);
+const boundWindowPointerCancel = (e: PointerEvent) => canvas.onPointerUp(e);
 
 /* 触屏手势层（双指缩放/长按菜单/双击编辑）：window 捕获相位转发。
    - 捕获相位先于卡片/线段的冒泡处理，第二指落在卡片上也能进入缩放；
    - window 级监听保证手指滑出画布（悬停在工具栏上空）仍持续跟踪；
    - 仅画布区域内的 touch 指针会被登记（store 内 rootEl.contains 过滤） */
-const boundTouchDown = (e: PointerEvent) => canvas.onTouchPointerDown(e)
-const boundTouchMove = (e: PointerEvent) => canvas.onTouchPointerMove(e)
-const boundTouchUp = (e: PointerEvent) => canvas.onTouchPointerEnd(e)
+const boundTouchDown = (e: PointerEvent) => canvas.onTouchPointerDown(e);
+const boundTouchMove = (e: PointerEvent) => canvas.onTouchPointerMove(e);
+const boundTouchUp = (e: PointerEvent) => canvas.onTouchPointerEnd(e);
 
 /* iOS Safari 非标准手势事件：画布内禁用原生双指缩放（与 touch-action:none 双保险） */
-const preventSafariGesture = (e: Event) => e.preventDefault()
+const preventSafariGesture = (e: Event) => e.preventDefault();
 
 function onRootPointerDown(e: PointerEvent) {
   // 事件仅在未被卡片/连线拦截（冒泡到根）时触发 —— 即空白区域
-  canvas.closeMenu()
-  canvas.onCanvasPointerDown(e)
+  canvas.closeMenu();
+  canvas.onCanvasPointerDown(e);
 }
 
 function onRootContextMenu(e: MouseEvent) {
-  e.preventDefault()
+  e.preventDefault();
   // 触屏长按刚开过菜单：压制 Android 长按后紧接派发的原生 contextmenu（避免重复开菜单）
-  if (canvas.touchMenuGuard()) return
-  const target = e.target as HTMLElement
-  const card = target.closest('[data-table-id]')
-  if (card) return // 卡片自身已处理
-  const edge = target.closest('[data-navigate-id]')
-  if (edge) return // 线段自身已处理
-  const local = canvas.localPoint(e)
+  if (canvas.touchMenuGuard()) return;
+  const target = e.target as HTMLElement;
+  const card = target.closest("[data-table-id]");
+  if (card) return; // 卡片自身已处理
+  const edge = target.closest("[data-navigate-id]");
+  if (edge) return; // 线段自身已处理
+  const local = canvas.localPoint(e);
   canvas.openMenu({
-    kind: 'canvas',
+    kind: "canvas",
     x: local.x,
     y: local.y,
     world: canvas.screenToWorld(local),
-  })
+  });
 }
 
 function isTypingTarget(e: Event): boolean {
-  const t = e.target as HTMLElement | null
-  if (!t) return false
-  const tag = t.tagName
-  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || t.isContentEditable
+  const t = e.target as HTMLElement | null;
+  if (!t) return false;
+  const tag = t.tagName;
+  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || t.isContentEditable;
 }
 
 function onKeyDown(e: KeyboardEvent) {
-  if (isTypingTarget(e)) return
-  if (e.code === 'Space') {
+  if (isTypingTarget(e)) return;
+  if (e.code === "Space") {
     if (!canvas.spacePressed) {
-      canvas.spacePressed = true
-      e.preventDefault()
+      canvas.spacePressed = true;
+      e.preventDefault();
     }
-    return
+    return;
   }
-  const mod = e.ctrlKey || e.metaKey
-  if (mod && e.key.toLowerCase() === 'z') {
-    e.preventDefault()
-    if (e.shiftKey) history.redo()
-    else history.undo()
-    return
+  const mod = e.ctrlKey || e.metaKey;
+  if (mod && e.key.toLowerCase() === "z") {
+    e.preventDefault();
+    if (e.shiftKey) history.redo();
+    else history.undo();
+    return;
   }
-  if (mod && e.key.toLowerCase() === 'y') {
-    e.preventDefault()
-    history.redo()
-    return
+  if (mod && e.key.toLowerCase() === "y") {
+    e.preventDefault();
+    history.redo();
+    return;
   }
-  if (mod && e.key.toLowerCase() === 'c') {
-    if (canvas.selectedIds.length) canvas.copySelection()
-    return
+  if (mod && e.key.toLowerCase() === "c") {
+    if (canvas.selectedIds.length) canvas.copySelection();
+    return;
   }
   // Ctrl+A 全选所有表卡片（仅可见表，隐藏表无卡片不参与）
-  if (mod && e.key.toLowerCase() === 'a') {
-    e.preventDefault()
-    canvas.setSelection([...canvas.visibleTableIds])
-    return
+  if (mod && e.key.toLowerCase() === "a") {
+    e.preventDefault();
+    canvas.setSelection([...canvas.visibleTableIds]);
+    return;
   }
   // Ctrl+D 取消选中（同 Esc；阻止浏览器书签快捷键）
-  if (mod && e.key.toLowerCase() === 'd') {
-    e.preventDefault()
-    canvas.clearSelection()
-    canvas.closeMenu()
-    return
+  if (mod && e.key.toLowerCase() === "d") {
+    e.preventDefault();
+    canvas.clearSelection();
+    canvas.closeMenu();
+    return;
   }
-  if (mod && e.key.toLowerCase() === 'v') {
+  if (mod && e.key.toLowerCase() === "v") {
     if (canvas.hasClipboard()) {
-      const center = canvas.screenToWorld({ x: canvas.viewportW / 2, y: canvas.viewportH / 2 })
-      canvas.pasteAt(center)
+      const center = canvas.screenToWorld({ x: canvas.viewportW / 2, y: canvas.viewportH / 2 });
+      canvas.pasteAt(center);
     }
-    return
+    return;
   }
-  if (e.key === 'Delete' || e.key === 'Backspace') {
+  if (e.key === "Delete" || e.key === "Backspace") {
     if (canvas.selectedIds.length) {
-      e.preventDefault()
-      confirmDeleteTables()
+      e.preventDefault();
+      confirmDeleteTables();
     }
-    return
+    return;
   }
-  if (e.key === 'Escape') {
-    canvas.clearSelection()
-    canvas.closeMenu()
+  if (e.key === "Escape") {
+    canvas.clearSelection();
+    canvas.closeMenu();
   }
 }
 
 function onKeyUp(e: KeyboardEvent) {
-  if (e.code === 'Space') canvas.spacePressed = false
+  if (e.code === "Space") canvas.spacePressed = false;
 }
 
 function confirmDeleteTables() {
-  const ids = [...canvas.selectedIds]
-  const names = ids.map((id) => model.tableById(id)?.tableName).filter(Boolean)
+  const ids = [...canvas.selectedIds];
+  const names = ids.map((id) => model.tableById(id)?.tableName).filter(Boolean);
   const navCount = model.navigates.filter(
     (n) => ids.includes(n.self) || ids.includes(n.target) || ids.includes(n.mappingTable),
-  ).length
+  ).length;
   Modal.confirm({
     title: `删除 ${ids.length} 张表？`,
-    content: `将删除表：${names.join('、')}${navCount ? `，及其涉及的 ${navCount} 条导航关系` : ''}。该操作可通过 Ctrl+Z 撤销。`,
-    okText: '删除',
-    okType: 'danger',
-    cancelText: '取消',
+    content: `将删除表：${names.join("、")}${navCount ? `，及其涉及的 ${navCount} 条导航关系` : ""}。该操作可通过 Ctrl+Z 撤销。`,
+    okText: "删除",
+    okType: "danger",
+    cancelText: "取消",
     onOk: async () => {
-      await model.removeTables(ids)
-      canvas.setSelection([])
+      await model.removeTables(ids);
+      canvas.setSelection([]);
     },
-  })
+  });
 }
 
 onMounted(() => {
-  if (!rootRef.value) return
-  canvas.init(rootRef.value)
+  if (!rootRef.value) return;
+  canvas.init(rootRef.value);
   resizeObserver = new ResizeObserver(() => {
-    canvas.measure()
-    scheduleGrid()
-  })
-  resizeObserver.observe(rootRef.value)
-  rootRef.value.addEventListener('wheel', boundWheel, { passive: false })
-  rootRef.value.addEventListener('gesturestart', preventSafariGesture)
-  rootRef.value.addEventListener('gesturechange', preventSafariGesture)
-  window.addEventListener('pointerdown', boundTouchDown, true)
-  window.addEventListener('pointermove', boundTouchMove, true)
-  window.addEventListener('pointerup', boundTouchUp, true)
-  window.addEventListener('pointercancel', boundTouchUp, true)
-  window.addEventListener('pointerup', boundWindowPointerUp)
-  window.addEventListener('pointercancel', boundWindowPointerCancel)
-  window.addEventListener('keydown', onKeyDown)
-  window.addEventListener('keyup', onKeyUp)
-})
+    canvas.measure();
+    scheduleGrid();
+  });
+  resizeObserver.observe(rootRef.value);
+  rootRef.value.addEventListener("wheel", boundWheel, { passive: false });
+  rootRef.value.addEventListener("gesturestart", preventSafariGesture);
+  rootRef.value.addEventListener("gesturechange", preventSafariGesture);
+  window.addEventListener("pointerdown", boundTouchDown, true);
+  window.addEventListener("pointermove", boundTouchMove, true);
+  window.addEventListener("pointerup", boundTouchUp, true);
+  window.addEventListener("pointercancel", boundTouchUp, true);
+  window.addEventListener("pointerup", boundWindowPointerUp);
+  window.addEventListener("pointercancel", boundWindowPointerCancel);
+  window.addEventListener("keydown", onKeyDown);
+  window.addEventListener("keyup", onKeyUp);
+});
 
 onBeforeUnmount(() => {
-  resizeObserver?.disconnect()
-  rootRef.value?.removeEventListener('wheel', boundWheel)
-  rootRef.value?.removeEventListener('gesturestart', preventSafariGesture)
-  rootRef.value?.removeEventListener('gesturechange', preventSafariGesture)
-  window.removeEventListener('pointerdown', boundTouchDown, true)
-  window.removeEventListener('pointermove', boundTouchMove, true)
-  window.removeEventListener('pointerup', boundTouchUp, true)
-  window.removeEventListener('pointercancel', boundTouchUp, true)
-  window.removeEventListener('pointerup', boundWindowPointerUp)
-  window.removeEventListener('pointercancel', boundWindowPointerCancel)
-  window.removeEventListener('keydown', onKeyDown)
-  window.removeEventListener('keyup', onKeyUp)
-  if (gridFrame) cancelAnimationFrame(gridFrame)
-})
+  resizeObserver?.disconnect();
+  rootRef.value?.removeEventListener("wheel", boundWheel);
+  rootRef.value?.removeEventListener("gesturestart", preventSafariGesture);
+  rootRef.value?.removeEventListener("gesturechange", preventSafariGesture);
+  window.removeEventListener("pointerdown", boundTouchDown, true);
+  window.removeEventListener("pointermove", boundTouchMove, true);
+  window.removeEventListener("pointerup", boundTouchUp, true);
+  window.removeEventListener("pointercancel", boundTouchUp, true);
+  window.removeEventListener("pointerup", boundWindowPointerUp);
+  window.removeEventListener("pointercancel", boundWindowPointerCancel);
+  window.removeEventListener("keydown", onKeyDown);
+  window.removeEventListener("keyup", onKeyUp);
+  if (gridFrame) cancelAnimationFrame(gridFrame);
+});
 
-defineExpose({ rootRef })
+defineExpose({ rootRef });
 </script>
 
 <template>

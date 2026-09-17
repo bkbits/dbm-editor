@@ -7,7 +7,7 @@ name: 发布演示应用到 GitHub Pages
 on:
   # 推送到 devel 分支时自动发布（当前开发主线；main 落后较多，暂不纳入触发）
   push:
-    branches: ['devel']
+    branches: ["devel"]
   # 支持在 Actions 页面手动触发
   workflow_dispatch:
 
@@ -19,7 +19,7 @@ permissions:
 
 # 同一时间仅保留一个部署，排队等待而不取消进行中的部署
 concurrency:
-  group: 'pages'
+  group: "pages"
   cancel-in-progress: false
 
 jobs:
@@ -33,7 +33,7 @@ jobs:
         uses: oven-sh/setup-bun@v2
         with:
           # 与本地验证一致的版本（package.json devEngines 亦声明 bun）
-          bun-version: '1.3.14'
+          bun-version: "1.3.14"
       - name: 安装依赖
         run: bun install --frozen-lockfile
       - name: 构建演示应用（应用模式，相对路径 base）
@@ -44,7 +44,7 @@ jobs:
         uses: actions/upload-pages-artifact@v3
         with:
           # 仅上传构建产物（dist：index.html + assets + favicon；动作会自动附带 .nojekyll）
-          path: 'dist'
+          path: "dist"
 
   # 部署作业（与官方模板一致）
   deploy:

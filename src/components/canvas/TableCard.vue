@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import {
   Key,
   CircleCheck,
@@ -10,136 +10,142 @@ import {
   EyeOff,
   ArrowDown,
   GitBranch,
-} from '@lucide/vue'
-import { useCanvasStore } from '@/stores/canvas'
-import { useModelStore } from '@/stores/model'
-import { useUiStore } from '@/stores/ui'
-import { useDictStore } from '@/stores/dict'
-import { CARD_WIDTH, type Side } from '@/utils/geometry'
-import { NAVIGATE_TYPE_LABEL } from '@/utils/navigate'
+} from "@lucide/vue";
+import { useCanvasStore } from "@/stores/canvas";
+import { useModelStore } from "@/stores/model";
+import { useUiStore } from "@/stores/ui";
+import { useDictStore } from "@/stores/dict";
+import { CARD_WIDTH, type Side } from "@/utils/geometry";
+import { NAVIGATE_TYPE_LABEL } from "@/utils/navigate";
 
-const props = defineProps<{ tableId: string }>()
+const props = defineProps<{ tableId: string }>();
 
-const canvas = useCanvasStore()
-const model = useModelStore()
-const ui = useUiStore()
-const dictStore = useDictStore()
+const canvas = useCanvasStore();
+const model = useModelStore();
+const ui = useUiStore();
+const dictStore = useDictStore();
 
-const elRef = ref<HTMLElement>()
+const elRef = ref<HTMLElement>();
 
-const table = computed(() => model.tableById(props.tableId))
-const columns = computed(() => model.columnsOf(props.tableId))
-const indexes = computed(() => model.indexesOf(props.tableId))
-const isMapping = computed(() => model.isMappingTable(props.tableId))
-const isHidden = computed(() => canvas.hiddenTableIds.includes(props.tableId))
+const table = computed(() => model.tableById(props.tableId));
+const columns = computed(() => model.columnsOf(props.tableId));
+const indexes = computed(() => model.indexesOf(props.tableId));
+const isMapping = computed(() => model.isMappingTable(props.tableId));
+const isHidden = computed(() => canvas.hiddenTableIds.includes(props.tableId));
 
-const COLLAPSE_COUNT = 6
-const expanded = computed(() => canvas.isExpanded(props.tableId))
+const COLLAPSE_COUNT = 6;
+const expanded = computed(() => canvas.isExpanded(props.tableId));
 const shownColumns = computed(() =>
   expanded.value ? columns.value : columns.value.slice(0, COLLAPSE_COUNT),
-)
+);
 
-const showIndexes = computed(() => canvas.showIndexes(props.tableId))
+const showIndexes = computed(() => canvas.showIndexes(props.tableId));
 
-const isSelected = computed(() => canvas.selectedIds.includes(props.tableId))
-const isHovered = computed(() => canvas.hoveredTableId === props.tableId)
+const isSelected = computed(() => canvas.selectedIds.includes(props.tableId));
+const isHovered = computed(() => canvas.hoveredTableId === props.tableId);
 const isConnectTarget = computed(
   () =>
     canvas.connectDraft?.hoverTableId === props.tableId &&
     canvas.connectDraft.fromTableId !== props.tableId,
-)
+);
 
 const catColor = computed(() => {
-  const idx = model.categories.findIndex((c) => c.id === table.value?.categoryId)
-  return `var(--dbm-cat-${Math.max(0, idx) % 8})`
-})
+  const idx = model.categories.findIndex((c) => c.id === table.value?.categoryId);
+  return `var(--dbm-cat-${Math.max(0, idx) % 8})`;
+});
 
 /** 隐藏导航摘要：对端表被隐藏的导航 */
 const hiddenNavs = computed(() => {
   return model
     .navigatesOf(props.tableId)
     .map((n) => {
-      const otherId = n.self === props.tableId ? n.target : n.self
-      if (!canvas.hiddenTableIds.includes(otherId)) return null
-      const other = model.tableById(otherId)
+      const otherId = n.self === props.tableId ? n.target : n.self;
+      if (!canvas.hiddenTableIds.includes(otherId)) return null;
+      const other = model.tableById(otherId);
       // 视角类型：若本表是 target，则类型翻转
       const viewType =
-        n.self === props.tableId ? n.type : n.type === '1N' ? 'N1' : n.type === 'N1' ? '1N' : n.type
+        n.self === props.tableId
+          ? n.type
+          : n.type === "1N"
+            ? "N1"
+            : n.type === "N1"
+              ? "1N"
+              : n.type;
       return {
         id: n.id,
         label: NAVIGATE_TYPE_LABEL[viewType],
-        otherName: other?.tableName ?? '?',
+        otherName: other?.tableName ?? "?",
         otherId,
-      }
+      };
     })
-    .filter(Boolean) as Array<{ id: string; label: string; otherName: string; otherId: string }>
-})
+    .filter(Boolean) as Array<{ id: string; label: string; otherName: string; otherId: string }>;
+});
 
 /** 点击隐藏导航目标：显示对应表并平滑居中到它 */
 function revealHiddenNav(otherId: string) {
-  canvas.showTable(otherId)
-  canvas.centerOnTable(otherId)
+  canvas.showTable(otherId);
+  canvas.centerOnTable(otherId);
 }
 
 function dictOf(dictKey: string) {
-  return dictStore.dicts.find((d) => d.dictKey === dictKey)
+  return dictStore.dicts.find((d) => d.dictKey === dictKey);
 }
 
 function onPointerDown(e: PointerEvent) {
-  if (e.button !== 0) return
-  canvas.closeMenu()
-  canvas.beginCardDrag(props.tableId, e)
+  if (e.button !== 0) return;
+  canvas.closeMenu();
+  canvas.beginCardDrag(props.tableId, e);
 }
 function onDblClick() {
-  ui.openTableEdit(props.tableId)
+  ui.openTableEdit(props.tableId);
 }
 function onContext(e: MouseEvent) {
-  const local = canvas.localPoint(e)
+  const local = canvas.localPoint(e);
   canvas.openMenu({
-    kind: 'card',
+    kind: "card",
     x: local.x,
     y: local.y,
     world: canvas.screenToWorld(local),
     tableId: props.tableId,
-  })
+  });
 }
 function onConnectorDown(e: PointerEvent, side: Side) {
-  if (e.button !== 0) return
-  canvas.closeMenu()
-  canvas.startConnect(props.tableId, side, e)
+  if (e.button !== 0) return;
+  canvas.closeMenu();
+  canvas.startConnect(props.tableId, side, e);
 }
 /** 隐藏本表（不删除数据，仅从画布视图移除；可在左侧大纲重新显示） */
 function onHide(e: MouseEvent) {
-  canvas.hideTable(props.tableId)
-  e.stopPropagation()
+  canvas.hideTable(props.tableId);
+  e.stopPropagation();
 }
 
 const SIDES: Array<{ side: Side; cls: string }> = [
-  { side: 'n', cls: 'conn-n' },
-  { side: 'e', cls: 'conn-e' },
-  { side: 's', cls: 'conn-s' },
-  { side: 'w', cls: 'conn-w' },
-]
+  { side: "n", cls: "conn-n" },
+  { side: "e", cls: "conn-e" },
+  { side: "s", cls: "conn-s" },
+  { side: "w", cls: "conn-w" },
+];
 
 /* 卡片尺寸上报（连线锚点计算用） */
-let ro: ResizeObserver | null = null
+let ro: ResizeObserver | null = null;
 onMounted(() => {
   if (elRef.value) {
     ro = new ResizeObserver(() => {
       if (elRef.value) {
-        canvas.setCardSize(props.tableId, elRef.value.offsetWidth, elRef.value.offsetHeight)
+        canvas.setCardSize(props.tableId, elRef.value.offsetWidth, elRef.value.offsetHeight);
       }
-    })
-    ro.observe(elRef.value)
-    canvas.setCardSize(props.tableId, elRef.value.offsetWidth, elRef.value.offsetHeight)
+    });
+    ro.observe(elRef.value);
+    canvas.setCardSize(props.tableId, elRef.value.offsetWidth, elRef.value.offsetHeight);
   }
-})
+});
 onBeforeUnmount(() => {
-  ro?.disconnect()
+  ro?.disconnect();
   // 卡片可能因隐藏/删除/视口裁剪而卸载：若卸载时仍处于悬停态，mouseleave 不一定触发，
   // 需主动清理，否则 hoveredTableId 残留会让关联导航线一直保持联动高亮
-  if (canvas.hoveredTableId === props.tableId) canvas.setHoveredTable('')
-})
+  if (canvas.hoveredTableId === props.tableId) canvas.setHoveredTable("");
+});
 </script>
 
 <template>
@@ -246,7 +252,7 @@ onBeforeUnmount(() => {
         <span class="idx-type" :class="idx.type.toLowerCase()">{{ idx.type }}</span>
         <span class="idx-name mono" :title="idx.columns.join(', ')">{{ idx.indexName }}</span>
         <span class="idx-cols mono" :title="idx.columns.join(', ')">{{
-          idx.columns.join(', ')
+          idx.columns.join(", ")
         }}</span>
       </div>
       <div v-if="!indexes.length" class="idx-empty">暂无索引</div>
@@ -359,7 +365,7 @@ onBeforeUnmount(() => {
 /* 触屏（无 hover）：连接点 16px 视觉尺寸不变，但命中区向外扩 6px 至 28px 点按目标 */
 @media (pointer: coarse) {
   .table-card .connector::after {
-    content: '';
+    content: "";
     position: absolute;
     inset: -6px;
     border-radius: 50%;
@@ -404,7 +410,7 @@ onBeforeUnmount(() => {
   overflow: hidden;
 
   &::before {
-    content: '';
+    content: "";
     position: absolute;
     left: 0;
     top: 0;

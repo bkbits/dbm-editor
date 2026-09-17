@@ -6,7 +6,7 @@
  * 对接真实后端时在此传入自定义 ManagerApi 实现：
  *   <DBManagerView :api="myManagerApi" />
  */
-import DBManagerView from '@/views/DBManagerView.vue'
+import DBManagerView from "@/views/DBManagerView.vue";
 </script>
 
 <template>

@@ -1,32 +1,32 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted } from 'vue'
-import { PanelLeft, X } from '@lucide/vue'
-import { useModelStore } from '@/stores/model'
-import { useUiStore } from '@/stores/ui'
-import OutlinePanel from '@/components/outline/OutlinePanel.vue'
-import CanvasToolbar from '@/components/canvas/CanvasToolbar.vue'
-import ModelCanvas from '@/components/canvas/ModelCanvas.vue'
-import TableEditDialog from '@/components/dialog/TableEditDialog.vue'
-import NavigateEditDialog from '@/components/dialog/NavigateEditDialog.vue'
-import CategoryEditDialog from '@/components/dialog/CategoryEditDialog.vue'
-import ImportDBDialog from '@/components/dialog/ImportDBDialog.vue'
-import CodePreviewModal from '@/components/dialog/CodePreviewModal.vue'
-import ReplaceConfirmModal from '@/components/dialog/ReplaceConfirmModal.vue'
+import { onBeforeUnmount, onMounted } from "vue";
+import { PanelLeft, X } from "@lucide/vue";
+import { useModelStore } from "@/stores/model";
+import { useUiStore } from "@/stores/ui";
+import OutlinePanel from "@/components/outline/OutlinePanel.vue";
+import CanvasToolbar from "@/components/canvas/CanvasToolbar.vue";
+import ModelCanvas from "@/components/canvas/ModelCanvas.vue";
+import TableEditDialog from "@/components/dialog/TableEditDialog.vue";
+import NavigateEditDialog from "@/components/dialog/NavigateEditDialog.vue";
+import CategoryEditDialog from "@/components/dialog/CategoryEditDialog.vue";
+import ImportDBDialog from "@/components/dialog/ImportDBDialog.vue";
+import CodePreviewModal from "@/components/dialog/CodePreviewModal.vue";
+import ReplaceConfirmModal from "@/components/dialog/ReplaceConfirmModal.vue";
 
-const model = useModelStore()
-const ui = useUiStore()
+const model = useModelStore();
+const ui = useUiStore();
 
 onMounted(() => {
-  model.init()
-})
+  model.init();
+});
 
 /* 窗口从窄屏切回宽屏时收起抽屉，避免残留遮罩状态 */
-const desktopMq = window.matchMedia('(min-width: 769px)')
+const desktopMq = window.matchMedia("(min-width: 769px)");
 function onDesktopChange() {
-  ui.closeMobileOutline()
+  ui.closeMobileOutline();
 }
-onMounted(() => desktopMq.addEventListener('change', onDesktopChange))
-onBeforeUnmount(() => desktopMq.removeEventListener('change', onDesktopChange))
+onMounted(() => desktopMq.addEventListener("change", onDesktopChange));
+onBeforeUnmount(() => desktopMq.removeEventListener("change", onDesktopChange));
 </script>
 
 <template>

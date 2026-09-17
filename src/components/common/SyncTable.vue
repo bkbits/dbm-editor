@@ -27,62 +27,62 @@
  * - 壳内容上的滚轮事件转发给两条滚动条（壳自身 overflow: hidden 不滚），
  *   边界处（滚不动时）不拦截，保持冒泡链与原生滚动容器一致。
  */
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 
 export interface StColumn {
   /** 列标识（单元格插槽按此分发渲染） */
-  key: string
+  key: string;
   /** 表头文案（缺省空） */
-  title?: string
+  title?: string;
   /** 显式列宽（px）；设定后不参与剩余空间分配 */
-  width?: number
+  width?: number;
   /** 最低列宽（px，缺省 80） */
-  minWidth?: number
+  minWidth?: number;
   /** 固定列：左 / 右 */
-  fixed?: 'left' | 'right'
+  fixed?: "left" | "right";
   /** 居中对齐（表头与单元格） */
-  align?: 'center'
+  align?: "center";
   /** 表头 title 提示 */
-  thTitle?: string
+  thTitle?: string;
   /** 表头附加类名 */
-  thClass?: string
+  thClass?: string;
 }
 
 const props = defineProps<{
-  columns: StColumn[]
+  columns: StColumn[];
   /** 行数（行数据由父级持有，经单元格插槽按 col/idx 取用） */
-  rowCount: number
-  rowKey: (idx: number) => string | number
+  rowCount: number;
+  rowKey: (idx: number) => string | number;
   /** 行附加类（拖拽指示 / 主键行等领域状态） */
-  rowClass?: (idx: number) => unknown
+  rowClass?: (idx: number) => unknown;
   /** 行是否可拖拽（拖拽排序手柄按下的瞬间为真） */
-  draggable?: (idx: number) => boolean
-}>()
+  draggable?: (idx: number) => boolean;
+}>();
 
 const emit = defineEmits<{
-  (e: 'row-dragstart', idx: number, ev: DragEvent): void
-  (e: 'row-dragend'): void
-  (e: 'row-dragover', idx: number, ev: DragEvent): void
-  (e: 'row-drop'): void
-}>()
+  (e: "row-dragstart", idx: number, ev: DragEvent): void;
+  (e: "row-dragend"): void;
+  (e: "row-dragover", idx: number, ev: DragEvent): void;
+  (e: "row-drop"): void;
+}>();
 
 /* ---------- 模板引用 ---------- */
-const rootRef = ref<HTMLElement>()
-const headerRef = ref<HTMLElement>()
-const headLeftRef = ref<HTMLElement>()
-const headCenterRef = ref<HTMLElement>()
-const headRightRef = ref<HTMLElement>()
-const bodyLeftRef = ref<HTMLElement>()
-const bodyCenterRef = ref<HTMLElement>()
-const bodyRightRef = ref<HTMLElement>()
-const barHRef = ref<HTMLElement>()
-const barVRef = ref<HTMLElement>()
+const rootRef = ref<HTMLElement>();
+const headerRef = ref<HTMLElement>();
+const headLeftRef = ref<HTMLElement>();
+const headCenterRef = ref<HTMLElement>();
+const headRightRef = ref<HTMLElement>();
+const bodyLeftRef = ref<HTMLElement>();
+const bodyCenterRef = ref<HTMLElement>();
+const bodyRightRef = ref<HTMLElement>();
+const barHRef = ref<HTMLElement>();
+const barVRef = ref<HTMLElement>();
 
 /** 滚动条带宽（挂载时实测，与全局 ::-webkit-scrollbar 一致） */
-let sbW = 9
+let sbW = 9;
 
 /** 最终列宽（key → px）与布局汇总（响应式驱动 colgroup 与 sizer） */
-const colWidths = reactive<Record<string, number>>({})
+const colWidths = reactive<Record<string, number>>({});
 const layout = reactive({
   vBar: false,
   hBar: false,
@@ -90,189 +90,189 @@ const layout = reactive({
   centerW: 0,
   rightW: 0,
   tableW: 0,
-})
-const sizerH = ref(0)
-const sizerV = ref(0)
+});
+const sizerH = ref(0);
+const sizerV = ref(0);
 
 /** 跨三表同步的悬停行索引（三张表体表各自触发 mouseenter/leave） */
-const hoverIdx = ref(-1)
+const hoverIdx = ref(-1);
 
-const leftCols = computed(() => props.columns.filter((c) => c.fixed === 'left'))
-const rightCols = computed(() => props.columns.filter((c) => c.fixed === 'right'))
-const centerCols = computed(() => props.columns.filter((c) => !c.fixed))
-const rowIdxs = computed(() => Array.from({ length: props.rowCount }, (_, i) => i))
+const leftCols = computed(() => props.columns.filter((c) => c.fixed === "left"));
+const rightCols = computed(() => props.columns.filter((c) => c.fixed === "right"));
+const centerCols = computed(() => props.columns.filter((c) => !c.fixed));
+const rowIdxs = computed(() => Array.from({ length: props.rowCount }, (_, i) => i));
 
 /** 列宽兜底（首帧 recalc 前 colgroup 也有非零宽度，避免闪空） */
 function widthOf(c: StColumn): number {
-  return colWidths[c.key] ?? Math.max(Math.round(c.width ?? 0), Math.round(c.minWidth ?? 80))
+  return colWidths[c.key] ?? Math.max(Math.round(c.width ?? 0), Math.round(c.minWidth ?? 80));
 }
 
 function regionStyle(cols: StColumn[]) {
-  return { width: cols.reduce((s, c) => s + widthOf(c), 0) + 'px' }
+  return { width: cols.reduce((s, c) => s + widthOf(c), 0) + "px" };
 }
 
 function thClass(c: StColumn) {
-  return [c.align === 'center' ? 'st-c' : '', c.thClass ?? '']
+  return [c.align === "center" ? "st-c" : "", c.thClass ?? ""];
 }
 
 function tdClass(c: StColumn) {
-  return [`st-c-${c.key}`, c.align === 'center' ? 'st-c' : '']
+  return [`st-c-${c.key}`, c.align === "center" ? "st-c" : ""];
 }
 
 function onRowEnter(idx: number) {
-  hoverIdx.value = idx
+  hoverIdx.value = idx;
 }
 function onRowLeave(idx: number) {
-  if (hoverIdx.value === idx) hoverIdx.value = -1
+  if (hoverIdx.value === idx) hoverIdx.value = -1;
 }
 
 /* ---------- 列宽分配（用户流程第 4/5 步） ---------- */
 
 function distribute(availW: number) {
-  const flexKeys: string[] = []
-  let total = 0
+  const flexKeys: string[] = [];
+  let total = 0;
   for (const c of props.columns) {
-    const min = Math.max(0, Math.round(c.minWidth ?? 80))
+    const min = Math.max(0, Math.round(c.minWidth ?? 80));
     if (c.width != null) {
       // 显式宽度直接采用（不参与分配）；低于自身 minWidth 时抬升
-      colWidths[c.key] = Math.max(Math.round(c.width), min)
+      colWidths[c.key] = Math.max(Math.round(c.width), min);
     } else {
-      colWidths[c.key] = min
-      flexKeys.push(c.key)
+      colWidths[c.key] = min;
+      flexKeys.push(c.key);
     }
-    total += colWidths[c.key]
+    total += colWidths[c.key];
   }
   // 剩余空间平均分给未指定宽度的列，除不尽时前几列各多 1px（总和精确）
-  const leftover = availW - total
+  const leftover = availW - total;
   if (leftover > 0 && flexKeys.length) {
-    const share = Math.floor(leftover / flexKeys.length)
-    const rem = leftover - share * flexKeys.length
-    flexKeys.forEach((k, i) => (colWidths[k] += share + (i < rem ? 1 : 0)))
+    const share = Math.floor(leftover / flexKeys.length);
+    const rem = leftover - share * flexKeys.length;
+    flexKeys.forEach((k, i) => (colWidths[k] += share + (i < rem ? 1 : 0)));
   }
-  layout.leftW = leftCols.value.reduce((s, c) => s + widthOf(c), 0)
-  layout.centerW = centerCols.value.reduce((s, c) => s + widthOf(c), 0)
-  layout.rightW = rightCols.value.reduce((s, c) => s + widthOf(c), 0)
-  layout.tableW = layout.leftW + layout.centerW + layout.rightW
+  layout.leftW = leftCols.value.reduce((s, c) => s + widthOf(c), 0);
+  layout.centerW = centerCols.value.reduce((s, c) => s + widthOf(c), 0);
+  layout.rightW = rightCols.value.reduce((s, c) => s + widthOf(c), 0);
+  layout.tableW = layout.leftW + layout.centerW + layout.rightW;
 }
 
 /* ---------- 滚动同步（用户流程第 7/8/9 步） ---------- */
 
 /** 滚动事件统一入口：两条滚动条的 scrollLeft / scrollTop 一次写入所有壳 */
 function syncScroll() {
-  const sl = barHRef.value ? barHRef.value.scrollLeft : 0
-  const st = barVRef.value ? barVRef.value.scrollTop : 0
+  const sl = barHRef.value ? barHRef.value.scrollLeft : 0;
+  const st = barVRef.value ? barVRef.value.scrollTop : 0;
   // 表头三壳只同步横向（表头无纵向溢出；左右壳无横向溢出，赋值即无操作）
   for (const el of [headLeftRef.value, headCenterRef.value, headRightRef.value]) {
-    if (el) el.scrollLeft = sl
+    if (el) el.scrollLeft = sl;
   }
   // 表体三壳横纵皆同步（左右壳横向无溢出，仅纵向生效）
   for (const el of [bodyLeftRef.value, bodyCenterRef.value, bodyRightRef.value]) {
-    if (!el) continue
-    el.scrollLeft = sl
-    el.scrollTop = st
+    if (!el) continue;
+    el.scrollLeft = sl;
+    el.scrollTop = st;
   }
   // 通知弹层类组件重新对位（antd 弹层不感知 overflow:hidden 壳的程序化滚动）
-  window.dispatchEvent(new Event('scroll'))
+  window.dispatchEvent(new Event("scroll"));
 }
 
 /** 壳内容滚轮转发给两条滚动条；边界处（滚不动）不拦截，保持事件冒泡链 */
 function onWheel(e: WheelEvent) {
-  let handled = false
+  let handled = false;
   if (e.deltaX && barHRef.value) {
-    const before = barHRef.value.scrollLeft
-    barHRef.value.scrollLeft = before + e.deltaX
-    if (barHRef.value.scrollLeft !== before) handled = true
+    const before = barHRef.value.scrollLeft;
+    barHRef.value.scrollLeft = before + e.deltaX;
+    if (barHRef.value.scrollLeft !== before) handled = true;
   }
   if (e.deltaY && barVRef.value) {
-    const before = barVRef.value.scrollTop
-    barVRef.value.scrollTop = before + e.deltaY
-    if (barVRef.value.scrollTop !== before) handled = true
+    const before = barVRef.value.scrollTop;
+    barVRef.value.scrollTop = before + e.deltaY;
+    if (barVRef.value.scrollTop !== before) handled = true;
   }
-  if (handled) e.preventDefault()
+  if (handled) e.preventDefault();
 }
 
 /* ---------- 布局重算（用户流程第 1~6 步 + 第 9 步重发滚动量） ---------- */
 
 function recalc() {
-  const root = rootRef.value
-  const body = root?.querySelector<HTMLElement>('.st-body')
-  const bodyC = bodyCenterRef.value
-  if (!root || !body || !bodyC || root.clientWidth < 50) return
-  const rootW = root.clientWidth
+  const root = rootRef.value;
+  const body = root?.querySelector<HTMLElement>(".st-body");
+  const bodyC = bodyCenterRef.value;
+  if (!root || !body || !bodyC || root.clientWidth < 50) return;
+  const rootW = root.clientWidth;
   // 根元素高度上限（桌面 348px；父级可用 --st-max-h 覆盖，如移动端 calc）
-  const rootMaxH = parseFloat(getComputedStyle(root).maxHeight) || 348
-  const headerH = headerRef.value?.offsetHeight ?? 28
+  const rootMaxH = parseFloat(getComputedStyle(root).maxHeight) || 348;
+  const headerH = headerRef.value?.offsetHeight ?? 28;
   // 表体实际内容高与上下内边距（sizer 高含内边距，与壳滚动范围严格一致）
-  const contentH = bodyC.scrollHeight
-  const bs = getComputedStyle(body)
-  const padY = (parseFloat(bs.paddingTop) || 0) + (parseFloat(bs.paddingBottom) || 0)
+  const contentH = bodyC.scrollHeight;
+  const bs = getComputedStyle(body);
+  const padY = (parseFloat(bs.paddingTop) || 0) + (parseFloat(bs.paddingBottom) || 0);
   // 横纵滚动条互相挤占空间（横向条占高 → 表体变矮 → 纵向条可能出现；
   // 纵向条占宽 → 可用宽变窄 → 横向条可能出现），迭代至收敛
-  let hBar = false
-  let vBar = false
+  let hBar = false;
+  let vBar = false;
   for (let i = 0; i < 3; i++) {
     const bodyClientH = Math.max(
       0,
       Math.min(rootMaxH, root.clientHeight) - headerH - (hBar ? sbW : 0),
-    )
-    vBar = contentH + padY > bodyClientH + 0.5
-    const availW = rootW - (vBar ? sbW : 0)
-    distribute(availW)
-    const next = layout.tableW > availW + 0.5
-    if (next === hBar) break
-    hBar = next
+    );
+    vBar = contentH + padY > bodyClientH + 0.5;
+    const availW = rootW - (vBar ? sbW : 0);
+    distribute(availW);
+    const next = layout.tableW > availW + 0.5;
+    if (next === hBar) break;
+    hBar = next;
   }
-  layout.vBar = vBar
-  layout.hBar = hBar
-  sizerH.value = Math.round(layout.tableW)
-  sizerV.value = Math.round(contentH + padY)
+  layout.vBar = vBar;
+  layout.hBar = hBar;
+  sizerH.value = Math.round(layout.tableW);
+  sizerV.value = Math.round(contentH + padY);
   // 尺寸 / 列宽变更后重新下发一次滚动量，清理越界 scrollLeft（浏览器对
   // sizer 收缩会自动钳制滚动条，这里把钳制后的值同步到各壳）
-  nextTick(syncScroll)
+  nextTick(syncScroll);
 }
 
 /** 实测当前环境滚动条带宽（全局 ::-webkit-scrollbar 定制后与默认值可能不同） */
 function measureScrollbarWidth(): number {
-  const el = document.createElement('div')
-  el.style.cssText = 'position:absolute;top:-9999px;width:100px;height:100px;overflow:scroll'
-  document.body.appendChild(el)
-  const w = el.offsetWidth - el.clientWidth
-  el.remove()
-  return w > 0 && w < 40 ? w : 9
+  const el = document.createElement("div");
+  el.style.cssText = "position:absolute;top:-9999px;width:100px;height:100px;overflow:scroll";
+  document.body.appendChild(el);
+  const w = el.offsetWidth - el.clientWidth;
+  el.remove();
+  return w > 0 && w < 40 ? w : 9;
 }
 
-let ro: ResizeObserver | undefined
+let ro: ResizeObserver | undefined;
 
 onMounted(() => {
-  sbW = measureScrollbarWidth()
-  const root = rootRef.value
+  sbW = measureScrollbarWidth();
+  const root = rootRef.value;
   if (root) {
-    ro = new ResizeObserver(() => recalc())
-    ro.observe(root)
-    root.addEventListener('wheel', onWheel, { passive: false })
+    ro = new ResizeObserver(() => recalc());
+    ro.observe(root);
+    root.addEventListener("wheel", onWheel, { passive: false });
   }
-  barHRef.value?.addEventListener('scroll', syncScroll)
-  barVRef.value?.addEventListener('scroll', syncScroll)
-  nextTick(recalc)
-})
+  barHRef.value?.addEventListener("scroll", syncScroll);
+  barVRef.value?.addEventListener("scroll", syncScroll);
+  nextTick(recalc);
+});
 
 onBeforeUnmount(() => {
-  ro?.disconnect()
-  rootRef.value?.removeEventListener('wheel', onWheel)
-  barHRef.value?.removeEventListener('scroll', syncScroll)
-  barVRef.value?.removeEventListener('scroll', syncScroll)
-})
+  ro?.disconnect();
+  rootRef.value?.removeEventListener("wheel", onWheel);
+  barHRef.value?.removeEventListener("scroll", syncScroll);
+  barVRef.value?.removeEventListener("scroll", syncScroll);
+});
 
 watch(
   () => props.columns,
   () => nextTick(recalc),
-)
+);
 watch(
   () => props.rowCount,
   () => nextTick(recalc),
-)
+);
 
-defineExpose({ recalc, layout })
+defineExpose({ recalc, layout });
 </script>
 
 <template>
@@ -298,7 +298,7 @@ defineExpose({ recalc, layout })
                 :class="thClass(c)"
                 :title="c.thTitle"
               >
-                <slot name="head" :col="c">{{ c.title ?? '' }}</slot>
+                <slot name="head" :col="c">{{ c.title ?? "" }}</slot>
               </th>
             </tr>
           </thead>
@@ -318,7 +318,7 @@ defineExpose({ recalc, layout })
                 :class="thClass(c)"
                 :title="c.thTitle"
               >
-                <slot name="head" :col="c">{{ c.title ?? '' }}</slot>
+                <slot name="head" :col="c">{{ c.title ?? "" }}</slot>
               </th>
             </tr>
           </thead>
@@ -338,7 +338,7 @@ defineExpose({ recalc, layout })
                 :class="thClass(c)"
                 :title="c.thTitle"
               >
-                <slot name="head" :col="c">{{ c.title ?? '' }}</slot>
+                <slot name="head" :col="c">{{ c.title ?? "" }}</slot>
               </th>
             </tr>
           </thead>

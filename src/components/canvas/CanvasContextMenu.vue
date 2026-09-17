@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { Modal } from 'antdv-next'
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { Modal } from "antdv-next";
 import {
   Pencil,
   Trash2,
@@ -21,98 +21,98 @@ import {
   AlignEndVertical,
   AlignHorizontalDistributeCenter,
   AlignVerticalDistributeCenter,
-} from '@lucide/vue'
-import type { FunctionalComponent } from 'vue'
-import { useCanvasStore, type AlignMode } from '@/stores/canvas'
-import { useModelStore } from '@/stores/model'
-import { useUiStore } from '@/stores/ui'
-import { message } from 'antdv-next'
+} from "@lucide/vue";
+import type { FunctionalComponent } from "vue";
+import { useCanvasStore, type AlignMode } from "@/stores/canvas";
+import { useModelStore } from "@/stores/model";
+import { useUiStore } from "@/stores/ui";
+import { message } from "antdv-next";
 
 interface MenuItem {
-  key: string
-  label: string
-  icon: FunctionalComponent | null
-  danger: boolean
-  disabled?: boolean
+  key: string;
+  label: string;
+  icon: FunctionalComponent | null;
+  danger: boolean;
+  disabled?: boolean;
   /** 分组小标题（不可点击） */
-  header?: boolean
+  header?: boolean;
   /** 分割线（不可点击） */
-  divider?: boolean
+  divider?: boolean;
   /** 悬停提示（如不可用原因） */
-  title?: string
-  run: () => void
+  title?: string;
+  run: () => void;
 }
 
-const canvas = useCanvasStore()
-const model = useModelStore()
-const ui = useUiStore()
+const canvas = useCanvasStore();
+const model = useModelStore();
+const ui = useUiStore();
 
-const rootRef = ref<HTMLElement>()
+const rootRef = ref<HTMLElement>();
 
-const menu = computed(() => canvas.menu)
-const visible = computed(() => Boolean(menu.value))
+const menu = computed(() => canvas.menu);
+const visible = computed(() => Boolean(menu.value));
 
-const menuWidth = 178
+const menuWidth = 178;
 
 /** 菜单内容项高度估算（用于菜单位置的垂直裁剪） */
 const menuHeight = computed(() => {
-  let h = 10
+  let h = 10;
   for (const it of items.value) {
-    if (it.divider) h += 7
-    else if (it.header) h += 22
-    else h += 29
+    if (it.divider) h += 7;
+    else if (it.header) h += 22;
+    else h += 29;
   }
-  return h
-})
+  return h;
+});
 
 /** 菜单位置（画布内裁剪） */
 const posStyle = computed(() => {
-  if (!menu.value) return {}
-  const x = Math.min(menu.value.x, Math.max(0, canvas.viewportW - menuWidth - 8))
-  const y = Math.min(menu.value.y, Math.max(0, canvas.viewportH - menuHeight.value - 8))
-  return { left: `${x}px`, top: `${y}px` }
-})
+  if (!menu.value) return {};
+  const x = Math.min(menu.value.x, Math.max(0, canvas.viewportW - menuWidth - 8));
+  const y = Math.min(menu.value.y, Math.max(0, canvas.viewportH - menuHeight.value - 8));
+  return { left: `${x}px`, top: `${y}px` };
+});
 
 function close() {
-  canvas.closeMenu()
+  canvas.closeMenu();
 }
 
 function withClose(fn: () => void) {
   return () => {
-    close()
-    fn()
-  }
+    close();
+    fn();
+  };
 }
 
 /* ==================== 各类菜单项 ==================== */
 
 /** 对齐/分布菜单定义（选中 ≥ 2 张表时出现；均匀分布需 ≥ 3 张） */
 const ALIGN_DEFS: Array<{ mode: AlignMode; label: string; icon: FunctionalComponent }> = [
-  { mode: 'left', label: '左对齐', icon: AlignStartHorizontal },
-  { mode: 'hcenter', label: '水平对齐', icon: AlignCenterHorizontal },
-  { mode: 'right', label: '右对齐', icon: AlignEndHorizontal },
-  { mode: 'top', label: '顶部对齐', icon: AlignStartVertical },
-  { mode: 'vcenter', label: '垂直对齐', icon: AlignCenterVertical },
-  { mode: 'bottom', label: '底部对齐', icon: AlignEndVertical },
-  { mode: 'hdistribute', label: '水平均匀分布', icon: AlignHorizontalDistributeCenter },
-  { mode: 'vdistribute', label: '垂直均匀分布', icon: AlignVerticalDistributeCenter },
-]
+  { mode: "left", label: "左对齐", icon: AlignStartHorizontal },
+  { mode: "hcenter", label: "水平对齐", icon: AlignCenterHorizontal },
+  { mode: "right", label: "右对齐", icon: AlignEndHorizontal },
+  { mode: "top", label: "顶部对齐", icon: AlignStartVertical },
+  { mode: "vcenter", label: "垂直对齐", icon: AlignCenterVertical },
+  { mode: "bottom", label: "底部对齐", icon: AlignEndVertical },
+  { mode: "hdistribute", label: "水平均匀分布", icon: AlignHorizontalDistributeCenter },
+  { mode: "vdistribute", label: "垂直均匀分布", icon: AlignVerticalDistributeCenter },
+];
 
 function alignItemsSection(): MenuItem[] {
-  const count = canvas.selectedIds.length
-  if (count < 2) return []
+  const count = canvas.selectedIds.length;
+  if (count < 2) return [];
   return [
-    { key: 'align-div', label: '', icon: null, danger: false, divider: true, run: () => undefined },
+    { key: "align-div", label: "", icon: null, danger: false, divider: true, run: () => undefined },
     {
-      key: 'align-head',
-      label: '对齐与分布',
+      key: "align-head",
+      label: "对齐与分布",
       icon: null,
       danger: false,
       header: true,
       run: () => undefined,
     },
     ...ALIGN_DEFS.map(({ mode, label, icon }) => {
-      const isDistribute = mode === 'hdistribute' || mode === 'vdistribute'
+      const isDistribute = mode === "hdistribute" || mode === "vdistribute";
       return {
         key: `align-${mode}`,
         label,
@@ -121,140 +121,140 @@ function alignItemsSection(): MenuItem[] {
         disabled: isDistribute && count < 3,
         title:
           isDistribute && count < 3
-            ? '均匀分布至少需要选中 3 张表'
+            ? "均匀分布至少需要选中 3 张表"
             : `${label}已选中的 ${count} 张表`,
         run: withClose(() => canvas.alignSelection(mode)),
-      }
+      };
     }),
-  ]
+  ];
 }
 
 const cardItems = computed<MenuItem[]>(() => {
-  const id = menu.value?.tableId ?? ''
-  const t = model.tableById(id)
-  const hidden = canvas.hiddenTableIds.includes(id)
+  const id = menu.value?.tableId ?? "";
+  const t = model.tableById(id);
+  const hidden = canvas.hiddenTableIds.includes(id);
   return [
     {
-      key: 'edit',
-      label: '编辑表',
+      key: "edit",
+      label: "编辑表",
       icon: Pencil,
       danger: false,
       run: withClose(() => ui.openTableEdit(id)),
     },
     {
-      key: 'copy',
-      label: '复制表',
+      key: "copy",
+      label: "复制表",
       icon: Copy,
       danger: false,
       run: withClose(() => {
-        canvas.setSelection([id])
-        const n = canvas.copySelection()
-        if (n) message.success(`已复制 ${n} 张表，右键空白处可粘贴`)
+        canvas.setSelection([id]);
+        const n = canvas.copySelection();
+        if (n) message.success(`已复制 ${n} 张表，右键空白处可粘贴`);
       }),
     },
     {
-      key: 'hide',
-      label: hidden ? '在画布中显示' : '在画布中隐藏',
+      key: "hide",
+      label: hidden ? "在画布中显示" : "在画布中隐藏",
       icon: hidden ? Eye : EyeOff,
       danger: false,
       run: withClose(() => canvas.toggleHiddenTable(id)),
     },
     ...alignItemsSection(),
     {
-      key: 'div',
-      label: '',
+      key: "div",
+      label: "",
       icon: null,
       danger: false,
       run: () => undefined,
       divider: true,
     },
     {
-      key: 'remove',
-      label: '删除表',
+      key: "remove",
+      label: "删除表",
       icon: Trash2,
       danger: true,
       run: withClose(() => {
-        const name = t?.tableName ?? ''
+        const name = t?.tableName ?? "";
         Modal.confirm({
           title: `删除表「${name}」？`,
-          content: '将同时删除其字段、索引及涉及的导航关系。可通过 Ctrl+Z 撤销。',
-          okText: '删除',
-          okType: 'danger',
-          cancelText: '取消',
+          content: "将同时删除其字段、索引及涉及的导航关系。可通过 Ctrl+Z 撤销。",
+          okText: "删除",
+          okType: "danger",
+          cancelText: "取消",
           onOk: async () => {
-            await model.removeTables([id])
-            canvas.setSelection([])
+            await model.removeTables([id]);
+            canvas.setSelection([]);
           },
-        })
+        });
       }),
     },
-  ]
-})
+  ];
+});
 
 const edgeItems = computed<MenuItem[]>(() => {
-  const id = menu.value?.navigateId ?? ''
-  const nav = model.navigates.find((n) => n.id === id)
+  const id = menu.value?.navigateId ?? "";
+  const nav = model.navigates.find((n) => n.id === id);
   return [
     {
-      key: 'edit',
-      label: '编辑导航',
+      key: "edit",
+      label: "编辑导航",
       icon: Pencil,
       danger: false,
       run: withClose(() => ui.openNavigateEdit(id)),
     },
     {
-      key: 'div',
-      label: '',
+      key: "div",
+      label: "",
       icon: null,
       danger: false,
       run: () => undefined,
       divider: true,
     },
     {
-      key: 'remove',
-      label: '删除导航',
+      key: "remove",
+      label: "删除导航",
       icon: Trash2,
       danger: true,
       run: withClose(() => {
         Modal.confirm({
-          title: '删除该导航关系？',
+          title: "删除该导航关系？",
           content: nav
             ? `${model.tableById(nav.self)?.tableName} 与 ${model.tableById(nav.target)?.tableName} 之间的导航将被移除。`
-            : '',
-          okText: '删除',
-          okType: 'danger',
-          cancelText: '取消',
+            : "",
+          okText: "删除",
+          okType: "danger",
+          cancelText: "取消",
           onOk: () => model.removeNavigate(id),
-        })
+        });
       }),
     },
-  ]
-})
+  ];
+});
 
 const canvasItems = computed<MenuItem[]>(() => [
   {
-    key: 'add',
-    label: '新增表（此处）',
+    key: "add",
+    label: "新增表（此处）",
     icon: Plus,
     danger: false,
     run: withClose(() => {
-      ui.openTableEdit(null, menu.value?.world ?? null)
+      ui.openTableEdit(null, menu.value?.world ?? null);
     }),
   },
   {
-    key: 'paste',
-    label: canvas.hasClipboard() ? `粘贴（${canvas.clipboard.length} 张）` : '粘贴（无内容）',
+    key: "paste",
+    label: canvas.hasClipboard() ? `粘贴（${canvas.clipboard.length} 张）` : "粘贴（无内容）",
     icon: ClipboardPaste,
     danger: false,
     disabled: !canvas.hasClipboard(),
     run: withClose(() => {
-      const w = menu.value?.world
-      if (w) canvas.pasteAt(w)
+      const w = menu.value?.world;
+      if (w) canvas.pasteAt(w);
     }),
   },
   {
     // 全选：触屏下框选不可用（单指已改为平移），多选入口由菜单承担
-    key: 'select-all',
+    key: "select-all",
     label: `全选表（${canvas.visibleTableIds.length} 张）`,
     icon: BoxSelect,
     danger: false,
@@ -262,58 +262,58 @@ const canvasItems = computed<MenuItem[]>(() => [
     run: withClose(() => canvas.setSelection([...canvas.visibleTableIds])),
   },
   {
-    key: 'div',
-    label: '',
+    key: "div",
+    label: "",
     icon: null,
     danger: false,
     run: () => undefined,
     divider: true,
   },
   {
-    key: 'auto-layout',
-    label: '自动美化布局',
+    key: "auto-layout",
+    label: "自动美化布局",
     icon: WandSparkles,
     danger: false,
     run: withClose(() => canvas.autoLayout()),
   },
   {
-    key: 'fit',
-    label: '适应画布',
+    key: "fit",
+    label: "适应画布",
     icon: Maximize2,
     danger: false,
     run: withClose(() => canvas.fitAll()),
   },
   {
-    key: 'reset',
-    label: '重置缩放',
+    key: "reset",
+    label: "重置缩放",
     icon: RotateCcw,
     danger: false,
     run: withClose(() => canvas.resetZoom()),
   },
   ...alignItemsSection(),
-])
+]);
 
 const items = computed(() => {
-  if (!menu.value) return []
-  if (menu.value.kind === 'card') return cardItems.value
-  if (menu.value.kind === 'edge') return edgeItems.value
-  return canvasItems.value
-})
+  if (!menu.value) return [];
+  if (menu.value.kind === "card") return cardItems.value;
+  if (menu.value.kind === "edge") return edgeItems.value;
+  return canvasItems.value;
+});
 
 /* 点击外部关闭 */
 function onWindowPointerDown(e: PointerEvent) {
-  if (!visible.value) return
-  const target = e.target as HTMLElement
-  if (rootRef.value?.contains(target)) return
-  close()
+  if (!visible.value) return;
+  const target = e.target as HTMLElement;
+  if (rootRef.value?.contains(target)) return;
+  close();
 }
 
 onMounted(() => {
-  window.addEventListener('pointerdown', onWindowPointerDown, true)
-})
+  window.addEventListener("pointerdown", onWindowPointerDown, true);
+});
 onBeforeUnmount(() => {
-  window.removeEventListener('pointerdown', onWindowPointerDown, true)
-})
+  window.removeEventListener("pointerdown", onWindowPointerDown, true);
+});
 </script>
 
 <template>

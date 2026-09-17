@@ -2,39 +2,39 @@
  * UI 仓库：页面状态切换（不使用 vue-router，使用 v-if 管理）+ 各编辑对话框状态
  * （reactive 对象工厂形态，由 DBManagerView 经上下文注入，不依赖 Pinia）
  */
-import { reactive } from 'vue'
-import { useDBManagerContext } from './context'
-import type { GeneratedFile } from '@/types/model'
+import { reactive } from "vue";
+import { useDBManagerContext } from "./context";
+import type { GeneratedFile } from "@/types/model";
 
-export type PageName = 'editor' | 'dict' | 'template' | 'settings' | 'ai'
+export type PageName = "editor" | "dict" | "template" | "settings" | "ai";
 
 export interface TableEditDialogState {
-  open: boolean
-  tableId: string | null // null 表示新增
-  position: { x: number; y: number } | null // 新增时的画布落点
-  defaultCategoryId: string | null // 新增时的默认分类
+  open: boolean;
+  tableId: string | null; // null 表示新增
+  position: { x: number; y: number } | null; // 新增时的画布落点
+  defaultCategoryId: string | null; // 新增时的默认分类
 }
 
 export interface NavigateEditDialogState {
-  open: boolean
-  navigateId: string | null // null 表示新增
-  preset: { self?: string; target?: string } | null // 拖拽连线预填
+  open: boolean;
+  navigateId: string | null; // null 表示新增
+  preset: { self?: string; target?: string } | null; // 拖拽连线预填
 }
 
 export interface CategoryEditDialogState {
-  open: boolean
-  categoryId: string | null
+  open: boolean;
+  categoryId: string | null;
 }
 
 export interface ReplaceConfirmDialogState {
-  open: boolean
-  files: GeneratedFile[]
+  open: boolean;
+  files: GeneratedFile[];
 }
 
 export function createUiStore() {
   return reactive({
     /** 当前页面（v-if 切换） */
-    page: 'editor' as PageName,
+    page: "editor" as PageName,
     tableEdit: {
       open: false,
       tableId: null,
@@ -51,13 +51,13 @@ export function createUiStore() {
     mobileOutlineOpen: false,
 
     setPage(page: PageName) {
-      this.page = page
+      this.page = page;
     },
     toggleMobileOutline() {
-      this.mobileOutlineOpen = !this.mobileOutlineOpen
+      this.mobileOutlineOpen = !this.mobileOutlineOpen;
     },
     closeMobileOutline() {
-      this.mobileOutlineOpen = false
+      this.mobileOutlineOpen = false;
     },
     openTableEdit(
       tableId?: string | null,
@@ -69,50 +69,50 @@ export function createUiStore() {
         tableId: tableId ?? null,
         position: position ?? null,
         defaultCategoryId: defaultCategoryId ?? null,
-      }
+      };
     },
     closeTableEdit() {
-      this.tableEdit.open = false
+      this.tableEdit.open = false;
     },
     openNavigateEdit(
       navigateId?: string | null,
       preset?: { self?: string; target?: string } | null,
     ) {
-      this.navigateEdit = { open: true, navigateId: navigateId ?? null, preset: preset ?? null }
+      this.navigateEdit = { open: true, navigateId: navigateId ?? null, preset: preset ?? null };
     },
     closeNavigateEdit() {
-      this.navigateEdit.open = false
+      this.navigateEdit.open = false;
     },
     openCategoryEdit(categoryId?: string | null) {
-      this.categoryEdit = { open: true, categoryId: categoryId ?? null }
+      this.categoryEdit = { open: true, categoryId: categoryId ?? null };
     },
     closeCategoryEdit() {
-      this.categoryEdit.open = false
+      this.categoryEdit.open = false;
     },
     openImportDB() {
-      this.importDB.open = true
+      this.importDB.open = true;
     },
     closeImportDB() {
-      this.importDB.open = false
+      this.importDB.open = false;
     },
     openCodePreview(tableId?: string | null) {
-      this.codePreview = { open: true, tableId: tableId ?? null }
+      this.codePreview = { open: true, tableId: tableId ?? null };
     },
     closeCodePreview() {
-      this.codePreview.open = false
+      this.codePreview.open = false;
     },
     openReplaceConfirm(files: GeneratedFile[]) {
-      this.replaceConfirm = { open: true, files }
+      this.replaceConfirm = { open: true, files };
     },
     closeReplaceConfirm() {
-      this.replaceConfirm.open = false
+      this.replaceConfirm.open = false;
     },
-  })
+  });
 }
 
-export type UiStore = ReturnType<typeof createUiStore>
+export type UiStore = ReturnType<typeof createUiStore>;
 
 /** 子组件取用 UI 仓库（须处于 DBManagerView 组件树内） */
 export function useUiStore(): UiStore {
-  return useDBManagerContext().ui
+  return useDBManagerContext().ui;
 }

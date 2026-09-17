@@ -14,7 +14,7 @@
  * - 助手正文用 markstream-vue 做流式 Markdown 渲染（mode=chat 平滑出字）
  * - 代码替换触发时弹出文件清单确认框，用户确认后才写回
  */
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from "vue";
 import {
   AlertTriangle,
   Archive,
@@ -36,265 +36,265 @@ import {
   User,
   Wrench,
   XCircle,
-} from '@lucide/vue'
-import MarkdownRender from 'markstream-vue'
-import 'markstream-vue/index.css'
-import { parseAiTaskList, useAiStore, type AiTaskStatus, type AiZipDownload } from '@/stores/ai'
-import { useUiStore } from '@/stores/ui'
-import { useThemeStore } from '@/stores/theme'
+} from "@lucide/vue";
+import MarkdownRender from "markstream-vue";
+import "markstream-vue/index.css";
+import { parseAiTaskList, useAiStore, type AiTaskStatus, type AiZipDownload } from "@/stores/ai";
+import { useUiStore } from "@/stores/ui";
+import { useThemeStore } from "@/stores/theme";
 
-const ai = useAiStore()
-const ui = useUiStore()
-const theme = useThemeStore()
+const ai = useAiStore();
+const ui = useUiStore();
+const theme = useThemeStore();
 
 /* ==================== 输入区 ==================== */
 
-const input = ref('')
-const textareaEl = ref<HTMLTextAreaElement>()
+const input = ref("");
+const textareaEl = ref<HTMLTextAreaElement>();
 
 function autoResize() {
-  const el = textareaEl.value
-  if (!el) return
-  el.style.height = 'auto'
-  el.style.height = `${Math.min(el.scrollHeight, 160)}px`
+  const el = textareaEl.value;
+  if (!el) return;
+  el.style.height = "auto";
+  el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
 }
 
 function onInput() {
-  autoResize()
+  autoResize();
 }
 
 function onSend() {
-  const text = input.value.trim()
-  if (!text || ai.running) return
-  input.value = ''
-  nextTick(autoResize)
-  ai.send(text)
+  const text = input.value.trim();
+  if (!text || ai.running) return;
+  input.value = "";
+  nextTick(autoResize);
+  ai.send(text);
 }
 
 function onKeydown(e: KeyboardEvent) {
-  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
-    e.preventDefault()
-    onSend()
+  if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
+    e.preventDefault();
+    onSend();
   }
 }
 
 /* ==================== 聊天滚动跟随 ==================== */
 
-const chatScrollEl = ref<HTMLElement>()
+const chatScrollEl = ref<HTMLElement>();
 /** 用户停留在底部时流式输出自动跟随滚动（上翻查看历史时不打扰） */
-const stickBottom = ref(true)
+const stickBottom = ref(true);
 
 function onChatScroll() {
-  const el = chatScrollEl.value
-  if (!el) return
-  stickBottom.value = el.scrollHeight - el.scrollTop - el.clientHeight < 80
+  const el = chatScrollEl.value;
+  if (!el) return;
+  stickBottom.value = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
 }
 
 function scrollToBottom() {
-  const el = chatScrollEl.value
-  if (el) el.scrollTop = el.scrollHeight
+  const el = chatScrollEl.value;
+  if (el) el.scrollTop = el.scrollHeight;
 }
 
 onMounted(() => {
-  scrollToBottom()
-  textareaEl.value?.focus()
-})
+  scrollToBottom();
+  textareaEl.value?.focus();
+});
 
 watch(
   () => [ai.messages, ai.toolRecords],
   async () => {
     if (stickBottom.value) {
-      await nextTick()
-      scrollToBottom()
+      await nextTick();
+      scrollToBottom();
     }
   },
   { deep: true },
-)
+);
 
 /* ==================== 思考块滚动跟随 ==================== */
 
 /** 各思考块贴底状态（消息 id → 是否贴底）。默认视为贴底：思考流式输出追加
  *  内容时，停留在底部的块自动跟随滚到底部；用户在块内上翻查看历史即停止
  *  跟随（不打扰），翻回底部后自动恢复跟随 */
-const reasoningStick = new Map<string, boolean>()
+const reasoningStick = new Map<string, boolean>();
 /** 程序跟随写入的 scrollTop（消息 id → 值）：用于区分「程序滚动」与「用户主动上翻」。
  *  洞口：程序写入 scrollTop 后 scroll 事件是异步派发的，事件到达时内容可能已
  *  又增长（scrollHeight 变大、scrollTop 停在旧值），若按「距底距离」判断会把
  *  自己的跟随误判为用户上翻而永久停跟（真实 SSE 高频分片下必现）；按「是否
  *  低于程序最近写入位置」判断则不受内容增长时序影响 */
-const reasoningOwnTop = new Map<string, number>()
+const reasoningOwnTop = new Map<string, number>();
 
 function onReasoningScroll(e: Event) {
-  const el = e.currentTarget as HTMLElement
-  const id = el.dataset.msgId
-  if (!id) return
-  const own = reasoningOwnTop.get(id) ?? 0
+  const el = e.currentTarget as HTMLElement;
+  const id = el.dataset.msgId;
+  if (!id) return;
+  const own = reasoningOwnTop.get(id) ?? 0;
   if (el.scrollTop < own - 4) {
     // 低于程序跟随点：用户主动上翻 → 停止跟随
-    reasoningStick.set(id, false)
+    reasoningStick.set(id, false);
   } else if (el.scrollHeight - el.scrollTop - el.clientHeight < 24) {
     // 回到底部：恢复跟随
-    reasoningStick.set(id, true)
+    reasoningStick.set(id, true);
   }
 }
 
 watch(
   () => ai.messages.map((m) => m.reasoning),
   async () => {
-    await nextTick()
+    await nextTick();
     for (const m of ai.messages) {
       // 仅跟随正在流式输出且展开中的思考块；用户已上翻（非贴底）的不打扰
-      if (m.status !== 'streaming' || !m.reasoning || !m.reasoningOpen) continue
-      if (reasoningStick.get(m.id) === false) continue
+      if (m.status !== "streaming" || !m.reasoning || !m.reasoningOpen) continue;
+      if (reasoningStick.get(m.id) === false) continue;
       const el = chatScrollEl.value?.querySelector<HTMLElement>(
         `.reasoning-body[data-msg-id="${m.id}"]`,
-      )
+      );
       if (el && el.scrollHeight > el.clientHeight) {
-        el.scrollTop = el.scrollHeight
-        reasoningOwnTop.set(m.id, el.scrollTop)
+        el.scrollTop = el.scrollHeight;
+        reasoningOwnTop.set(m.id, el.scrollTop);
       }
     }
   },
-)
+);
 
 /* ==================== 任务清单（左侧面板） ==================== */
 
 /** 任务状态展示元数据（图标 / 文案 / 颜色令牌） */
 const TASK_STATUS_META: Record<AiTaskStatus, { label: string; cls: string; title: string }> = {
-  running: { label: '执行中', cls: 'running', title: '正在执行' },
-  pending: { label: '未开始', cls: 'pending', title: '尚未开始' },
-  completed: { label: '已完成', cls: 'completed', title: '已完成' },
-  paused: { label: '暂停', cls: 'paused', title: '已暂停（上轮被中止）' },
-}
+  running: { label: "执行中", cls: "running", title: "正在执行" },
+  pending: { label: "未开始", cls: "pending", title: "尚未开始" },
+  completed: { label: "已完成", cls: "completed", title: "已完成" },
+  paused: { label: "暂停", cls: "paused", title: "已暂停（上轮被中止）" },
+};
 
 /** 各状态任务数（面板头部汇总） */
-const taskCountBy = (s: AiTaskStatus) => ai.tasks.filter((t) => t.status === s).length
+const taskCountBy = (s: AiTaskStatus) => ai.tasks.filter((t) => t.status === s).length;
 
 /* ==================== 消息展示文本 ==================== */
 
 /** 助手消息展示文本：剔除任务清单块（已解析到左侧任务面板，正文中不再重复展示） */
 function displayContent(m: { role: string; content: string }): string {
-  if (m.role !== 'assistant' || !m.content) return m.content
-  return parseAiTaskList(m.content).cleaned
+  if (m.role !== "assistant" || !m.content) return m.content;
+  return parseAiTaskList(m.content).cleaned;
 }
 
 /* ==================== token 用量统计 ==================== */
 
 /** 当前模型上下文长度（未配置为 0：界面只显示已用量不显示分母） */
-const ctxLimit = computed(() => ai.currentModel?.inputContextLength ?? 0)
+const ctxLimit = computed(() => ai.currentModel?.inputContextLength ?? 0);
 
 /** 展示用 token 数：<10000 原样，≥10000 用 k/M 缩写 */
 function fmtTok(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 10_000) return `${(n / 1000).toFixed(1)}k`
-  return String(Math.round(n))
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 10_000) return `${(n / 1000).toFixed(1)}k`;
+  return String(Math.round(n));
 }
 
 /** 展示速度：任务进行中显示当前实时速度，停止后显示上一次任务速度 */
 const speedTokSec = computed(() =>
   ai.running ? Math.round(ai.currentSpeedTokSec) : Math.round(ai.lastSpeedTokSec),
-)
+);
 
 /* ==================== 空态引导 ==================== */
 
-const unconfigured = computed(() => !ai.aiSettings.baseUrl || !ai.aiSettings.models.length)
+const unconfigured = computed(() => !ai.aiSettings.baseUrl || !ai.aiSettings.models.length);
 
 const suggestions = [
-  '查询当前模型里有哪些分类和表',
-  '为全部表生成代码，给我文件清单',
-  '把字典的字典键和值数量统计出来',
-  '重新设置每个表卡片的位置，美化当前画布布置',
-]
+  "查询当前模型里有哪些分类和表",
+  "为全部表生成代码，给我文件清单",
+  "把字典的字典键和值数量统计出来",
+  "重新设置每个表卡片的位置，美化当前画布布置",
+];
 
 function useSuggestion(text: string) {
-  input.value = text
+  input.value = text;
   nextTick(() => {
-    autoResize()
-    textareaEl.value?.focus()
-  })
+    autoResize();
+    textareaEl.value?.focus();
+  });
 }
 
 function gotoSettings() {
-  ui.setPage('settings')
+  ui.setPage("settings");
 }
 
 /* ==================== 右侧调用记录 ==================== */
 
 /** 展开的记录 id 集合（默认收起） */
-const expandedRecords = ref(new Set<string>())
+const expandedRecords = ref(new Set<string>());
 
 /** 清空能力调用记录（仅右侧面板；聊天消息保留，同步清理本地展开态） */
 function onClearRecords() {
-  ai.clearToolRecords()
-  expandedRecords.value = new Set()
+  ai.clearToolRecords();
+  expandedRecords.value = new Set();
 }
 
 function toggleRecord(id: string) {
-  const next = new Set(expandedRecords.value)
-  if (next.has(id)) next.delete(id)
-  else next.add(id)
-  expandedRecords.value = next
+  const next = new Set(expandedRecords.value);
+  if (next.has(id)) next.delete(id);
+  else next.add(id);
+  expandedRecords.value = next;
 }
 
 /** 右侧记录面板滚动跟随：原本处于底部时，新记录添加后跟随滚到底部 */
-const toolsScrollEl = ref<HTMLElement>()
-const toolsStickBottom = ref(true)
+const toolsScrollEl = ref<HTMLElement>();
+const toolsStickBottom = ref(true);
 
 function onToolsScroll() {
-  const el = toolsScrollEl.value
-  if (!el) return
-  toolsStickBottom.value = el.scrollHeight - el.scrollTop - el.clientHeight < 24
+  const el = toolsScrollEl.value;
+  if (!el) return;
+  toolsStickBottom.value = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
 }
 
 watch(
   () => ai.toolRecords.length,
   async () => {
-    if (!toolsStickBottom.value) return
-    await nextTick()
-    const el = toolsScrollEl.value
-    if (el) el.scrollTop = el.scrollHeight
+    if (!toolsStickBottom.value) return;
+    await nextTick();
+    const el = toolsScrollEl.value;
+    if (el) el.scrollTop = el.scrollHeight;
   },
-)
+);
 
 /** zip 下载缓存查询（代码生成记录） */
 function zipEntry(callId: string): AiZipDownload | undefined {
-  return ai.zipDownloads[callId]
+  return ai.zipDownloads[callId];
 }
 
 function sizeText(size: number): string {
-  return size >= 1024 ? `${(size / 1024).toFixed(1)} KB` : `${size} B`
+  return size >= 1024 ? `${(size / 1024).toFixed(1)} KB` : `${size} B`;
 }
 
 /** 展示文本截断（详情面板显示上限；顺带去头尾空白） */
-const DISPLAY_CAP = 8000
+const DISPLAY_CAP = 8000;
 function capDisplay(text: string): string {
-  const t = String(text ?? '').trim()
+  const t = String(text ?? "").trim();
   return t.length > DISPLAY_CAP
     ? `${t.slice(0, DISPLAY_CAP)}\n…（内容过长已截断，共 ${t.length} 字符）`
-    : t
+    : t;
 }
 
 function durationText(ms?: number): string {
-  if (ms == null) return ''
-  return ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`
+  if (ms == null) return "";
+  return ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`;
 }
 
 /** 聊天区工具芯片点击 → 展开并定位右侧对应记录 */
 function locateRecord(callId: string) {
-  const rec = ai.toolRecords.find((r) => r.callId === callId)
-  if (!rec) return
-  const next = new Set(expandedRecords.value)
-  next.add(rec.id)
-  expandedRecords.value = next
+  const rec = ai.toolRecords.find((r) => r.callId === callId);
+  if (!rec) return;
+  const next = new Set(expandedRecords.value);
+  next.add(rec.id);
+  expandedRecords.value = next;
   nextTick(() => {
     document.getElementById(`tool-rec-${rec.id}`)?.scrollIntoView({
-      behavior: 'smooth',
-      block: 'nearest',
-    })
-  })
+      behavior: "smooth",
+      block: "nearest",
+    });
+  });
 }
 
-const runningCount = computed(() => ai.toolRecords.filter((r) => r.status === 'running').length)
+const runningCount = computed(() => ai.toolRecords.filter((r) => r.status === "running").length);
 </script>
 
 <template>
@@ -308,16 +308,16 @@ const runningCount = computed(() => ai.toolRecords.filter((r) => r.status === 'r
         </div>
         <div class="task-summary" v-if="ai.tasks.length">
           <span class="ts-chip running"
-            ><Loader2 :size="10" class="spin" /> 执行中 {{ taskCountBy('running') }}</span
+            ><Loader2 :size="10" class="spin" /> 执行中 {{ taskCountBy("running") }}</span
           >
           <span class="ts-chip completed"
-            ><CheckCircle2 :size="10" /> 完成 {{ taskCountBy('completed') }}</span
+            ><CheckCircle2 :size="10" /> 完成 {{ taskCountBy("completed") }}</span
           >
           <span class="ts-chip paused"
-            ><CirclePause :size="10" /> 暂停 {{ taskCountBy('paused') }}</span
+            ><CirclePause :size="10" /> 暂停 {{ taskCountBy("paused") }}</span
           >
           <span class="ts-chip pending"
-            ><Circle :size="10" /> 待办 {{ taskCountBy('pending') }}</span
+            ><Circle :size="10" /> 待办 {{ taskCountBy("pending") }}</span
           >
         </div>
         <div class="task-list">
@@ -399,7 +399,7 @@ const runningCount = computed(() => ai.toolRecords.filter((r) => r.status === 'r
                     @click="m.reasoningOpen = !m.reasoningOpen"
                   >
                     <Brain :size="12" />
-                    <span>{{ m.status === 'streaming' ? '思考中…' : '思考过程' }}</span>
+                    <span>{{ m.status === "streaming" ? "思考中…" : "思考过程" }}</span>
                     <ChevronRight :size="12" class="chev" :class="{ down: m.reasoningOpen }" />
                   </button>
                   <div
@@ -498,10 +498,10 @@ const runningCount = computed(() => ai.toolRecords.filter((r) => r.status === 'r
                     : '（模型未配置输入上下文长度，设置后可显示上限并自动压缩）')
                 "
               >
-                上下文 {{ fmtTok(ai.contextUsed) }}{{ ctxLimit ? `/${fmtTok(ctxLimit)}` : '' }}
+                上下文 {{ fmtTok(ai.contextUsed) }}{{ ctxLimit ? `/${fmtTok(ctxLimit)}` : "" }}
               </span>
               <span v-if="speedTokSec" class="tok-speed" :class="{ live: ai.running }">
-                {{ speedTokSec }} tok/s{{ ai.running ? '' : '（上次）' }}
+                {{ speedTokSec }} tok/s{{ ai.running ? "" : "（上次）" }}
               </span>
             </span>
             <a-tooltip title="开启新会话（清空当前对话与调用记录）">
@@ -556,7 +556,7 @@ const runningCount = computed(() => ai.toolRecords.filter((r) => r.status === 'r
             <Loader2 :size="11" class="spin" />
             {{ runningCount }} 执行中
           </span>
-          <span v-else class="tools-count">{{ ai.toolRecords.length || '' }}</span>
+          <span v-else class="tools-count">{{ ai.toolRecords.length || "" }}</span>
           <a-tooltip title="清空能力调用记录（不影响对话内容）">
             <button
               class="tools-clear"
@@ -587,7 +587,7 @@ const runningCount = computed(() => ai.toolRecords.filter((r) => r.status === 'r
               </span>
               <BookOpen v-if="r.kind === 'skill'" :size="12" class="rec-skill-icon" />
               <span class="rec-name mono" :class="{ 'skill-name': r.kind === 'skill' }">{{
-                r.kind === 'skill' ? `技能·${r.skill?.title || r.name}` : r.name
+                r.kind === "skill" ? `技能·${r.skill?.title || r.name}` : r.name
               }}</span>
               <button
                 v-if="zipEntry(r.callId)"
@@ -629,7 +629,7 @@ const runningCount = computed(() => ai.toolRecords.filter((r) => r.status === 'r
               </div>
               <div class="rec-section">
                 <span class="sec-label" :class="{ err: r.status === 'error' }">
-                  {{ r.status === 'error' ? '错误' : '返回' }}
+                  {{ r.status === "error" ? "错误" : "返回" }}
                 </span>
                 <pre class="mono" :class="{ err: r.status === 'error' }">{{
                   capDisplay(r.resultText)

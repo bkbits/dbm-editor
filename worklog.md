@@ -1078,3 +1078,19 @@ Stage Summary:
 - 全局规则默认文本全链路落地：新库种子默认 → 设置页可视化编辑与一键恢复默认 → 保存持久化 → 系统提示附加（默认规则随 AGENT 每次调用生效）
 - 关键决策：① 默认文本以共享常量 src/ai/defaults.ts 单点维护（种子层与设置页引用同源）；② 「重置」实现为全局规则区块专属「恢复默认」按钮（草稿级、需保存生效，与字段约定卡片既有模式一致）；③ 旧库已保存空值不注入默认（尊重用户主动清空语义），需要时经按钮一键找回——默认与克制兼容
 - 排障沉淀：agent-browser 守护进程 CDP 半死状态会静默返回旧实例截图（screenshot/eval 内容不一致），pkill agent-browser + chrome 重启即愈；视口内小区块 VLM 复核应先 PIL 裁剪放大再送审
+
+---
+Task ID: 43
+Agent: main (Zed)
+Task: 格式化基线切换为 oxfmt 默认（双引号 + 分号）并全仓 vp check --fix 重排；AI 全局规则默认文本增强
+
+Work Log:
+- vite.config.ts（手动）：fmt 配置由 singleQuote: true / semi: false 改为 singleQuote: false / semi: true，格式化基线自项目既有「单引号、无分号」约定切换回 oxfmt 默认「双引号、带分号」（ignorePatterns 等其余配置语义不变；该文件不在忽略名单内，自身亦按新风格重排）
+- 全仓重排（vp check --fix）：其余 67 个源码/脚本/配置/文档文件按新基线重排，覆盖 src/**（stores/views/components/utils/mock/ai/styles 等）、scripts/*.mjs、vite.pages.config.ts、.github/workflows/deploy-pages.yml、README.md 代码块、tsconfig.json 等；全部为风格层变更（引号、语句尾分号、超宽行折行），无逻辑改动
+- src/ai/defaults.ts（手动）：DEFAULT_AI_GLOBAL_RULES 默认文本增强——新增「# 术语」段（元素口径：表分类/表/字典分类/字典/导航/整体设置；表位置定义与卡片未展开宽 270px 提示）；任务流程追加第 8 步「输出任务报告」；遵守规则自 3 条扩至 6 条（原「不要一次性添加删除大量元素」收窄为「一轮问答只负责添加一个元素」，新增表位置一轮批量更新、每阶段更新任务队列清单、任务报告须含完成情况与未完成原因）
+- 验证：bun run typecheck 通过；vp check 74 文件格式 + 64 文件 lint 全绿
+
+Stage Summary:
+- 关键决策：格式化基线统一为 oxfmt 默认值，避免 staged 钩子 `vp check --fix` 与既有风格偏好来回改写
+- 交付物：全仓格式化 + AI 默认规则文本增强（种子库新库与设置页「恢复默认」引用同一常量，自动继承）
+- 待跟进：AGENTS.md「代码风格」段仍写「单引号、无分号」，与当前 fmt 基线相反，需单独同步

@@ -7,127 +7,127 @@
  * 草稿与校验在本组件内维护；保存 / 放弃由设置页底部操作栏统一驱动
  * （经 defineExpose 暴露 dirty / invalid / save / resetDraft）。
  */
-import { computed, reactive, watch } from 'vue'
-import { Bot, Plus, RotateCcw, Trash2 } from '@lucide/vue'
-import type { AiModelConfig, ThinkingIntensity } from '@/types/model'
-import { DEFAULT_AI_GLOBAL_RULES } from '@/ai/defaults'
-import { useAiStore } from '@/stores/ai'
-import { useUiStore } from '@/stores/ui'
-import { uid } from '@/utils/id'
+import { computed, reactive, watch } from "vue";
+import { Bot, Plus, RotateCcw, Trash2 } from "@lucide/vue";
+import type { AiModelConfig, ThinkingIntensity } from "@/types/model";
+import { DEFAULT_AI_GLOBAL_RULES } from "@/ai/defaults";
+import { useAiStore } from "@/stores/ai";
+import { useUiStore } from "@/stores/ui";
+import { uid } from "@/utils/id";
 
-const ai = useAiStore()
-const ui = useUiStore()
+const ai = useAiStore();
+const ui = useUiStore();
 
 /* ==================== 草稿（保存前本地编辑） ==================== */
 
 /** 模型草稿行（输入框可清空 → 长度字段允许 null，保存时归一为 undefined） */
 interface ModelDraft {
-  key: string // 客户端稳定 key（列表渲染复用，保存时剥离）
-  id: string
-  name: string
-  supportsThinking: boolean
-  thinkingIntensity: ThinkingIntensity
-  inputContextLength: number | null
-  outputContextLength: number | null
+  key: string; // 客户端稳定 key（列表渲染复用，保存时剥离）
+  id: string;
+  name: string;
+  supportsThinking: boolean;
+  thinkingIntensity: ThinkingIntensity;
+  inputContextLength: number | null;
+  outputContextLength: number | null;
 }
 
 /** 工具调用轮数上限缺省（与 api 层 DEFAULT_MAX_TOOL_ROUNDS 一致） */
-const DEFAULT_ROUNDS = 50
+const DEFAULT_ROUNDS = 50;
 
 const draft = reactive({
-  baseUrl: '',
-  apiKey: '',
-  globalRules: '',
+  baseUrl: "",
+  apiKey: "",
+  globalRules: "",
   maxToolRounds: DEFAULT_ROUNDS as number,
   models: [] as ModelDraft[],
-})
+});
 
 function toDraft(m: AiModelConfig): ModelDraft {
   return {
-    key: uid('aim-'),
+    key: uid("aim-"),
     id: m.id,
-    name: m.name || '',
+    name: m.name || "",
     supportsThinking: Boolean(m.supportsThinking),
-    thinkingIntensity: m.thinkingIntensity || 'medium',
+    thinkingIntensity: m.thinkingIntensity || "medium",
     inputContextLength: m.inputContextLength ?? null,
     outputContextLength: m.outputContextLength ?? null,
-  }
+  };
 }
 
 /** 全局规则恢复默认（仅本区块草稿，需保存生效）：重置为默认任务流程约定文本 */
 function resetGlobalRules() {
-  draft.globalRules = DEFAULT_AI_GLOBAL_RULES
+  draft.globalRules = DEFAULT_AI_GLOBAL_RULES;
 }
 
 function resetDraft() {
-  draft.baseUrl = ai.aiSettings.baseUrl
-  draft.apiKey = ai.aiSettings.apiKey
-  draft.globalRules = ai.aiSettings.globalRules || ''
-  const rounds = Math.floor(Number(ai.aiSettings.maxToolRounds))
+  draft.baseUrl = ai.aiSettings.baseUrl;
+  draft.apiKey = ai.aiSettings.apiKey;
+  draft.globalRules = ai.aiSettings.globalRules || "";
+  const rounds = Math.floor(Number(ai.aiSettings.maxToolRounds));
   draft.maxToolRounds =
-    Number.isFinite(rounds) && rounds >= 1 ? Math.min(500, rounds) : DEFAULT_ROUNDS
-  draft.models = ai.aiSettings.models.map(toDraft)
+    Number.isFinite(rounds) && rounds >= 1 ? Math.min(500, rounds) : DEFAULT_ROUNDS;
+  draft.models = ai.aiSettings.models.map(toDraft);
 }
 
 watch(
   () => ai.aiSettings,
   () => resetDraft(),
   { immediate: true },
-)
+);
 
 function addModel() {
   draft.models.push({
-    key: uid('aim-'),
-    id: '',
-    name: '',
+    key: uid("aim-"),
+    id: "",
+    name: "",
     supportsThinking: false,
-    thinkingIntensity: 'medium',
+    thinkingIntensity: "medium",
     inputContextLength: null,
     outputContextLength: null,
-  })
+  });
 }
 
 function removeModel(idx: number) {
-  draft.models.splice(idx, 1)
+  draft.models.splice(idx, 1);
 }
 
 /* ==================== 校验 ==================== */
 
 const INTENSITY_OPTIONS: Array<{ value: ThinkingIntensity; label: string }> = [
-  { value: 'low', label: 'low' },
-  { value: 'medium', label: 'medium' },
-  { value: 'high', label: 'high' },
-  { value: 'xhigh', label: 'xhigh' },
-  { value: 'max', label: 'max' },
-]
+  { value: "low", label: "low" },
+  { value: "medium", label: "medium" },
+  { value: "high", label: "high" },
+  { value: "xhigh", label: "xhigh" },
+  { value: "max", label: "max" },
+];
 
 const baseUrlError = computed(() => {
-  const url = draft.baseUrl.trim()
-  if (!url) return null
-  if (!/^https?:\/\//i.test(url)) return '服务地址必须以 http:// 或 https:// 开头'
-  if (!/\/v1\/?$/i.test(url)) return '服务地址必须以 /v1 结尾（如 https://api.example.com/v1）'
-  return null
-})
+  const url = draft.baseUrl.trim();
+  if (!url) return null;
+  if (!/^https?:\/\//i.test(url)) return "服务地址必须以 http:// 或 https:// 开头";
+  if (!/\/v1\/?$/i.test(url)) return "服务地址必须以 /v1 结尾（如 https://api.example.com/v1）";
+  return null;
+});
 
 /** 模型行错误（空 id / 重复 id） */
 function modelError(idx: number): string | null {
-  const m = draft.models[idx]
-  const id = m.id.trim()
-  if (!id) return '模型 id 不能为空'
-  if (draft.models.some((o, i) => i !== idx && o.id.trim() === id)) return `模型 id 重复：${id}`
-  return null
+  const m = draft.models[idx];
+  const id = m.id.trim();
+  if (!id) return "模型 id 不能为空";
+  if (draft.models.some((o, i) => i !== idx && o.id.trim() === id)) return `模型 id 重复：${id}`;
+  return null;
 }
 
 const modelsError = computed(() => {
   for (let i = 0; i < draft.models.length; i++) {
-    const err = modelError(i)
-    if (err) return err
+    const err = modelError(i);
+    if (err) return err;
   }
-  if (draft.models.length && !draft.baseUrl.trim()) return '已配置模型时必须填写服务地址'
-  return null
-})
+  if (draft.models.length && !draft.baseUrl.trim()) return "已配置模型时必须填写服务地址";
+  return null;
+});
 
-const invalid = computed(() => baseUrlError.value || modelsError.value)
+const invalid = computed(() => baseUrlError.value || modelsError.value);
 
 /* ==================== 脏检查 / 保存（供设置页统一驱动） ==================== */
 
@@ -140,21 +140,21 @@ function draftModelsNormalized(): AiModelConfig[] {
     thinkingIntensity: m.supportsThinking ? m.thinkingIntensity : undefined,
     inputContextLength: m.inputContextLength ?? undefined,
     outputContextLength: m.outputContextLength ?? undefined,
-  }))
+  }));
 }
 
 /** 轮数上限草稿归一（空 / 非法回退 50；范围 1-500） */
 function draftRoundsNormalized(): number {
-  const n = Math.floor(Number(draft.maxToolRounds))
-  if (!Number.isFinite(n) || n < 1) return DEFAULT_ROUNDS
-  return Math.min(500, n)
+  const n = Math.floor(Number(draft.maxToolRounds));
+  if (!Number.isFinite(n) || n < 1) return DEFAULT_ROUNDS;
+  return Math.min(500, n);
 }
 
 const dirty = computed(
   () =>
     draft.baseUrl !== ai.aiSettings.baseUrl ||
     draft.apiKey !== ai.aiSettings.apiKey ||
-    (draft.globalRules || '') !== (ai.aiSettings.globalRules || '') ||
+    (draft.globalRules || "") !== (ai.aiSettings.globalRules || "") ||
     draftRoundsNormalized() !== ai.maxToolRounds ||
     JSON.stringify(draftModelsNormalized()) !==
       JSON.stringify(
@@ -176,26 +176,26 @@ const dirty = computed(
           }),
         ),
       ),
-)
+);
 
 /** 保存 AI 设置（校验失败时抛错，由设置页统一提示） */
 async function save() {
-  if (invalid.value) throw new Error(invalid.value)
+  if (invalid.value) throw new Error(invalid.value);
   await ai.saveSettings({
     baseUrl: draft.baseUrl.trim(),
     apiKey: draft.apiKey,
     models: draftModelsNormalized(),
     globalRules: draft.globalRules,
     maxToolRounds: draftRoundsNormalized(),
-  })
+  });
 }
 
 /** 未配置时一键跳转 AI 工具页 */
 function gotoAiTool() {
-  ui.setPage('ai')
+  ui.setPage("ai");
 }
 
-defineExpose({ dirty, invalid, save, resetDraft })
+defineExpose({ dirty, invalid, save, resetDraft });
 </script>
 
 <template>

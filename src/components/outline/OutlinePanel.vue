@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
-import { Modal, message } from 'antdv-next'
+import { computed, reactive, ref, watch } from "vue";
+import { Modal, message } from "antdv-next";
 import {
   ChevronRight,
   ChevronDown,
@@ -14,147 +14,147 @@ import {
   Search,
   RefreshCcw,
   Folder,
-} from '@lucide/vue'
-import { useModelStore } from '@/stores/model'
-import { useCanvasStore } from '@/stores/canvas'
-import { useUiStore } from '@/stores/ui'
-import { useHistoryStore } from '@/stores/history'
+} from "@lucide/vue";
+import { useModelStore } from "@/stores/model";
+import { useCanvasStore } from "@/stores/canvas";
+import { useUiStore } from "@/stores/ui";
+import { useHistoryStore } from "@/stores/history";
 
-const model = useModelStore()
-const canvas = useCanvasStore()
-const ui = useUiStore()
+const model = useModelStore();
+const canvas = useCanvasStore();
+const ui = useUiStore();
 // 必须在 setup 顶层获取（context 注入体系下，回调里调 useHistoryStore()
 // 会因 inject() 脱离 setup 上下文而失败，导致重置弹窗 onOk 拒绝、Modal 卡住不关）
-const history = useHistoryStore()
+const history = useHistoryStore();
 
-const keyword = ref('')
-const expanded = reactive(new Set<string>())
+const keyword = ref("");
+const expanded = reactive(new Set<string>());
 
 const filteredCategories = computed(() => {
-  const kw = keyword.value.trim().toLowerCase()
-  const cats = [...model.categories]
-  if (!kw) return cats
+  const kw = keyword.value.trim().toLowerCase();
+  const cats = [...model.categories];
+  if (!kw) return cats;
   return cats.filter((c) => {
-    const inCat = c.name.toLowerCase().includes(kw) || c.basePackage.toLowerCase().includes(kw)
+    const inCat = c.name.toLowerCase().includes(kw) || c.basePackage.toLowerCase().includes(kw);
     const inTables = model
       .tablesByCategory(c.id)
       .some(
         (t) =>
-          t.tableName.toLowerCase().includes(kw) || (t.comment || '').toLowerCase().includes(kw),
-      )
-    return inCat || inTables
-  })
-})
+          t.tableName.toLowerCase().includes(kw) || (t.comment || "").toLowerCase().includes(kw),
+      );
+    return inCat || inTables;
+  });
+});
 
 function tablesOf(categoryId: string) {
-  const kw = keyword.value.trim().toLowerCase()
-  const list = model.tablesByCategory(categoryId)
-  if (!kw) return list
+  const kw = keyword.value.trim().toLowerCase();
+  const list = model.tablesByCategory(categoryId);
+  if (!kw) return list;
   return list.filter(
     (t) =>
       t.tableName.toLowerCase().includes(kw) ||
-      (t.comment || '').toLowerCase().includes(kw) ||
+      (t.comment || "").toLowerCase().includes(kw) ||
       model.categories
         .find((c) => c.id === categoryId)
         ?.name.toLowerCase()
         .includes(kw),
-  )
+  );
 }
 
 /** 大纲眼睛：显示隐藏表并保证完整进入视野 */
 function revealTable(tableId: string) {
-  canvas.showTable(tableId)
-  canvas.ensureTableVisible(tableId)
+  canvas.showTable(tableId);
+  canvas.ensureTableVisible(tableId);
 }
 
 function isExpanded(categoryId: string) {
   // 搜索时自动展开
-  if (keyword.value.trim()) return true
-  return expanded.has(categoryId)
+  if (keyword.value.trim()) return true;
+  return expanded.has(categoryId);
 }
 function toggleExpand(categoryId: string) {
-  if (expanded.has(categoryId)) expanded.delete(categoryId)
-  else expanded.add(categoryId)
+  if (expanded.has(categoryId)) expanded.delete(categoryId);
+  else expanded.add(categoryId);
 }
 
 function catColor(categoryId: string, index: number) {
-  return `var(--dbm-cat-${index % 8})`
+  return `var(--dbm-cat-${index % 8})`;
 }
 
 /** 点击大纲表名：双向联动高亮 + 画布居中定位（移动端选中后自动收起抽屉） */
 function clickTable(tableId: string, e: MouseEvent) {
-  canvas.selectTable(tableId, e.ctrlKey || e.shiftKey)
-  canvas.centerOnTable(tableId)
-  ui.closeMobileOutline()
+  canvas.selectTable(tableId, e.ctrlKey || e.shiftKey);
+  canvas.centerOnTable(tableId);
+  ui.closeMobileOutline();
 }
 function dblClickTable(tableId: string) {
-  ui.openTableEdit(tableId)
+  ui.openTableEdit(tableId);
 }
 function contextTable(tableId: string, e: MouseEvent) {
-  e.preventDefault()
-  const local = canvas.localPoint(e)
+  e.preventDefault();
+  const local = canvas.localPoint(e);
   canvas.openMenu({
-    kind: 'card',
+    kind: "card",
     x: local.x,
     y: local.y,
     world: canvas.screenToWorld(local),
     tableId,
-  })
+  });
 }
 
 function clickCategory(categoryId: string, e: MouseEvent) {
-  canvas.selectCategory(categoryId, e.ctrlKey || e.shiftKey)
+  canvas.selectCategory(categoryId, e.ctrlKey || e.shiftKey);
 }
 
 function addTableIn(categoryId: string) {
   // 在该分类下新增表，落点取画布可视区域中心
-  const world = canvas.screenToWorld({ x: canvas.viewportW / 2, y: canvas.viewportH / 2 })
-  ui.openTableEdit(null, world, categoryId)
+  const world = canvas.screenToWorld({ x: canvas.viewportW / 2, y: canvas.viewportH / 2 });
+  ui.openTableEdit(null, world, categoryId);
 }
 
 function removeCategory(categoryId: string) {
-  const cat = model.categoryById(categoryId)
-  const count = model.tablesByCategory(categoryId).length
+  const cat = model.categoryById(categoryId);
+  const count = model.tablesByCategory(categoryId).length;
   if (count > 0) {
-    message.warning(`分类「${cat?.name}」下仍有 ${count} 张表，请先移动或删除`)
-    return
+    message.warning(`分类「${cat?.name}」下仍有 ${count} 张表，请先移动或删除`);
+    return;
   }
   Modal.confirm({
     title: `删除分类「${cat?.name}」？`,
-    content: '仅删除分类本身，不含任何表。',
-    okText: '删除',
-    okType: 'danger',
-    cancelText: '取消',
+    content: "仅删除分类本身，不含任何表。",
+    okText: "删除",
+    okType: "danger",
+    cancelText: "取消",
     onOk: () => model.removeCategory(categoryId),
-  })
+  });
 }
 
 async function resetDemo() {
   Modal.confirm({
-    title: '重置为演示数据？',
-    content: '将清空本地全部修改，恢复内置演示模型（含字典与模板）。',
-    okText: '重置',
-    okType: 'danger',
-    cancelText: '取消',
+    title: "重置为演示数据？",
+    content: "将清空本地全部修改，恢复内置演示模型（含字典与模板）。",
+    okText: "重置",
+    okType: "danger",
+    cancelText: "取消",
     onOk: async () => {
-      await model.resetDemoData()
-      history.clear()
-      canvas.setSelection([])
-      canvas.fitAll(true)
-      message.success('已重置为演示数据')
+      await model.resetDemoData();
+      history.clear();
+      canvas.setSelection([]);
+      canvas.fitAll(true);
+      message.success("已重置为演示数据");
     },
-  })
+  });
 }
 
 watch(
   () => model.loaded,
   (loaded) => {
     if (loaded && !expanded.size && model.categories.length) {
-      model.categories.forEach((c) => expanded.add(c.id))
+      model.categories.forEach((c) => expanded.add(c.id));
     }
   },
   { immediate: true },
-)
+);
 </script>
 
 <template>

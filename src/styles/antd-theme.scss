@@ -23,7 +23,7 @@
  * 仍为静态青绿色，与选中态的 antd 主色蓝不一致）。
  */
 .app-provider,
-[class*='css-var-'] {
+[class*="css-var-"] {
   /* 字体 */
   --dbm-font-sans: var(--ant-font-family);
   --dbm-font-mono: var(--ant-font-family-code);

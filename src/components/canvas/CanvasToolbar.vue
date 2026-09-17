@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { message } from 'antdv-next'
+import { computed, ref } from "vue";
+import { message } from "antdv-next";
 import {
   ZoomIn,
   ZoomOut,
@@ -13,100 +13,100 @@ import {
   Eye,
   Plus,
   WandSparkles,
-} from '@lucide/vue'
-import { useCanvasStore, MIN_ZOOM, MAX_ZOOM } from '@/stores/canvas'
-import { useModelStore } from '@/stores/model'
-import { useHistoryStore } from '@/stores/history'
-import { useUiStore } from '@/stores/ui'
-import { useTemplateStore } from '@/stores/template'
-import { useDictStore } from '@/stores/dict'
-import type { GeneratedFile } from '@/types/model'
-import TemplateSelectModal from '@/components/dialog/TemplateSelectModal.vue'
+} from "@lucide/vue";
+import { useCanvasStore, MIN_ZOOM, MAX_ZOOM } from "@/stores/canvas";
+import { useModelStore } from "@/stores/model";
+import { useHistoryStore } from "@/stores/history";
+import { useUiStore } from "@/stores/ui";
+import { useTemplateStore } from "@/stores/template";
+import { useDictStore } from "@/stores/dict";
+import type { GeneratedFile } from "@/types/model";
+import TemplateSelectModal from "@/components/dialog/TemplateSelectModal.vue";
 
-const canvas = useCanvasStore()
-const model = useModelStore()
-const history = useHistoryStore()
-const ui = useUiStore()
-const templateStore = useTemplateStore()
-const dictStore = useDictStore()
+const canvas = useCanvasStore();
+const model = useModelStore();
+const history = useHistoryStore();
+const ui = useUiStore();
+const templateStore = useTemplateStore();
+const dictStore = useDictStore();
 
 /** 模板选择对话框（生成/替换前勾选本次参与的模板，默认全选） */
-const selectOpen = ref(false)
-const selectMode = ref<'generate' | 'replace'>('generate')
+const selectOpen = ref(false);
+const selectMode = ref<"generate" | "replace">("generate");
 
 /** 代码生成范围：选中分类 > 选中表 > 全部 */
 const scopeTableIds = computed<string[]>(() => {
   if (canvas.selectedCategoryIds.length) {
     return model.tables
       .filter((t) => canvas.selectedCategoryIds.includes(t.categoryId))
-      .map((t) => t.id)
+      .map((t) => t.id);
   }
-  if (canvas.selectedIds.length) return [...canvas.selectedIds]
-  return model.tables.map((t) => t.id)
-})
+  if (canvas.selectedIds.length) return [...canvas.selectedIds];
+  return model.tables.map((t) => t.id);
+});
 
 const scopeLabel = computed(() => {
   if (canvas.selectedCategoryIds.length) {
     const names = canvas.selectedCategoryIds
       .map((id) => model.categoryById(id)?.name)
-      .filter(Boolean)
-    return `分类: ${names.join('、')}（${scopeTableIds.value.length} 表）`
+      .filter(Boolean);
+    return `分类: ${names.join("、")}（${scopeTableIds.value.length} 表）`;
   }
-  if (canvas.selectedIds.length) return `已选 ${canvas.selectedIds.length} 张表`
-  return `全部 ${model.tableCount} 张表`
-})
+  if (canvas.selectedIds.length) return `已选 ${canvas.selectedIds.length} 张表`;
+  return `全部 ${model.tableCount} 张表`;
+});
 
 function previewCode() {
   if (canvas.selectedIds.length === 1) {
-    ui.openCodePreview(canvas.selectedIds[0])
+    ui.openCodePreview(canvas.selectedIds[0]);
   } else {
-    ui.openCodePreview(null)
+    ui.openCodePreview(null);
   }
 }
 
 function generate() {
   if (!model.tables.length) {
-    message.warning('当前没有可生成的表')
-    return
+    message.warning("当前没有可生成的表");
+    return;
   }
   // 先弹模板选择框（默认全选），确认后下载 zip
-  selectMode.value = 'generate'
-  selectOpen.value = true
+  selectMode.value = "generate";
+  selectOpen.value = true;
 }
 
 /** 模板选择确认：生成并下载 zip（dictEnabled = 是否生成字典分类代码，默认生成） */
 async function onGenerateConfirm(templateNames: string[], dictEnabled: boolean) {
   // 字典分类代码依赖字典数据：生成前确保字典仓库已加载（未进过字典页时补拉）
-  if (dictEnabled) await dictStore.init()
-  await templateStore.generateAndDownload(scopeTableIds.value, templateNames, dictEnabled)
+  if (dictEnabled) await dictStore.init();
+  await templateStore.generateAndDownload(scopeTableIds.value, templateNames, dictEnabled);
 }
 
 /** 模板选择确认分发：按模式路由（避免模板内联多参数表达式） */
 function onSelectConfirm(templateNames: string[], dictEnabled: boolean) {
-  if (selectMode.value === 'generate') onGenerateConfirm(templateNames, dictEnabled)
-  else onReplaceConfirm(templateNames, dictEnabled)
+  if (selectMode.value === "generate") onGenerateConfirm(templateNames, dictEnabled);
+  else onReplaceConfirm(templateNames, dictEnabled);
 }
 
 /** 代码替换：先弹模板选择框，确认后生成文件并进入替换确认 */
 function replace() {
   if (!model.tables.length) {
-    message.warning('当前没有可生成的表')
-    return
+    message.warning("当前没有可生成的表");
+    return;
   }
-  selectMode.value = 'replace'
-  selectOpen.value = true
+  selectMode.value = "replace";
+  selectOpen.value = true;
 }
 
 /** 模板选择确认：生成文件，经确认后调用 /api/codegen/replace */
 async function onReplaceConfirm(templateNames: string[], dictEnabled: boolean) {
-  await templateStore.init()
-  if (dictEnabled) await dictStore.init()
-  const { files } = templateStore.generateFiles(scopeTableIds.value, templateNames, dictEnabled)
+  await templateStore.init();
+  if (dictEnabled) await dictStore.init();
+  const { files } = templateStore.generateFiles(scopeTableIds.value, templateNames, dictEnabled);
   if (!files.length) {
-    message.warning('未生成任何文件')
-    return
+    message.warning("未生成任何文件");
+    return;
   }
-  ui.openReplaceConfirm(files as GeneratedFile[])
+  ui.openReplaceConfirm(files as GeneratedFile[]);
 }
 </script>
 

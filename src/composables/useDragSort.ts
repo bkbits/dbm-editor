@@ -11,20 +11,20 @@
  * - 头部锁定行（lockCount）：不可拖动、也不可插入到其之前
  *   （如表编辑字段表固定的主键首行）
  */
-import { reactive } from 'vue'
+import { reactive } from "vue";
 
 export interface DragSortState {
   /** 被拖拽行索引（-1 表示无拖拽） */
-  from: number
+  from: number;
   /** 当前悬停行索引 */
-  over: number
+  over: number;
   /** 悬停位置：目标行上缘 / 下缘 */
-  pos: 'above' | 'below'
+  pos: "above" | "below";
 }
 
 export interface DragSortOptions {
   /** 头部锁定行数：这些行不可拖动，也不可插入到其之前（默认 0） */
-  lockCount?: number
+  lockCount?: number;
 }
 
 export function useDragSort<T>(
@@ -32,77 +32,77 @@ export function useDragSort<T>(
   onSorted?: () => void,
   opts: DragSortOptions = {},
 ) {
-  const lockCount = opts.lockCount ?? 0
-  const state = reactive<DragSortState>({ from: -1, over: -1, pos: 'above' })
+  const lockCount = opts.lockCount ?? 0;
+  const state = reactive<DragSortState>({ from: -1, over: -1, pos: "above" });
 
   /** 手柄按下：锁定行直接忽略；置 draggable 并注册一次性指针复位（未形成拖拽时） */
   function handleDown(idx: number) {
-    if (idx < lockCount) return
-    state.from = idx
-    state.over = -1
+    if (idx < lockCount) return;
+    state.from = idx;
+    state.over = -1;
     window.addEventListener(
-      'pointerup',
+      "pointerup",
       () => {
-        state.from = -1
+        state.from = -1;
       },
       { once: true },
-    )
+    );
   }
 
   function onDragStart(idx: number, e: DragEvent) {
     if (state.from !== idx) {
-      e.preventDefault()
-      return
+      e.preventDefault();
+      return;
     }
     if (e.dataTransfer) {
       // Firefox 要求拖拽起始时写入数据，否则拖拽不会发起
-      e.dataTransfer.setData('text/plain', String(idx))
-      e.dataTransfer.effectAllowed = 'move'
+      e.dataTransfer.setData("text/plain", String(idx));
+      e.dataTransfer.effectAllowed = "move";
     }
   }
 
   function onDragEnd() {
-    state.from = -1
-    state.over = -1
-    state.pos = 'above'
+    state.from = -1;
+    state.over = -1;
+    state.pos = "above";
   }
 
   function onDragOver(idx: number, e: DragEvent) {
-    if (state.from < 0) return
-    const row = e.currentTarget as HTMLElement
-    const rect = row.getBoundingClientRect()
-    state.over = idx
-    state.pos = e.clientY - rect.top < rect.height / 2 ? 'above' : 'below'
-    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
+    if (state.from < 0) return;
+    const row = e.currentTarget as HTMLElement;
+    const rect = row.getBoundingClientRect();
+    state.over = idx;
+    state.pos = e.clientY - rect.top < rect.height / 2 ? "above" : "below";
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
   }
 
   function onDrop() {
-    const from = state.from
-    const over = state.over
-    const above = state.pos === 'above'
-    onDragEnd()
-    if (from < 0 || over < 0 || from === over) return
-    const list = getList()
-    if (!Array.isArray(list) || from >= list.length || over >= list.length) return
+    const from = state.from;
+    const over = state.over;
+    const above = state.pos === "above";
+    onDragEnd();
+    if (from < 0 || over < 0 || from === over) return;
+    const list = getList();
+    if (!Array.isArray(list) || from >= list.length || over >= list.length) return;
     // 先移除再插入：插入目标大于来源时需要回退一位换算
-    const insertRaw = above ? over : over + 1
-    const [item] = list.splice(from, 1)
-    let insert = insertRaw > from ? insertRaw - 1 : insertRaw
+    const insertRaw = above ? over : over + 1;
+    const [item] = list.splice(from, 1);
+    let insert = insertRaw > from ? insertRaw - 1 : insertRaw;
     // 头部锁定：插入位置不允许落在锁定区内（最低插到锁定区之后）
-    if (insert < lockCount) insert = lockCount
-    list.splice(insert, 0, item)
-    onSorted?.()
+    if (insert < lockCount) insert = lockCount;
+    list.splice(insert, 0, item);
+    onSorted?.();
   }
 
   /** 行样式类：拖拽中半透明 + 上/下落点指示线（锁定行不显示上落点线——不可能插入其上方） */
   function rowClass(idx: number) {
-    const active = state.from >= 0
+    const active = state.from >= 0;
     return {
       dragging: state.from === idx,
-      'drop-above': active && state.over === idx && state.pos === 'above' && idx >= lockCount,
-      'drop-below': active && state.over === idx && state.pos === 'below',
-    }
+      "drop-above": active && state.over === idx && state.pos === "above" && idx >= lockCount,
+      "drop-below": active && state.over === idx && state.pos === "below",
+    };
   }
 
-  return { state, handleDown, onDragStart, onDragEnd, onDragOver, onDrop, rowClass }
+  return { state, handleDown, onDragStart, onDragEnd, onDragOver, onDrop, rowClass };
 }

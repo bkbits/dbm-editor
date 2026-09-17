@@ -9,61 +9,61 @@ import {
   SaveAll,
   RefreshCw,
   Bot,
-} from '@lucide/vue'
-import { onBeforeUnmount, onMounted } from 'vue'
-import { message } from 'antdv-next'
-import { useThemeStore } from '@/stores/theme'
-import { useUiStore, type PageName } from '@/stores/ui'
-import { useModelStore } from '@/stores/model'
-import { useHistoryStore } from '@/stores/history'
-import { errorMessageOf } from '@/api/manager-api'
+} from "@lucide/vue";
+import { onBeforeUnmount, onMounted } from "vue";
+import { message } from "antdv-next";
+import { useThemeStore } from "@/stores/theme";
+import { useUiStore, type PageName } from "@/stores/ui";
+import { useModelStore } from "@/stores/model";
+import { useHistoryStore } from "@/stores/history";
+import { errorMessageOf } from "@/api/manager-api";
 
-const themeStore = useThemeStore()
-const ui = useUiStore()
-const model = useModelStore()
-const history = useHistoryStore()
+const themeStore = useThemeStore();
+const ui = useUiStore();
+const model = useModelStore();
+const history = useHistoryStore();
 
 const pages: Array<{ key: PageName; label: string; icon: unknown }> = [
-  { key: 'editor', label: '模型编辑器', icon: Database },
-  { key: 'dict', label: '字典管理', icon: BookText },
-  { key: 'template', label: '模板管理', icon: FileCode },
-  { key: 'ai', label: 'AI 工具', icon: Bot },
-  { key: 'settings', label: '系统设置', icon: Settings },
-]
+  { key: "editor", label: "模型编辑器", icon: Database },
+  { key: "dict", label: "字典管理", icon: BookText },
+  { key: "template", label: "模板管理", icon: FileCode },
+  { key: "ai", label: "AI 工具", icon: Bot },
+  { key: "settings", label: "系统设置", icon: Settings },
+];
 
 function switchPage(key: PageName) {
-  ui.setPage(key)
+  ui.setPage(key);
 }
 
 /** 点击「保存所有」：走 ManagerApi.save() 全量保存契约（快捷键 Ctrl/Cmd + S 同效） */
 async function saveAll() {
   try {
-    await model.saveAll()
-    message.success('所有修改已保存')
+    await model.saveAll();
+    message.success("所有修改已保存");
   } catch (e: unknown) {
-    message.error(errorMessageOf(e, '保存失败'))
+    message.error(errorMessageOf(e, "保存失败"));
   }
 }
 
 /** Ctrl/Cmd + S 全局保存（与「保存所有」按钮同逻辑；阻止浏览器保存页对话框） */
 function onGlobalKeyDown(e: KeyboardEvent) {
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
-    e.preventDefault()
-    saveAll()
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+    e.preventDefault();
+    saveAll();
   }
 }
 
-onMounted(() => window.addEventListener('keydown', onGlobalKeyDown))
-onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKeyDown))
+onMounted(() => window.addEventListener("keydown", onGlobalKeyDown));
+onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKeyDown));
 
 /** 点击「刷新」：走 ManagerApi.load() 重新加载（放弃本地未保存状态） */
 async function refresh() {
   try {
-    await model.refresh()
-    history.clear()
-    message.success('模型已刷新')
+    await model.refresh();
+    history.clear();
+    message.success("模型已刷新");
   } catch (e: unknown) {
-    message.error(errorMessageOf(e, '刷新失败'))
+    message.error(errorMessageOf(e, "刷新失败"));
   }
 }
 </script>

@@ -11,61 +11,61 @@ export function toCamelCase(
   str: string | null | undefined,
   firstLetterLowerCase?: boolean,
 ): string {
-  const s = String(str ?? '').trim()
-  if (!s) return ''
-  const hadSeparator = /[\s_\-.]/.test(s)
-  let words: string[]
+  const s = String(str ?? "").trim();
+  if (!s) return "";
+  const hadSeparator = /[\s_\-.]/.test(s);
+  let words: string[];
   if (hadSeparator) {
-    words = s.split(/[\s_\-.]+/).filter(Boolean)
+    words = s.split(/[\s_\-.]+/).filter(Boolean);
   } else {
     // 已是驼峰：在大写字母前分割（保留连续大写缩写，如 HTTPServer）
     words = s
-      .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+      .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
       .split(/\s+/)
-      .filter(Boolean)
+      .filter(Boolean);
   }
-  const lower = words.map((w) => w.toLowerCase())
-  let camel = lower.map((w, i) => (i === 0 ? w : w.charAt(0).toUpperCase() + w.slice(1))).join('')
-  if (!camel) camel = s.toLowerCase()
-  return firstLetterLowerCase ? camel : camel.charAt(0).toUpperCase() + camel.slice(1)
+  const lower = words.map((w) => w.toLowerCase());
+  let camel = lower.map((w, i) => (i === 0 ? w : w.charAt(0).toUpperCase() + w.slice(1))).join("");
+  if (!camel) camel = s.toLowerCase();
+  return firstLetterLowerCase ? camel : camel.charAt(0).toUpperCase() + camel.slice(1);
 }
 
 /** 转蛇形命名（sysUser -> sys_user） */
 export function toSnakeCase(str: string | null | undefined): string {
-  const s = String(str ?? '').trim()
-  if (!s) return ''
+  const s = String(str ?? "").trim();
+  if (!s) return "";
   return s
-    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
-    .replace(/[\s\-.]+/g, '_')
-    .replace(/_+/g, '_')
-    .toLowerCase()
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .replace(/[\s\-.]+/g, "_")
+    .replace(/_+/g, "_")
+    .toLowerCase();
 }
 
 /** 判空（null/undefined/空字符串） */
 export function isEmpty(str: unknown): boolean {
-  return str == null || String(str).length === 0
+  return str == null || String(str).length === 0;
 }
 
 /** 判空白（null/undefined/仅空白字符） */
 export function isBlank(str: unknown): boolean {
-  return str == null || String(str).trim().length === 0
+  return str == null || String(str).trim().length === 0;
 }
 
 /** 引号包裹：condition 为真时用双引号包裹内容，否则原样返回 */
 export function quote(content: unknown, condition?: unknown): string {
-  const text = String(content ?? '')
-  return condition === undefined || condition ? `"${text}"` : text
+  const text = String(content ?? "");
+  return condition === undefined || condition ? `"${text}"` : text;
 }
 
 /** 括号包裹：condition 为真时用圆括号包裹内容，否则原样返回 */
 export function wrap(content: unknown, condition?: unknown): string {
-  const text = String(content ?? '')
-  return condition === undefined || condition ? `(${text})` : text
+  const text = String(content ?? "");
+  return condition === undefined || condition ? `(${text})` : text;
 }
 
 /** 当前时间戳（yyyy-MM-dd HH:mm:ss），模板内生成 javadoc 的 @since 使用 */
 export function nowDateTime(): string {
-  const d = new Date()
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }

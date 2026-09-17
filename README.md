@@ -119,18 +119,18 @@ npm i vue antdv-next @lucide/vue
 
 ```ts
 // 宿主入口（自带组件注册与全局样式注入，无需额外 import css）
-import { createApp } from 'vue'
-import Antd from 'antdv-next'
-import 'antdv-next/dist/reset.css'
-import { DBManagerView, type ManagerApi, type UpdateTablePosDTO } from 'dbmanager-lib'
+import { createApp } from "vue";
+import Antd from "antdv-next";
+import "antdv-next/dist/reset.css";
+import { DBManagerView, type ManagerApi, type UpdateTablePosDTO } from "dbmanager-lib";
 
 const myApi: ManagerApi = {
   /* 实现全部异步契约方法（返回 Promise，校验失败 reject 中文提示） */
-} as ManagerApi
+} as ManagerApi;
 
 createApp(() => h(DBManagerView, { api: myApi }))
   .use(Antd)
-  .mount('#app')
+  .mount("#app");
 ```
 
 > 库模式构建后 `dist` 不含演示页 HTML——演示应用通过 `vp dev`（入口 `index.html` → `src/main.ts`）访问；仓库内 `test/host-smoke.html` 为宿主接入冒烟页（直接加载 `dist/DBManager.js` 验证外部依赖解析与样式内联），`test/` 目录已 gitignore。
@@ -217,18 +217,18 @@ createApp(() => h(DBManagerView, { api: myApi }))
 ```ts
 interface TableTemplateContext {
   // 表模板渲染上下文（每表渲染一次）
-  templateName: string // 模板名称
-  templateContent: string // 模板内容
-  result?: string // 生成结果
-  basePackage: string // 基础包名（表所属分类）
-  fileName: string // 文件名（模板内赋值）
-  filePath: string // 文件路径（模板内赋值）
-  language?: string // 显式指定预览高亮语言（模板内赋值，如 <% context.language = 'java' %>）
-  table: TableVO // 当前表（columns/indexes/navigates/options/templates）
-  settings: Settings // 应用设置（作者 author 与表/列选项元定义，供 javadoc 与选项分支）
-  aborted: boolean // 丢弃本次生成（默认 false；置 true 则该产物不打包进 zip）
-  hasColumn(columnName: string): boolean // 按数据库列名判断列是否存在
-  getColumn(columnName: string): TableColumn | undefined // 按数据库列名获取列
+  templateName: string; // 模板名称
+  templateContent: string; // 模板内容
+  result?: string; // 生成结果
+  basePackage: string; // 基础包名（表所属分类）
+  fileName: string; // 文件名（模板内赋值）
+  filePath: string; // 文件路径（模板内赋值）
+  language?: string; // 显式指定预览高亮语言（模板内赋值，如 <% context.language = 'java' %>）
+  table: TableVO; // 当前表（columns/indexes/navigates/options/templates）
+  settings: Settings; // 应用设置（作者 author 与表/列选项元定义，供 javadoc 与选项分支）
+  aborted: boolean; // 丢弃本次生成（默认 false；置 true 则该产物不打包进 zip）
+  hasColumn(columnName: string): boolean; // 按数据库列名判断列是否存在
+  getColumn(columnName: string): TableColumn | undefined; // 按数据库列名获取列
 }
 ```
 
@@ -372,11 +372,11 @@ const myApi: ManagerApi = {
 导出全局单例 `Logger`，提供 `log / info / debug / warn / error / fatal` 六个输出方法与级别控制：
 
 ```ts
-import { Logger } from '@/log/Logger'
+import { Logger } from "@/log/Logger";
 
-Logger.debug('入参', args) // [09:30:12.405] [DEBUG] 入参 [args...]
-Logger.error('失败', err) // [09:30:12.405] [ERROR] 失败 Error: ...
-Logger.setLevel('INFO') // 或 Logger.level = 'INFO' / Logger.getLevel()
+Logger.debug("入参", args); // [09:30:12.405] [DEBUG] 入参 [args...]
+Logger.error("失败", err); // [09:30:12.405] [ERROR] 失败 Error: ...
+Logger.setLevel("INFO"); // 或 Logger.level = 'INFO' / Logger.getLevel()
 ```
 
 - 级别：`DEBUG < INFO < WARN < ERROR < FATAL`，只输出当前级别及以上的日志；`DISABLED` 屏蔽一切输出（含 `log` 与 `fatal`）
@@ -462,21 +462,21 @@ Logger.setLevel('INFO') // 或 Logger.level = 'INFO' / Logger.getLevel()
 
 ```js
 // 控制台执行：直接调用 demo api 验证契约行为
-const { sharedDemoApi } = await import('/src/api/manager-api.ts')
-await sharedDemoApi.getTables() // 返回全部表（含字段与索引）
+const { sharedDemoApi } = await import("/src/api/manager-api.ts");
+await sharedDemoApi.getTables(); // 返回全部表（含字段与索引）
 await sharedDemoApi.updateTablePos({
-  tables: [{ tableId: 't-sys-user', pos: { x: 300, y: 200 } }],
-}) // 体验批量契约与抛错路径
+  tables: [{ tableId: "t-sys-user", pos: { x: 300, y: 200 } }],
+}); // 体验批量契约与抛错路径
 ```
 
 ### 运行时调整日志级别
 
 ```js
 // 控制台执行：Logger 经动态导入获取
-const { Logger } = await import('/src/log/Logger.ts')
-Logger.setLevel('INFO') // 静默 debug 级调用追踪（info 及以上保留）
-Logger.setLevel('DISABLED') // 完全关闭所有输出
-Logger.getLevel() // 查看当前级别
+const { Logger } = await import("/src/log/Logger.ts");
+Logger.setLevel("INFO"); // 静默 debug 级调用追踪（info 及以上保留）
+Logger.setLevel("DISABLED"); // 完全关闭所有输出
+Logger.getLevel(); // 查看当前级别
 ```
 
 ### Eta 模板冒烟测试

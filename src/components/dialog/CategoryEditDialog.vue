@@ -1,71 +1,71 @@
 <script setup lang="ts">
-import { computed, reactive, watch } from 'vue'
-import { message } from 'antdv-next'
-import { useUiStore } from '@/stores/ui'
-import { useModelStore } from '@/stores/model'
+import { computed, reactive, watch } from "vue";
+import { message } from "antdv-next";
+import { useUiStore } from "@/stores/ui";
+import { useModelStore } from "@/stores/model";
 
-const ui = useUiStore()
-const model = useModelStore()
+const ui = useUiStore();
+const model = useModelStore();
 
-const dialogOpen = computed(() => ui.categoryEdit.open)
-const isEdit = computed(() => Boolean(ui.categoryEdit.categoryId))
+const dialogOpen = computed(() => ui.categoryEdit.open);
+const isEdit = computed(() => Boolean(ui.categoryEdit.categoryId));
 
 const draft = reactive({
-  id: '',
-  name: '',
-  basePackage: '',
-  src: '',
-})
+  id: "",
+  name: "",
+  basePackage: "",
+  src: "",
+});
 
 watch(dialogOpen, (open) => {
-  if (!open) return
+  if (!open) return;
   if (ui.categoryEdit.categoryId) {
-    const cat = model.categoryById(ui.categoryEdit.categoryId)
-    if (!cat) return
-    draft.id = cat.id
-    draft.name = cat.name
-    draft.basePackage = cat.basePackage
-    draft.src = cat.src || ''
+    const cat = model.categoryById(ui.categoryEdit.categoryId);
+    if (!cat) return;
+    draft.id = cat.id;
+    draft.name = cat.name;
+    draft.basePackage = cat.basePackage;
+    draft.src = cat.src || "";
   } else {
-    draft.id = ''
-    draft.name = ''
-    draft.basePackage = ''
-    draft.src = ''
+    draft.id = "";
+    draft.name = "";
+    draft.basePackage = "";
+    draft.src = "";
   }
-})
+});
 
-const saving = reactive({ loading: false })
+const saving = reactive({ loading: false });
 
 function validate(): string | null {
-  if (!draft.name.trim()) return '分类名称不能为空'
+  if (!draft.name.trim()) return "分类名称不能为空";
   if (model.categories.some((c) => c.name === draft.name.trim() && c.id !== draft.id)) {
-    return `分类名称已存在：${draft.name}`
+    return `分类名称已存在：${draft.name}`;
   }
-  if (!draft.basePackage.trim()) return '基础包路径不能为空'
-  return null
+  if (!draft.basePackage.trim()) return "基础包路径不能为空";
+  return null;
 }
 
 async function save() {
-  const err = validate()
+  const err = validate();
   if (err) {
-    message.warning(err)
-    return
+    message.warning(err);
+    return;
   }
-  saving.loading = true
+  saving.loading = true;
   try {
     await model.saveCategory({
       id: draft.id || undefined,
       name: draft.name.trim(),
       basePackage: draft.basePackage.trim(),
       src: draft.src.trim(),
-    })
-    message.success(isEdit.value ? '分类已更新' : '分类已创建')
-    ui.closeCategoryEdit()
+    });
+    message.success(isEdit.value ? "分类已更新" : "分类已创建");
+    ui.closeCategoryEdit();
   } catch (e: unknown) {
-    const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
-    message.error(msg || (e as Error)?.message || '保存失败')
+    const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
+    message.error(msg || (e as Error)?.message || "保存失败");
   } finally {
-    saving.loading = false
+    saving.loading = false;
   }
 }
 </script>

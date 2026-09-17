@@ -1,40 +1,40 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
-import { message } from 'antdv-next'
-import { Plus, Trash2, GripVertical, Lock, ShieldCheck, Eraser } from '@lucide/vue'
-import type { AuditFieldRole, OptionSetting, TableColumn, TableIndex } from '@/types/model'
-import SyncTable, { type StColumn } from '@/components/common/SyncTable.vue'
-import { useUiStore } from '@/stores/ui'
-import { useModelStore } from '@/stores/model'
-import { useDictStore } from '@/stores/dict'
-import { useCanvasStore } from '@/stores/canvas'
-import { useSettingsStore } from '@/stores/settings'
-import { useTemplateStore } from '@/stores/template'
-import { toCamelCase } from '@/utils/string'
-import { getJavaTypeByType, COMMON_DB_TYPES, COMMON_JAVA_TYPES } from '@/utils/javaType'
-import { uid } from '@/utils/id'
-import { NAVIGATE_TYPE_LABEL, CASCADE_LABEL, flipNavigateType } from '@/utils/navigate'
-import { useDragSort } from '@/composables/useDragSort'
+import { computed, reactive, ref, watch } from "vue";
+import { message } from "antdv-next";
+import { Plus, Trash2, GripVertical, Lock, ShieldCheck, Eraser } from "@lucide/vue";
+import type { AuditFieldRole, OptionSetting, TableColumn, TableIndex } from "@/types/model";
+import SyncTable, { type StColumn } from "@/components/common/SyncTable.vue";
+import { useUiStore } from "@/stores/ui";
+import { useModelStore } from "@/stores/model";
+import { useDictStore } from "@/stores/dict";
+import { useCanvasStore } from "@/stores/canvas";
+import { useSettingsStore } from "@/stores/settings";
+import { useTemplateStore } from "@/stores/template";
+import { toCamelCase } from "@/utils/string";
+import { getJavaTypeByType, COMMON_DB_TYPES, COMMON_JAVA_TYPES } from "@/utils/javaType";
+import { uid } from "@/utils/id";
+import { NAVIGATE_TYPE_LABEL, CASCADE_LABEL, flipNavigateType } from "@/utils/navigate";
+import { useDragSort } from "@/composables/useDragSort";
 import {
   AUDIT_FIELD_LABELS,
   AUDIT_FIELD_NOT_NULL,
   AUDIT_FIELD_ROLES,
-} from '@/utils/fieldConvention'
+} from "@/utils/fieldConvention";
 
-const ui = useUiStore()
-const model = useModelStore()
-const dictStore = useDictStore()
-const canvas = useCanvasStore()
-const settingsStore = useSettingsStore()
-const templateStore = useTemplateStore()
+const ui = useUiStore();
+const model = useModelStore();
+const dictStore = useDictStore();
+const canvas = useCanvasStore();
+const settingsStore = useSettingsStore();
+const templateStore = useTemplateStore();
 
 type DraftColumn = TableColumn & {
-  _propTouched?: boolean
-  _javaTouched?: boolean
+  _propTouched?: boolean;
+  _javaTouched?: boolean;
   /** 列选项扁平值（UI 编辑态；保存时转换为 TableColumn.options） */
-  _optVals: Record<string, boolean | string>
-}
-type DraftIndex = TableIndex
+  _optVals: Record<string, boolean | string>;
+};
+type DraftIndex = TableIndex;
 
 /* ==================== 选项工具（表/列选项扁平值 ⇄ options 记录） ==================== */
 
@@ -42,18 +42,18 @@ type DraftIndex = TableIndex
 function flattenRawOptions(
   options?: Record<string, { value?: boolean | string | number }>,
 ): Record<string, any> {
-  const out: Record<string, any> = {}
+  const out: Record<string, any> = {};
   for (const [name, entry] of Object.entries(options || {})) {
     out[name] =
-      entry?.value === undefined || entry?.value === null ? true : (entry.value as boolean)
+      entry?.value === undefined || entry?.value === null ? true : (entry.value as boolean);
   }
-  return out
+  return out;
 }
 
 /** 补齐缺失定义的默认值（不动已有值；boolean 默认 true，其余空串） */
 function fillOptionDefaults(vals: Record<string, boolean | string>, defs: OptionSetting[]): void {
   for (const def of defs) {
-    if (vals[def.name] === undefined) vals[def.name] = def.type === 'boolean' ? true : ''
+    if (vals[def.name] === undefined) vals[def.name] = def.type === "boolean" ? true : "";
   }
 }
 
@@ -63,61 +63,61 @@ function buildOptionRecord<T extends { name: string; value?: boolean | string | 
   defs: OptionSetting[],
   makeEntry: (name: string, value: boolean | string | number) => T,
 ): Record<string, T> | undefined {
-  const out: Record<string, T> = {}
+  const out: Record<string, T> = {};
   for (const def of defs) {
-    const v = vals[def.name]
-    if (def.type === 'boolean') {
-      if (v === false) out[def.name] = makeEntry(def.name, false)
+    const v = vals[def.name];
+    if (def.type === "boolean") {
+      if (v === false) out[def.name] = makeEntry(def.name, false);
     } else {
-      const s = String(v ?? '').trim()
+      const s = String(v ?? "").trim();
       if (s) {
-        const numeric = def.type === 'int' || def.type === 'long' || def.type === 'double'
-        out[def.name] = makeEntry(def.name, numeric ? Number(s) : s)
+        const numeric = def.type === "int" || def.type === "long" || def.type === "double";
+        out[def.name] = makeEntry(def.name, numeric ? Number(s) : s);
       }
     }
   }
-  return Object.keys(out).length ? out : undefined
+  return Object.keys(out).length ? out : undefined;
 }
 
-const isEdit = computed(() => Boolean(ui.tableEdit.tableId))
+const isEdit = computed(() => Boolean(ui.tableEdit.tableId));
 
 const draft = reactive({
-  id: '',
-  categoryId: '',
-  tableName: '',
-  className: '',
-  comment: '',
-  parentIdColumn: '', // 树形表父ID字段，空代表非树形表
+  id: "",
+  categoryId: "",
+  tableName: "",
+  className: "",
+  comment: "",
+  parentIdColumn: "", // 树形表父ID字段，空代表非树形表
   x: 0,
   y: 0,
   columns: [] as DraftColumn[],
   indexes: [] as DraftIndex[],
-  activeTab: 'columns',
+  activeTab: "columns",
   /** 启用的模板（显式选择；空 = 启用全部，配合 templatesExplicit/templatesTouched 语义） */
   templates: [] as string[],
   /** 表选项扁平值（UI 编辑态；boolean 定义存 boolean，其余存 string） */
   optionVals: {} as Record<string, any>,
-})
+});
 
 /** 表模板选择：未显式配置且未手动改动时展示全部（响应式跟随模板加载） */
-const templatesExplicit = ref(false)
-const templatesTouched = ref(false)
+const templatesExplicit = ref(false);
+const templatesTouched = ref(false);
 const templatesSelected = computed<string[]>({
   get: () =>
     templatesExplicit.value || templatesTouched.value
       ? draft.templates
       : [...templateStore.templateNames],
   set: (vals) => {
-    templatesTouched.value = true
-    draft.templates = vals
+    templatesTouched.value = true;
+    draft.templates = vals;
   },
-})
+});
 const templateCheckOptions = computed(() =>
   templateStore.templates.map((t) => ({ value: t.name, label: t.name })),
-)
+);
 
 /** 表选项定义（来自应用设置） */
-const tableOptionDefs = computed(() => settingsStore.tableOptions)
+const tableOptionDefs = computed(() => settingsStore.tableOptions);
 
 /**
  * 字段表格列定义（SyncTable 多表同步滚动结构）：
@@ -127,36 +127,36 @@ const tableOptionDefs = computed(() => settingsStore.tableOptions)
  */
 const fieldColumns = computed<StColumn[]>(() => {
   const cols: StColumn[] = [
-    { key: 'sort', title: '排序', width: 32, minWidth: 32, fixed: 'left', align: 'center' },
-    { key: 'name', title: '字段名', minWidth: 100, fixed: 'left' },
-    { key: 'propertyName', title: 'Java属性名', minWidth: 88 },
-    { key: 'type', title: '数据库类型', width: 136, minWidth: 136 },
-    { key: 'javaType', title: 'Java类型', width: 122, minWidth: 122 },
-    { key: 'notNull', title: '非空', width: 48, minWidth: 48, align: 'center' },
-    { key: 'primaryKey', title: '主键', width: 48, minWidth: 48, align: 'center' },
+    { key: "sort", title: "排序", width: 32, minWidth: 32, fixed: "left", align: "center" },
+    { key: "name", title: "字段名", minWidth: 100, fixed: "left" },
+    { key: "propertyName", title: "Java属性名", minWidth: 88 },
+    { key: "type", title: "数据库类型", width: 136, minWidth: 136 },
+    { key: "javaType", title: "Java类型", width: 122, minWidth: 122 },
+    { key: "notNull", title: "非空", width: 48, minWidth: 48, align: "center" },
+    { key: "primaryKey", title: "主键", width: 48, minWidth: 48, align: "center" },
     {
-      key: 'logicDelete',
-      title: '逻辑删',
+      key: "logicDelete",
+      title: "逻辑删",
       width: 48,
       minWidth: 48,
-      align: 'center',
-      thTitle: '逻辑删除字段（软删除标记，每表最多一个）',
+      align: "center",
+      thTitle: "逻辑删除字段（软删除标记，每表最多一个）",
     },
-    { key: 'dict', title: '字典', width: 112, minWidth: 112 },
-    { key: 'comment', title: '注释', minWidth: 76 },
-  ]
+    { key: "dict", title: "字典", width: 112, minWidth: 112 },
+    { key: "comment", title: "注释", minWidth: 76 },
+  ];
   // 列选项动态列（boolean=勾选列，其余=输入列），键以 opt: 前缀避免与基础列冲突
   for (const def of settingsStore.columnOptions) {
     cols.push(
-      def.type === 'boolean'
+      def.type === "boolean"
         ? {
             key: `opt:${def.name}`,
             title: def.label,
             width: 48,
             minWidth: 48,
-            align: 'center',
+            align: "center",
             thTitle: `${def.label}：${def.remark || def.name}`,
-            thClass: 'opt-head',
+            thClass: "opt-head",
           }
         : {
             key: `opt:${def.name}`,
@@ -164,167 +164,167 @@ const fieldColumns = computed<StColumn[]>(() => {
             width: 100,
             minWidth: 100,
             thTitle: `${def.label}：${def.remark || def.name}`,
-            thClass: 'opt-head',
+            thClass: "opt-head",
           },
-    )
+    );
   }
-  cols.push({ key: 'del', title: '', width: 32, minWidth: 32, fixed: 'right' })
-  return cols
-})
+  cols.push({ key: "del", title: "", width: 32, minWidth: 32, fixed: "right" });
+  return cols;
+});
 
 /** 列选项定义反查（单元格插槽按 opt: 前缀键取回定义） */
 function optDefOf(key: string) {
-  const name = key.startsWith('opt:') ? key.slice(4) : ''
-  return settingsStore.columnOptions.find((d) => d.name === name)
+  const name = key.startsWith("opt:") ? key.slice(4) : "";
+  return settingsStore.columnOptions.find((d) => d.name === name);
 }
 
 /** 字段行键（列 id） */
 function fieldRowKey(idx: number) {
-  return draft.columns[idx]?.id ?? idx
+  return draft.columns[idx]?.id ?? idx;
 }
 
 /** 字段行附加类：拖拽指示 + 主键行标记（跨三表按 idx 统一驱动） */
 function fieldRowClass(idx: number) {
-  return [columnDrag.rowClass(idx), { 'pk-row': isPkRow(idx) }]
+  return [columnDrag.rowClass(idx), { "pk-row": isPkRow(idx) }];
 }
 
 /** 行可拖拽：拖拽手柄按下的瞬间（三张表体表同行一并置 draggable，任一处可发起） */
 function fieldDraggable(idx: number) {
-  return columnDrag.state.from === idx
+  return columnDrag.state.from === idx;
 }
 
 /** 树形表开关：开启时父ID字段默认 parent_id，关闭时清空 */
 const treeEnabled = computed({
   get: () => Boolean(draft.parentIdColumn.trim()),
   set: (v: boolean) => {
-    draft.parentIdColumn = v ? draft.parentIdColumn.trim() || 'parent_id' : ''
+    draft.parentIdColumn = v ? draft.parentIdColumn.trim() || "parent_id" : "";
   },
-})
+});
 
-const dialogOpen = computed(() => ui.tableEdit.open)
+const dialogOpen = computed(() => ui.tableEdit.open);
 
 watch(dialogOpen, (open) => {
-  if (!open) return
-  dictStore.init()
+  if (!open) return;
+  dictStore.init();
   // 索引类型选项来自应用设置（首次打开时预载）
-  settingsStore.init()
+  settingsStore.init();
   // 模板列表用于「启用模板」多选
-  templateStore.init()
-  templatesTouched.value = false
-  const state = ui.tableEdit
+  templateStore.init();
+  templatesTouched.value = false;
+  const state = ui.tableEdit;
   if (state.tableId) {
-    const t = model.tableById(state.tableId)
-    if (!t) return
-    draft.id = t.id
-    draft.categoryId = t.categoryId
-    draft.tableName = t.tableName
-    draft.className = t.className || ''
-    draft.comment = t.comment || ''
-    draft.parentIdColumn = t.parentIdColumn || ''
-    draft.x = t.x ?? 0
-    draft.y = t.y ?? 0
-    const rawTpl = (t.templates ?? '').trim()
-    templatesExplicit.value = Boolean(rawTpl)
+    const t = model.tableById(state.tableId);
+    if (!t) return;
+    draft.id = t.id;
+    draft.categoryId = t.categoryId;
+    draft.tableName = t.tableName;
+    draft.className = t.className || "";
+    draft.comment = t.comment || "";
+    draft.parentIdColumn = t.parentIdColumn || "";
+    draft.x = t.x ?? 0;
+    draft.y = t.y ?? 0;
+    const rawTpl = (t.templates ?? "").trim();
+    templatesExplicit.value = Boolean(rawTpl);
     draft.templates = rawTpl
       ? rawTpl
-          .split(',')
+          .split(",")
           .map((s) => s.trim())
           .filter(Boolean)
-      : []
-    draft.optionVals = flattenRawOptions(t.options)
+      : [];
+    draft.optionVals = flattenRawOptions(t.options);
     draft.columns = normalizePkColumn(
       model.columnsOf(t.id).map((c) => ({
         ...c,
         _optVals: flattenRawOptions(c.options),
       })),
-    )
-    draft.indexes = model.indexesOf(t.id).map((i) => ({ ...i, columns: [...i.columns] }))
-    fillOptionDefaults(draft.optionVals, settingsStore.tableOptions)
+    );
+    draft.indexes = model.indexesOf(t.id).map((i) => ({ ...i, columns: [...i.columns] }));
+    fillOptionDefaults(draft.optionVals, settingsStore.tableOptions);
     for (const col of draft.columns)
-      fillOptionDefaults((col._optVals ||= {}), settingsStore.columnOptions)
+      fillOptionDefaults((col._optVals ||= {}), settingsStore.columnOptions);
   } else {
     const world =
-      state.position ?? canvas.screenToWorld({ x: canvas.viewportW / 2, y: canvas.viewportH / 2 })
-    draft.id = ''
-    draft.categoryId = state.defaultCategoryId || model.categories[0]?.id || ''
-    draft.tableName = ''
-    draft.className = ''
-    draft.comment = ''
-    draft.parentIdColumn = ''
-    draft.x = world.x - 130
-    draft.y = world.y - 60
-    templatesExplicit.value = false
-    draft.templates = []
-    draft.optionVals = {}
+      state.position ?? canvas.screenToWorld({ x: canvas.viewportW / 2, y: canvas.viewportH / 2 });
+    draft.id = "";
+    draft.categoryId = state.defaultCategoryId || model.categories[0]?.id || "";
+    draft.tableName = "";
+    draft.className = "";
+    draft.comment = "";
+    draft.parentIdColumn = "";
+    draft.x = world.x - 130;
+    draft.y = world.y - 60;
+    templatesExplicit.value = false;
+    draft.templates = [];
+    draft.optionVals = {};
     // 新建表：首字段固定为设置约定的主键字段
-    draft.columns = [makePkColumn()]
-    draft.indexes = []
+    draft.columns = [makePkColumn()];
+    draft.indexes = [];
   }
-  draft.activeTab = 'columns'
-})
+  draft.activeTab = "columns";
+});
 
 /** 选项定义异步加载后补齐缺失默认值（不动已加载的显式值） */
 watch(
   () => settingsStore.tableOptions,
   (defs) => fillOptionDefaults(draft.optionVals, defs),
-)
+);
 watch(
   () => settingsStore.columnOptions,
   (defs) => {
-    for (const col of draft.columns) fillOptionDefaults((col._optVals ||= {}), defs)
+    for (const col of draft.columns) fillOptionDefaults((col._optVals ||= {}), defs);
   },
-)
+);
 
 /* ==================== 字段编辑 ==================== */
 
 const categoryOptions = computed(() =>
   model.categories.map((c) => ({ value: c.id, label: `${c.name}（${c.basePackage}）` })),
-)
+);
 const dictOptions = computed(() => [
-  { value: '', label: '（无字典）' },
+  { value: "", label: "（无字典）" },
   ...dictStore.dicts.map((d) => ({ value: d.dictKey, label: `${d.dictKey} · ${d.label}` })),
-])
+]);
 
-const dbTypeOptions = COMMON_DB_TYPES.map((t) => ({ value: t, label: t }))
-const javaTypeOptions = COMMON_JAVA_TYPES.map((t) => ({ value: t, label: t }))
+const dbTypeOptions = COMMON_DB_TYPES.map((t) => ({ value: t, label: t }));
+const javaTypeOptions = COMMON_JAVA_TYPES.map((t) => ({ value: t, label: t }));
 
 /* ==================== 主键与审计字段约定（来自应用设置） ==================== */
 
-const conventions = computed(() => settingsStore.fieldConventions)
+const conventions = computed(() => settingsStore.fieldConventions);
 
 /** 主键行 = 首行（固定不可修改、不可排序） */
 function isPkRow(idx: number): boolean {
-  return idx === 0
+  return idx === 0;
 }
 
 /** 依约定构造主键字段草稿 */
 function makePkColumn(): DraftColumn {
-  const pk = conventions.value.primaryKey
+  const pk = conventions.value.primaryKey;
   const col: DraftColumn = {
-    id: uid('c-'),
-    tableId: '',
+    id: uid("c-"),
+    tableId: "",
     columnName: pk.name,
     propertyName: toCamelCase(pk.name, true),
     sort: 0,
     type: pk.type,
     javaType: getJavaTypeByType(pk.type),
-    comment: '主键',
+    comment: "主键",
     notNull: true,
     primaryKey: true,
-    dict: '',
+    dict: "",
     _optVals: {},
-  }
+  };
   // 列选项默认值在创建时即补齐（设置未加载时为空列表，加载后 watch 兜底）
-  fillOptionDefaults(col._optVals, settingsStore.columnOptions)
-  return col
+  fillOptionDefaults(col._optVals, settingsStore.columnOptions);
+  return col;
 }
 
 /** 依约定构造审计字段草稿（非空约束随角色固定语义；Java 类型显式设定优先，空则按类型映射规则推导） */
 function makeAuditColumn(role: AuditFieldRole): DraftColumn {
-  const conv = conventions.value.auditFields[role]
+  const conv = conventions.value.auditFields[role];
   const col: DraftColumn = {
-    id: uid('c-'),
-    tableId: '',
+    id: uid("c-"),
+    tableId: "",
     columnName: conv.name,
     propertyName: toCamelCase(conv.name, true),
     sort: draft.columns.length,
@@ -334,11 +334,11 @@ function makeAuditColumn(role: AuditFieldRole): DraftColumn {
     comment: AUDIT_FIELD_LABELS[role],
     notNull: AUDIT_FIELD_NOT_NULL[role],
     primaryKey: false,
-    dict: '',
+    dict: "",
     _optVals: {},
-  }
-  fillOptionDefaults(col._optVals, settingsStore.columnOptions)
-  return col
+  };
+  fillOptionDefaults(col._optVals, settingsStore.columnOptions);
+  return col;
 }
 
 /**
@@ -347,204 +347,204 @@ function makeAuditColumn(role: AuditFieldRole): DraftColumn {
  * 没有则依约定补建；其余列一律清除主键标记（单一主键语义，与模板渲染假定一致）
  */
 function normalizePkColumn(cols: DraftColumn[]): DraftColumn[] {
-  const pk = conventions.value.primaryKey
-  const pkName = pk.name.trim()
-  const out = [...cols]
-  const idx = out.findIndex((c) => c.columnName.trim() === pkName)
-  let pkCol: DraftColumn
+  const pk = conventions.value.primaryKey;
+  const pkName = pk.name.trim();
+  const out = [...cols];
+  const idx = out.findIndex((c) => c.columnName.trim() === pkName);
+  let pkCol: DraftColumn;
   if (idx >= 0) {
-    ;[pkCol] = out.splice(idx, 1)
-    pkCol.columnName = pkName
-    pkCol.type = pk.type
-    pkCol.javaType = getJavaTypeByType(pk.type)
-    pkCol.notNull = true
-    pkCol.primaryKey = true
-    pkCol.propertyName = toCamelCase(pkName, true)
+    [pkCol] = out.splice(idx, 1);
+    pkCol.columnName = pkName;
+    pkCol.type = pk.type;
+    pkCol.javaType = getJavaTypeByType(pk.type);
+    pkCol.notNull = true;
+    pkCol.primaryKey = true;
+    pkCol.propertyName = toCamelCase(pkName, true);
   } else {
-    pkCol = makePkColumn()
+    pkCol = makePkColumn();
   }
-  for (const c of out) c.primaryKey = false
-  const result = [pkCol, ...out]
-  result.forEach((c, i) => (c.sort = i))
-  return result
+  for (const c of out) c.primaryKey = false;
+  const result = [pkCol, ...out];
+  result.forEach((c, i) => (c.sort = i));
+  return result;
 }
 
 /** 当前表中是否已存在指定名称的字段 */
 function hasColumnName(name: string): boolean {
-  const n = name.trim()
-  return Boolean(n) && draft.columns.some((c) => c.columnName.trim() === n)
+  const n = name.trim();
+  return Boolean(n) && draft.columns.some((c) => c.columnName.trim() === n);
 }
 
 /** 审计字段约定名列表（按当前设置） */
 const auditNames = computed(() =>
   AUDIT_FIELD_ROLES.map((role) => conventions.value.auditFields[role].name.trim()).filter(Boolean),
-)
-const allAuditPresent = computed(() => auditNames.value.every((n) => hasColumnName(n)))
-const anyAuditPresent = computed(() => auditNames.value.some((n) => hasColumnName(n)))
-const auditNamesLabel = computed(() => auditNames.value.join(' · '))
+);
+const allAuditPresent = computed(() => auditNames.value.every((n) => hasColumnName(n)));
+const anyAuditPresent = computed(() => auditNames.value.some((n) => hasColumnName(n)));
+const auditNamesLabel = computed(() => auditNames.value.join(" · "));
 
 /** 一键补齐审计字段（已存在的同名字段跳过，不动用户数据） */
 function addAuditFields() {
-  let added = 0
+  let added = 0;
   for (const role of AUDIT_FIELD_ROLES) {
-    const name = conventions.value.auditFields[role].name.trim()
-    if (!name || hasColumnName(name)) continue
-    draft.columns.push(makeAuditColumn(role))
-    added++
+    const name = conventions.value.auditFields[role].name.trim();
+    if (!name || hasColumnName(name)) continue;
+    draft.columns.push(makeAuditColumn(role));
+    added++;
   }
-  renumber()
-  if (added) message.success(`已按设置约定添加 ${added} 个审计字段`)
-  else message.info('审计字段均已存在，无需添加')
+  renumber();
+  if (added) message.success(`已按设置约定添加 ${added} 个审计字段`);
+  else message.info("审计字段均已存在，无需添加");
 }
 
 /** 一键移除审计字段（仅删约定名称匹配的列，主键首行不受影响） */
 function removeAuditFields() {
-  const names = new Set(auditNames.value)
-  const before = draft.columns.length
-  draft.columns = draft.columns.filter((c, i) => i === 0 || !names.has(c.columnName.trim()))
-  renumber()
-  const removed = before - draft.columns.length
-  if (removed) message.success(`已移除 ${removed} 个审计字段`)
-  else message.info('当前表没有约定名称的审计字段')
+  const names = new Set(auditNames.value);
+  const before = draft.columns.length;
+  draft.columns = draft.columns.filter((c, i) => i === 0 || !names.has(c.columnName.trim()));
+  renumber();
+  const removed = before - draft.columns.length;
+  if (removed) message.success(`已移除 ${removed} 个审计字段`);
+  else message.info("当前表没有约定名称的审计字段");
 }
 
 /* ---------- 逻辑删除字段（依设置约定，每表至多一个） ---------- */
 
 /** 依约定构造逻辑删除字段草稿（软删除标记 0/1，强制非空） */
 function makeLogicDeleteColumn(): DraftColumn {
-  const conv = conventions.value.logicDelete
+  const conv = conventions.value.logicDelete;
   const col: DraftColumn = {
-    id: uid('c-'),
-    tableId: '',
+    id: uid("c-"),
+    tableId: "",
     columnName: conv.name,
     propertyName: toCamelCase(conv.name, true),
     sort: draft.columns.length,
     type: conv.type,
     javaType:
       conv.javaType || (settingsStore.matchJavaType(conv.type) ?? getJavaTypeByType(conv.type)),
-    comment: '逻辑删除标记（0=正常，1=已删除）',
+    comment: "逻辑删除标记（0=正常，1=已删除）",
     notNull: true,
     primaryKey: false,
     logicDelete: true,
-    dict: '',
+    dict: "",
     _optVals: {},
-  }
-  fillOptionDefaults(col._optVals, settingsStore.columnOptions)
-  return col
+  };
+  fillOptionDefaults(col._optVals, settingsStore.columnOptions);
+  return col;
 }
 
 /** 当前逻辑删除字段（至多一个；导入/AI 脏数据可能多标，validate 兕底拦截） */
-const logicDeleteColumn = computed(() => draft.columns.find((c) => c.logicDelete === true))
+const logicDeleteColumn = computed(() => draft.columns.find((c) => c.logicDelete === true));
 
 /** 约定的逻辑删除字段名 */
-const logicDeleteName = computed(() => conventions.value.logicDelete.name.trim())
+const logicDeleteName = computed(() => conventions.value.logicDelete.name.trim());
 
 /** 逻辑删除字段约定描述（按钮行提示） */
 const logicDeleteLabel = computed(() => {
-  const conv = conventions.value.logicDelete
-  return `${conv.name} · ${conv.type}`
-})
+  const conv = conventions.value.logicDelete;
+  return `${conv.name} · ${conv.type}`;
+});
 
 /** 勾选互斥：勾选新的同时清除其他列标记（单表唯一），主键行禁止勾选 */
 function onLogicDeleteToggle(col: DraftColumn, e: Event) {
-  const checked = (e.target as HTMLInputElement).checked
+  const checked = (e.target as HTMLInputElement).checked;
   if (!checked) {
-    col.logicDelete = false
-    return
+    col.logicDelete = false;
+    return;
   }
-  let transferred = ''
+  let transferred = "";
   for (const c of draft.columns) {
     if (c !== col && c.logicDelete) {
-      c.logicDelete = false
-      transferred = c.columnName
+      c.logicDelete = false;
+      transferred = c.columnName;
     }
   }
-  col.logicDelete = true
-  if (transferred) message.info(`逻辑删除标记已从「${transferred}」转移至当前字段（每表最多一个）`)
+  col.logicDelete = true;
+  if (transferred) message.info(`逻辑删除标记已从「${transferred}」转移至当前字段（每表最多一个）`);
 }
 
 /** 一键添加逻辑删除字段：已存在同名列则直接复用打标记，否则依约定新建 */
 function addLogicDeleteField() {
-  const name = logicDeleteName.value
+  const name = logicDeleteName.value;
   if (!name) {
-    message.warning('逻辑删除字段约定名为空，请先在系统设置中配置')
-    return
+    message.warning("逻辑删除字段约定名为空，请先在系统设置中配置");
+    return;
   }
-  const existing = draft.columns.find((c) => c.columnName.trim() === name)
+  const existing = draft.columns.find((c) => c.columnName.trim() === name);
   if (existing) {
     if (existing.logicDelete) {
-      message.info(`字段「${name}」已是逻辑删除字段`)
-      return
+      message.info(`字段「${name}」已是逻辑删除字段`);
+      return;
     }
-    for (const c of draft.columns) if (c !== existing) c.logicDelete = false
-    existing.logicDelete = true
-    message.success(`已将字段「${name}」标记为逻辑删除字段`)
-    return
+    for (const c of draft.columns) if (c !== existing) c.logicDelete = false;
+    existing.logicDelete = true;
+    message.success(`已将字段「${name}」标记为逻辑删除字段`);
+    return;
   }
-  draft.columns.push(makeLogicDeleteColumn())
-  renumber()
-  message.success(`已按设置约定添加逻辑删除字段「${name}」`)
+  draft.columns.push(makeLogicDeleteColumn());
+  renumber();
+  message.success(`已按设置约定添加逻辑删除字段「${name}」`);
 }
 
 /** 删除逻辑删除字段（整列移除并重排序号；主键首行防御性仅清标记） */
 function removeLogicDeleteField() {
-  const col = logicDeleteColumn.value
+  const col = logicDeleteColumn.value;
   if (!col) {
-    message.info('当前表没有逻辑删除字段')
-    return
+    message.info("当前表没有逻辑删除字段");
+    return;
   }
-  const name = col.columnName.trim() || col.propertyName || '未命名字段'
-  const idx = draft.columns.indexOf(col)
+  const name = col.columnName.trim() || col.propertyName || "未命名字段";
+  const idx = draft.columns.indexOf(col);
   if (idx > 0) {
-    draft.columns.splice(idx, 1)
-    renumber()
-    message.success(`已删除逻辑删除字段「${name}」`)
+    draft.columns.splice(idx, 1);
+    renumber();
+    message.success(`已删除逻辑删除字段「${name}」`);
   } else {
     // 防御：主键首行不可删（正常情况下主键行不会带逻辑删除标记）
-    col.logicDelete = false
-    message.warning('主键行不可删除，已仅清除其逻辑删除标记')
+    col.logicDelete = false;
+    message.warning("主键行不可删除，已仅清除其逻辑删除标记");
   }
 }
 
 function addColumn() {
   const col: DraftColumn = {
-    id: uid('c-'),
-    tableId: '',
-    columnName: '',
-    propertyName: '',
+    id: uid("c-"),
+    tableId: "",
+    columnName: "",
+    propertyName: "",
     sort: draft.columns.length,
-    type: 'VARCHAR(50)',
-    javaType: 'String',
-    comment: '',
+    type: "VARCHAR(50)",
+    javaType: "String",
+    comment: "",
     notNull: false,
     primaryKey: false,
-    dict: '',
+    dict: "",
     _optVals: {},
-  }
+  };
   // 新建字段即补齐列选项默认值（修复：选项复选框缺省应显示为启用）
-  fillOptionDefaults(col._optVals, settingsStore.columnOptions)
-  draft.columns.push(col)
+  fillOptionDefaults(col._optVals, settingsStore.columnOptions);
+  draft.columns.push(col);
 }
 function removeColumn(idx: number) {
-  if (isPkRow(idx)) return // 主键首行不可删除
-  draft.columns.splice(idx, 1)
-  renumber()
+  if (isPkRow(idx)) return; // 主键首行不可删除
+  draft.columns.splice(idx, 1);
+  renumber();
 }
 
 /* 字段拖拽排序（手柄触发，替代上移/下移按钮；主键首行锁定不可拖、不可插入其上方） */
-const columnDrag = useDragSort(() => draft.columns, renumber, { lockCount: 1 })
+const columnDrag = useDragSort(() => draft.columns, renumber, { lockCount: 1 });
 function renumber() {
-  draft.columns.forEach((c, i) => (c.sort = i))
+  draft.columns.forEach((c, i) => (c.sort = i));
 }
 function onColumnName(col: DraftColumn) {
-  if (!col._propTouched) col.propertyName = toCamelCase(col.columnName, true)
+  if (!col._propTouched) col.propertyName = toCamelCase(col.columnName, true);
 }
 function onTypeChange(col: DraftColumn) {
-  if (!col._javaTouched) col.javaType = getJavaTypeByType(col.type)
+  if (!col._javaTouched) col.javaType = getJavaTypeByType(col.type);
 }
 function onTableNameBlur() {
   if (!isEdit.value && !draft.className.trim() && draft.tableName.trim()) {
-    draft.className = toCamelCase(draft.tableName)
+    draft.className = toCamelCase(draft.tableName);
   }
 }
 
@@ -552,49 +552,49 @@ function onTableNameBlur() {
 
 function addIndex() {
   draft.indexes.push({
-    id: uid('i-'),
-    tableId: '',
-    indexName: '',
-    type: 'NORMAL',
+    id: uid("i-"),
+    tableId: "",
+    indexName: "",
+    type: "NORMAL",
     columns: [],
-    comment: '',
-  })
+    comment: "",
+  });
 }
 function removeIndex(idx: number) {
-  draft.indexes.splice(idx, 1)
+  draft.indexes.splice(idx, 1);
 }
 const indexTypeOptions = computed(() =>
   settingsStore.indexTypeOptions.map((v) => ({ value: v, label: v })),
-)
+);
 const columnSelectOptions = computed(() =>
   draft.columns
     .filter((c) => c.columnName.trim())
     .map((c) => ({ value: c.columnName, label: c.columnName })),
-)
+);
 
 /* ==================== 导航列表（实时来自 store） ==================== */
 
-const tableNavs = computed(() => (draft.id ? model.navigatesOf(draft.id) : []))
+const tableNavs = computed(() => (draft.id ? model.navigatesOf(draft.id) : []));
 
 function navView(nav: (typeof tableNavs.value)[number]) {
-  const isSelf = nav.self === draft.id
-  const type = isSelf ? nav.type : flipNavigateType(nav.type)
+  const isSelf = nav.self === draft.id;
+  const type = isSelf ? nav.type : flipNavigateType(nav.type);
   return {
     id: nav.id,
     type,
     typeLabel: NAVIGATE_TYPE_LABEL[type],
-    selfName: model.tableById(nav.self)?.tableName ?? '?',
-    targetName: model.tableById(nav.target)?.tableName ?? '?',
+    selfName: model.tableById(nav.self)?.tableName ?? "?",
+    targetName: model.tableById(nav.target)?.tableName ?? "?",
     selfProp: nav.selfPropertyName,
     targetProp: nav.targetPropertyName,
     cascadeAB: CASCADE_LABEL[nav.selfToTargetCascade],
     cascadeBA: CASCADE_LABEL[nav.targetToSelfCascade],
-  }
+  };
 }
 
 async function deleteNavigate(id: string) {
-  await model.removeNavigate(id)
-  message.success('导航已删除')
+  await model.removeNavigate(id);
+  message.success("导航已删除");
 }
 
 /* 父ID字段候选：当前字段列表 */
@@ -602,74 +602,74 @@ const parentColumnOptions = computed(() =>
   draft.columns
     .filter((c) => c.columnName.trim())
     .map((c) => ({ value: c.columnName, label: c.columnName })),
-)
+);
 
 /* ==================== 校验与保存 ==================== */
 
-const saving = reactive({ loading: false })
+const saving = reactive({ loading: false });
 
 function validate(): string | null {
-  if (!draft.categoryId) return '请选择所属分类'
-  if (!draft.tableName.trim()) return '表名不能为空'
+  if (!draft.categoryId) return "请选择所属分类";
+  if (!draft.tableName.trim()) return "表名不能为空";
   const dupName = model.tables.find(
     (t) => t.tableName === draft.tableName.trim() && t.id !== draft.id,
-  )
-  if (dupName) return `表名已存在：${draft.tableName}`
+  );
+  if (dupName) return `表名已存在：${draft.tableName}`;
   // 主键不变量：首字段固定为设置约定的主键字段（正常交互下构造保证，此为兑底校验）
-  const pkName = conventions.value.primaryKey.name.trim()
+  const pkName = conventions.value.primaryKey.name.trim();
   if (!draft.columns.length || draft.columns[0].columnName.trim() !== pkName) {
-    return `首字段必须为主键字段「${pkName}」（可在系统设置中调整约定）`
+    return `首字段必须为主键字段「${pkName}」（可在系统设置中调整约定）`;
   }
-  const names = new Set<string>()
+  const names = new Set<string>();
   for (const c of draft.columns) {
-    if (!c.columnName.trim()) return '存在空字段名'
-    if (names.has(c.columnName)) return `字段名重复：${c.columnName}`
-    names.add(c.columnName)
+    if (!c.columnName.trim()) return "存在空字段名";
+    if (names.has(c.columnName)) return `字段名重复：${c.columnName}`;
+    names.add(c.columnName);
   }
   // 逻辑删除字段唯一性兕底（交互勾选已互斥；拦截导入/AI 构造的多标数据）
   if (draft.columns.filter((c) => c.logicDelete === true).length > 1)
-    return '逻辑删除字段最多只能有一个，请取消多余的标记'
-  const idxNames = new Set<string>()
+    return "逻辑删除字段最多只能有一个，请取消多余的标记";
+  const idxNames = new Set<string>();
   for (const i of draft.indexes) {
-    if (!i.indexName.trim()) return '存在空索引名'
-    if (idxNames.has(i.indexName)) return `索引名重复：${i.indexName}`
-    idxNames.add(i.indexName)
-    if (!i.columns.length) return `索引 ${i.indexName} 未选择字段`
+    if (!i.indexName.trim()) return "存在空索引名";
+    if (idxNames.has(i.indexName)) return `索引名重复：${i.indexName}`;
+    idxNames.add(i.indexName);
+    if (!i.columns.length) return `索引 ${i.indexName} 未选择字段`;
     for (const col of i.columns) {
-      if (!names.has(col)) return `索引 ${i.indexName} 引用了不存在的字段：${col}`
+      if (!names.has(col)) return `索引 ${i.indexName} 引用了不存在的字段：${col}`;
     }
   }
   if (treeEnabled.value) {
-    const parentCol = draft.parentIdColumn.trim()
-    if (!parentCol) return '树形表需填写父ID字段'
-    if (!names.has(parentCol)) return `树形父ID字段「${parentCol}」不存在，请先在字段列表中添加`
+    const parentCol = draft.parentIdColumn.trim();
+    if (!parentCol) return "树形表需填写父ID字段";
+    if (!names.has(parentCol)) return `树形父ID字段「${parentCol}」不存在，请先在字段列表中添加`;
   }
   // 启用模板：空字符串语义为「启用全部」，无法表达「一个都不启用」——手动取消全部时拦截
   if (templateStore.templates.length && templatesSelected.value.length === 0) {
-    return '启用模板不能为空（全选即启用全部模板）'
+    return "启用模板不能为空（全选即启用全部模板）";
   }
-  return null
+  return null;
 }
 
 async function save() {
-  const err = validate()
+  const err = validate();
   if (err) {
-    message.warning(err)
-    return
+    message.warning(err);
+    return;
   }
-  saving.loading = true
+  saving.loading = true;
   try {
     // 全选（或模板列表为空）→ 存 undefined（启用全部）；否则存逗号分割的显式列表
     const templatesStr =
       templateStore.templates.length &&
       templatesSelected.value.length !== templateStore.templateNames.length
-        ? templatesSelected.value.join(',')
-        : undefined
+        ? templatesSelected.value.join(",")
+        : undefined;
     const tableOptions = buildOptionRecord(
       draft.optionVals,
       settingsStore.tableOptions,
       (name, value) => ({ tableId: draft.id, name, value }),
-    )
+    );
     const columns = draft.columns.map((c) => ({
       id: c.id,
       tableId: draft.id,
@@ -678,25 +678,25 @@ async function save() {
       sort: c.sort,
       type: c.type,
       javaType: c.javaType || getJavaTypeByType(c.type),
-      comment: c.comment || '',
+      comment: c.comment || "",
       notNull: c.notNull,
       primaryKey: c.primaryKey,
       logicDelete: c.logicDelete === true ? true : undefined,
-      dict: c.dict || '',
+      dict: c.dict || "",
       options: buildOptionRecord(c._optVals || {}, settingsStore.columnOptions, (name, value) => ({
         columnId: c.id,
         name,
         value,
       })),
-    }))
+    }));
     const indexes = draft.indexes.map((i) => ({
       id: i.id,
       tableId: draft.id,
       indexName: i.indexName.trim(),
       type: i.type,
       columns: [...i.columns],
-      comment: i.comment || '',
-    }))
+      comment: i.comment || "",
+    }));
     if (isEdit.value) {
       await model.saveTable({
         id: draft.id,
@@ -711,8 +711,8 @@ async function save() {
         options: tableOptions,
         columns,
         indexes,
-      })
-      message.success(`表「${draft.tableName}」已更新`)
+      });
+      message.success(`表「${draft.tableName}」已更新`);
     } else {
       const newId = await model.createTable({
         categoryId: draft.categoryId,
@@ -726,16 +726,16 @@ async function save() {
         options: tableOptions,
         columns,
         indexes,
-      })
-      canvas.setSelection([newId])
-      canvas.centerOnTable(newId)
-      message.success(`表「${draft.tableName}」已创建`)
+      });
+      canvas.setSelection([newId]);
+      canvas.centerOnTable(newId);
+      message.success(`表「${draft.tableName}」已创建`);
     }
-    ui.closeTableEdit()
+    ui.closeTableEdit();
   } catch (e: unknown) {
-    message.error((e as Error)?.message || '保存失败')
+    message.error((e as Error)?.message || "保存失败");
   } finally {
-    saving.loading = false
+    saving.loading = false;
   }
 }
 </script>

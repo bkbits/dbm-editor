@@ -3,73 +3,73 @@
  * 模板选择对话框：代码生成 / 代码替换前，让用户勾选本次参与的模板（默认全部选中）。
  * 确认后回传所选模板名称列表；与表级「启用模板」（Table.templates）取交集后生效。
  */
-import { computed, ref, watch } from 'vue'
-import { FileCode } from '@lucide/vue'
-import { useTemplateStore } from '@/stores/template'
+import { computed, ref, watch } from "vue";
+import { FileCode } from "@lucide/vue";
+import { useTemplateStore } from "@/stores/template";
 
 const props = defineProps<{
-  open: boolean
+  open: boolean;
   /** generate：生成并下载 zip；replace：进入替换确认流程 */
-  mode: 'generate' | 'replace'
-}>()
+  mode: "generate" | "replace";
+}>();
 
 const emit = defineEmits<{
-  (e: 'update:open', v: boolean): void
-  (e: 'confirm', templateNames: string[], dictEnabled: boolean): void
-}>()
+  (e: "update:open", v: boolean): void;
+  (e: "confirm", templateNames: string[], dictEnabled: boolean): void;
+}>();
 
-const templateStore = useTemplateStore()
+const templateStore = useTemplateStore();
 
 /** 所选模板名称（打开时重置为全部选中） */
-const checked = ref<string[]>([])
+const checked = ref<string[]>([]);
 
 /** 是否生成字典分类模板代码（每个字典分类一个文件；默认生成） */
-const dictEnabled = ref(true)
+const dictEnabled = ref(true);
 
 watch(
   () => props.open,
   (open) => {
-    if (!open) return
-    templateStore.init()
-    checked.value = [...templateStore.templateNames]
-    dictEnabled.value = true
+    if (!open) return;
+    templateStore.init();
+    checked.value = [...templateStore.templateNames];
+    dictEnabled.value = true;
   },
-)
+);
 
 /** 模板列表异步加载后保持「全选」默认态（尚未手动改动时） */
 watch(
   () => templateStore.templateNames,
   (names) => {
-    if (props.open && !checked.value.length) checked.value = [...names]
+    if (props.open && !checked.value.length) checked.value = [...names];
   },
-)
+);
 
-const templates = computed(() => templateStore.templates)
+const templates = computed(() => templateStore.templates);
 
 const allChecked = computed(
   () => templates.value.length > 0 && checked.value.length === templates.value.length,
-)
+);
 
 function toggleAll() {
-  checked.value = allChecked.value ? [] : [...templateStore.templateNames]
+  checked.value = allChecked.value ? [] : [...templateStore.templateNames];
 }
 
 function toggleOne(name: string, v: boolean) {
   if (v) {
-    if (!checked.value.includes(name)) checked.value = [...checked.value, name]
+    if (!checked.value.includes(name)) checked.value = [...checked.value, name];
   } else {
-    checked.value = checked.value.filter((n) => n !== name)
+    checked.value = checked.value.filter((n) => n !== name);
   }
 }
 
 function onCancel() {
-  emit('update:open', false)
+  emit("update:open", false);
 }
 
 function onConfirm() {
-  if (!checked.value.length && !dictEnabled.value) return
-  emit('confirm', [...checked.value], dictEnabled.value)
-  emit('update:open', false)
+  if (!checked.value.length && !dictEnabled.value) return;
+  emit("confirm", [...checked.value], dictEnabled.value);
+  emit("update:open", false);
 }
 </script>
 
@@ -85,7 +85,7 @@ function onConfirm() {
     <template #footer>
       <a-button @click="onCancel">取消</a-button>
       <a-button type="primary" :disabled="!checked.length && !dictEnabled" @click="onConfirm">
-        {{ mode === 'generate' ? '生成并下载' : '下一步：确认替换' }}
+        {{ mode === "generate" ? "生成并下载" : "下一步：确认替换" }}
       </a-button>
     </template>
 

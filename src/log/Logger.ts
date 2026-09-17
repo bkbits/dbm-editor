@@ -25,85 +25,85 @@
  */
 
 /** 日志级别：DISABLED 表示完全关闭日志输出 */
-export type LogLevel = 'DEBUG' | 'INFO' | 'WARN' | 'ERROR' | 'FATAL' | 'DISABLED'
+export type LogLevel = "DEBUG" | "INFO" | "WARN" | "ERROR" | "FATAL" | "DISABLED";
 
 /** 级别权重（越大越严重；DISABLED 无权重、直接短路屏蔽） */
-const WEIGHT: Record<Exclude<LogLevel, 'DISABLED'>, number> = {
+const WEIGHT: Record<Exclude<LogLevel, "DISABLED">, number> = {
   DEBUG: 10,
   INFO: 20,
   WARN: 30,
   ERROR: 40,
   FATAL: 50,
-}
+};
 
 /** 当前级别：模块级闭包变量（方法被解构调用时不依赖 this，依然正确） */
-let currentLevel: LogLevel = import.meta.env.DEV ? 'DEBUG' : 'INFO'
+let currentLevel: LogLevel = import.meta.env.DEV ? "DEBUG" : "INFO";
 
 /** 目标级别是否达到当前级别门槛（DISABLED 恒为否） */
-function enabled(level: Exclude<LogLevel, 'DISABLED'>): boolean {
-  if (currentLevel === 'DISABLED') return false
-  return WEIGHT[currentLevel] <= WEIGHT[level]
+function enabled(level: Exclude<LogLevel, "DISABLED">): boolean {
+  if (currentLevel === "DISABLED") return false;
+  return WEIGHT[currentLevel] <= WEIGHT[level];
 }
 
 /** 时间戳 [HH:mm:ss.SSS] */
 function stamp(): string {
-  const d = new Date()
-  const pad = (n: number, w = 2) => String(n).padStart(w, '0')
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}`
+  const d = new Date();
+  const pad = (n: number, w = 2) => String(n).padStart(w, "0");
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}`;
 }
 
 export const Logger = {
   /** 读取 / 设置当前级别（Logger.level = 'WARN' 与 setLevel 等价） */
   get level(): LogLevel {
-    return currentLevel
+    return currentLevel;
   },
   set level(level: LogLevel) {
-    currentLevel = level
+    currentLevel = level;
   },
 
   /** 设置日志级别（DEBUG / INFO / WARN / ERROR / FATAL / DISABLED） */
   setLevel(level: LogLevel): void {
-    currentLevel = level
+    currentLevel = level;
   },
 
   /** 当前日志级别 */
   getLevel(): LogLevel {
-    return currentLevel
+    return currentLevel;
   },
 
   /** 无级别输出：未禁用即打印（不参与级别过滤，等同 console.log 定位） */
   log(...args: unknown[]): void {
-    if (currentLevel === 'DISABLED') return
-    console.log(`[${stamp()}] [LOG]`, ...args)
+    if (currentLevel === "DISABLED") return;
+    console.log(`[${stamp()}] [LOG]`, ...args);
   },
 
   /** DEBUG 级输出（细粒度追踪，如契约方法的入参 / 返回） */
   debug(...args: unknown[]): void {
-    if (!enabled('DEBUG')) return
-    console.log(`[${stamp()}] [DEBUG]`, ...args)
+    if (!enabled("DEBUG")) return;
+    console.log(`[${stamp()}] [DEBUG]`, ...args);
   },
 
   /** INFO 级输出 */
   info(...args: unknown[]): void {
-    if (!enabled('INFO')) return
-    console.info(`[${stamp()}] [INFO]`, ...args)
+    if (!enabled("INFO")) return;
+    console.info(`[${stamp()}] [INFO]`, ...args);
   },
 
   /** WARN 级输出 */
   warn(...args: unknown[]): void {
-    if (!enabled('WARN')) return
-    console.warn(`[${stamp()}] [WARN]`, ...args)
+    if (!enabled("WARN")) return;
+    console.warn(`[${stamp()}] [WARN]`, ...args);
   },
 
   /** ERROR 级输出 */
   error(...args: unknown[]): void {
-    if (!enabled('ERROR')) return
-    console.error(`[${stamp()}] [ERROR]`, ...args)
+    if (!enabled("ERROR")) return;
+    console.error(`[${stamp()}] [ERROR]`, ...args);
   },
 
   /** FATAL 级输出（最高级别；控制台无 fatal 通道，按 error 通道 + [FATAL] 标签输出） */
   fatal(...args: unknown[]): void {
-    if (!enabled('FATAL')) return
-    console.error(`[${stamp()}] [FATAL]`, ...args)
+    if (!enabled("FATAL")) return;
+    console.error(`[${stamp()}] [FATAL]`, ...args);
   },
-}
+};

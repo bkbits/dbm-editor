@@ -1,85 +1,87 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import { message } from 'antdv-next'
-import { Copy } from '@lucide/vue'
-import { useUiStore } from '@/stores/ui'
-import { useModelStore } from '@/stores/model'
-import { useTemplateStore } from '@/stores/template'
-import { highlightCode, resolveLanguage } from '@/utils/highlight'
+import { computed, ref, watch } from "vue";
+import { message } from "antdv-next";
+import { Copy } from "@lucide/vue";
+import { useUiStore } from "@/stores/ui";
+import { useModelStore } from "@/stores/model";
+import { useTemplateStore } from "@/stores/template";
+import { highlightCode, resolveLanguage } from "@/utils/highlight";
 
-const ui = useUiStore()
-const model = useModelStore()
-const templateStore = useTemplateStore()
+const ui = useUiStore();
+const model = useModelStore();
+const templateStore = useTemplateStore();
 
-const dialogOpen = computed(() => ui.codePreview.open)
+const dialogOpen = computed(() => ui.codePreview.open);
 
-const tableId = ref('')
-const activeTemplate = ref('')
+const tableId = ref("");
+const activeTemplate = ref("");
 
 const tableOptions = computed(() =>
   model.tables.map((t) => ({
     value: t.id,
-    label: `${t.tableName}${t.comment ? `（${t.comment}）` : ''}`,
+    label: `${t.tableName}${t.comment ? `（${t.comment}）` : ""}`,
   })),
-)
+);
 
-const templates = computed(() => templateStore.templates)
+const templates = computed(() => templateStore.templates);
 
 watch(dialogOpen, (open) => {
-  if (!open) return
-  templateStore.init()
-  tableId.value = ui.codePreview.tableId || model.tables[0]?.id || ''
-  activeTemplate.value = templateStore.templates[0]?.name ?? ''
-})
+  if (!open) return;
+  templateStore.init();
+  tableId.value = ui.codePreview.tableId || model.tables[0]?.id || "";
+  activeTemplate.value = templateStore.templates[0]?.name ?? "";
+});
 
 /** 模板异步加载完成后，确保选中有效模板 */
 watch(
   () => templateStore.templates,
   (tpls) => {
     if (!tpls.some((t) => t.name === activeTemplate.value)) {
-      activeTemplate.value = tpls[0]?.name ?? ''
+      activeTemplate.value = tpls[0]?.name ?? "";
     }
   },
   { immediate: true },
-)
+);
 
 watch(tableId, () => {
   // 切换表后保持模板选择
-})
+});
 
-const currentTemplate = computed(() => templates.value.find((t) => t.name === activeTemplate.value))
+const currentTemplate = computed(() =>
+  templates.value.find((t) => t.name === activeTemplate.value),
+);
 
 const renderOutput = computed(() => {
-  if (!tableId.value || !currentTemplate.value) return null
-  return templateStore.renderFor(currentTemplate.value, tableId.value)
-})
+  if (!tableId.value || !currentTemplate.value) return null;
+  return templateStore.renderFor(currentTemplate.value, tableId.value);
+});
 
 const renderedHtml = computed(() => {
-  const out = renderOutput.value
-  if (!out) return ''
-  return highlightCode(out.result || '', resolveLanguage(out.fileName, out.language))
-})
+  const out = renderOutput.value;
+  if (!out) return "";
+  return highlightCode(out.result || "", resolveLanguage(out.fileName, out.language));
+});
 
 const meta = computed(() => {
-  const out = renderOutput.value
-  if (!out) return null
+  const out = renderOutput.value;
+  if (!out) return null;
   return {
     fileName: out.fileName,
     filePath: out.filePath,
     error: out.error,
     /** 实际生效的高亮语言（显式指定优先，否则按后缀自动识别） */
     language: resolveLanguage(out.fileName, out.language),
-  }
-})
+  };
+});
 
 async function copyCode() {
-  const code = renderOutput.value?.result || ''
-  if (!code) return
+  const code = renderOutput.value?.result || "";
+  if (!code) return;
   try {
-    await navigator.clipboard.writeText(code)
-    message.success('代码已复制到剪贴板')
+    await navigator.clipboard.writeText(code);
+    message.success("代码已复制到剪贴板");
   } catch {
-    message.error('复制失败，请手动选择复制')
+    message.error("复制失败，请手动选择复制");
   }
 }
 </script>

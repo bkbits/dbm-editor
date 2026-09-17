@@ -8,5 +8,5 @@
  * vue / antdv-next / @lucide/vue 为外部依赖（peerDependencies），
  * 由宿主项目提供，不打包进产物。
  */
-export { default as DBManagerView } from './views/DBManagerView.vue'
-export type * from './types/model'
+export { default as DBManagerView } from "./views/DBManagerView.vue";
+export type * from "./types/model";

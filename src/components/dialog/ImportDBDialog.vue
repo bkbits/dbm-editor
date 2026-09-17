@@ -1,96 +1,96 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
-import { message } from 'antdv-next'
-import type { DBTable } from '@/types/model'
-import { useUiStore } from '@/stores/ui'
-import { useModelStore } from '@/stores/model'
-import { useCanvasStore } from '@/stores/canvas'
-import { useSettingsStore } from '@/stores/settings'
-import { useManagerApi, errorMessageOf } from '@/api/manager-api'
-import { getJavaTypeByType } from '@/utils/javaType'
+import { computed, reactive, ref, watch } from "vue";
+import { message } from "antdv-next";
+import type { DBTable } from "@/types/model";
+import { useUiStore } from "@/stores/ui";
+import { useModelStore } from "@/stores/model";
+import { useCanvasStore } from "@/stores/canvas";
+import { useSettingsStore } from "@/stores/settings";
+import { useManagerApi, errorMessageOf } from "@/api/manager-api";
+import { getJavaTypeByType } from "@/utils/javaType";
 
-const ui = useUiStore()
-const model = useModelStore()
-const canvas = useCanvasStore()
-const settingsStore = useSettingsStore()
-const api = useManagerApi()
+const ui = useUiStore();
+const model = useModelStore();
+const canvas = useCanvasStore();
+const settingsStore = useSettingsStore();
+const api = useManagerApi();
 
-const dialogOpen = computed(() => ui.importDB.open)
+const dialogOpen = computed(() => ui.importDB.open);
 
-const loading = reactive({ fetching: false, importing: false })
-const dbTables = ref<DBTable[]>([])
-const selected = reactive(new Set<string>())
-const categoryId = ref('')
+const loading = reactive({ fetching: false, importing: false });
+const dbTables = ref<DBTable[]>([]);
+const selected = reactive(new Set<string>());
+const categoryId = ref("");
 
 async function fetchDefs() {
-  loading.fetching = true
+  loading.fetching = true;
   try {
-    dbTables.value = await api.value.importFromDB()
-    selected.clear()
+    dbTables.value = await api.value.importFromDB();
+    selected.clear();
   } catch (e) {
-    message.error(errorMessageOf(e, '查询数据库结构失败'))
+    message.error(errorMessageOf(e, "查询数据库结构失败"));
   } finally {
-    loading.fetching = false
+    loading.fetching = false;
   }
 }
 
 watch(dialogOpen, (open) => {
   if (open) {
-    categoryId.value = model.categories[0]?.id ?? ''
-    if (!dbTables.value.length) fetchDefs()
+    categoryId.value = model.categories[0]?.id ?? "";
+    if (!dbTables.value.length) fetchDefs();
     // 列默认类型规则预取：导入字段 Java 类型默认值由设置规则推导
-    settingsStore.init()
+    settingsStore.init();
   }
-})
+});
 
 const categoryOptions = computed(() =>
   model.categories.map((c) => ({ value: c.id, label: `${c.name}（${c.basePackage}）` })),
-)
+);
 
 function toggle(tableName: string) {
-  if (selected.has(tableName)) selected.delete(tableName)
-  else selected.add(tableName)
+  if (selected.has(tableName)) selected.delete(tableName);
+  else selected.add(tableName);
 }
 
-const canImport = computed(() => Boolean(categoryId.value) && selected.size > 0)
+const canImport = computed(() => Boolean(categoryId.value) && selected.size > 0);
 
 /** 字段 Java 类型预览：设置规则第一条命中优先，未命中回退内置映射 */
 function previewJavaType(type: string): string {
-  if (!settingsStore.loaded) return ''
-  return settingsStore.matchJavaType(type) ?? getJavaTypeByType(type)
+  if (!settingsStore.loaded) return "";
+  return settingsStore.matchJavaType(type) ?? getJavaTypeByType(type);
 }
 
 /** 悬停预览：字段推导 + 索引归一化结果 */
 function columnPreview(t: DBTable): string {
   const lines = t.columns.map((c) => {
-    const jt = previewJavaType(c.type)
-    return jt ? `${c.columnName}  ${c.type} → ${jt}` : `${c.columnName}  ${c.type}`
-  })
-  const types = settingsStore.indexTypeOptions
+    const jt = previewJavaType(c.type);
+    return jt ? `${c.columnName}  ${c.type} → ${jt}` : `${c.columnName}  ${c.type}`;
+  });
+  const types = settingsStore.indexTypeOptions;
   for (const idx of t.indexes || []) {
-    const raw = String(idx.type || '')
+    const raw = String(idx.type || "")
       .trim()
-      .toUpperCase()
-    const normalized = types.includes(raw) ? raw : types[0]
-    lines.push(`[索引] ${idx.indexName}  ${idx.type} → ${normalized}（${idx.columns.join(', ')}）`)
+      .toUpperCase();
+    const normalized = types.includes(raw) ? raw : types[0];
+    lines.push(`[索引] ${idx.indexName}  ${idx.type} → ${normalized}（${idx.columns.join(", ")}）`);
   }
-  return lines.join('\n')
+  return lines.join("\n");
 }
 
 async function doImport() {
-  if (!canImport.value) return
-  loading.importing = true
+  if (!canImport.value) return;
+  loading.importing = true;
   try {
-    const defs = dbTables.value.filter((t) => selected.has(t.tableName))
-    const ids = await model.importFromDB(categoryId.value, defs)
-    message.success(`已从数据库导入 ${ids.length} 张表`)
-    ui.closeImportDB()
-    canvas.setSelection(ids)
-    if (ids.length) canvas.fitAll()
+    const defs = dbTables.value.filter((t) => selected.has(t.tableName));
+    const ids = await model.importFromDB(categoryId.value, defs);
+    message.success(`已从数据库导入 ${ids.length} 张表`);
+    ui.closeImportDB();
+    canvas.setSelection(ids);
+    if (ids.length) canvas.fitAll();
   } catch (e) {
-    message.error(errorMessageOf(e, '导入失败'))
+    message.error(errorMessageOf(e, "导入失败"));
   } finally {
-    loading.importing = false
+    loading.importing = false;
   }
 }
 </script>

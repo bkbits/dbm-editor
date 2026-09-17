@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
-import { message } from 'antdv-next'
+import { computed, reactive, ref, watch } from "vue";
+import { message } from "antdv-next";
 import {
   Bot,
   Plus,
@@ -14,156 +14,156 @@ import {
   SlidersHorizontal,
   KeyRound,
   RotateCcw,
-} from '@lucide/vue'
-import type { FieldConventions, OptionSetting, TypeMapping } from '@/types/model'
-import { useSettingsStore, SETTINGS_JAVA_TYPES } from '@/stores/settings'
-import { errorMessageOf } from '@/api/manager-api'
-import AiSettingsSection from '@/components/settings/AiSettingsSection.vue'
-import { useDragSort } from '@/composables/useDragSort'
-import { uid } from '@/utils/id'
-import { getJavaTypeByType, COMMON_DB_TYPES } from '@/utils/javaType'
+} from "@lucide/vue";
+import type { FieldConventions, OptionSetting, TypeMapping } from "@/types/model";
+import { useSettingsStore, SETTINGS_JAVA_TYPES } from "@/stores/settings";
+import { errorMessageOf } from "@/api/manager-api";
+import AiSettingsSection from "@/components/settings/AiSettingsSection.vue";
+import { useDragSort } from "@/composables/useDragSort";
+import { uid } from "@/utils/id";
+import { getJavaTypeByType, COMMON_DB_TYPES } from "@/utils/javaType";
 import {
   AUDIT_FIELD_LABELS,
   AUDIT_FIELD_NOT_NULL,
   AUDIT_FIELD_ROLES,
   DEFAULT_FIELD_CONVENTIONS,
   normalizeFieldConventions,
-} from '@/utils/fieldConvention'
+} from "@/utils/fieldConvention";
 
-const settingsStore = useSettingsStore()
+const settingsStore = useSettingsStore();
 
 /* ==================== 规则草稿（保存前本地编辑，带稳定 key） ==================== */
 
 interface TypeMappingDraft extends TypeMapping {
-  key: string // 客户端稳定 key（拖拽/编辑期间保持 DOM 复用，保存时剥离）
+  key: string; // 客户端稳定 key（拖拽/编辑期间保持 DOM 复用，保存时剥离）
 }
 
-const rules = ref<TypeMappingDraft[]>([])
+const rules = ref<TypeMappingDraft[]>([]);
 
 watch(
   () => settingsStore.typeMappings,
   (v) => {
-    rules.value = (v || []).map((m) => ({ ...m, key: uid('mapping-') }))
+    rules.value = (v || []).map((m) => ({ ...m, key: uid("mapping-") }));
   },
   { immediate: true },
-)
+);
 
 /* 规则顺序即匹配优先级（sort 升序），拖拽手柄排序后按位置重编号 */
 const drag = useDragSort(
   () => rules.value,
   () => {
-    rules.value.forEach((m, i) => (m.sort = i))
+    rules.value.forEach((m, i) => (m.sort = i));
   },
-)
+);
 
 function addRule() {
-  rules.value.push({ ...settingsStore.newMappingDraft(), key: uid('mapping-') })
+  rules.value.push({ ...settingsStore.newMappingDraft(), key: uid("mapping-") });
 }
 function removeRule(idx: number) {
-  rules.value.splice(idx, 1)
-  rules.value.forEach((m, i) => (m.sort = i))
+  rules.value.splice(idx, 1);
+  rules.value.forEach((m, i) => (m.sort = i));
 }
 
-const javaTypeOptions = SETTINGS_JAVA_TYPES.map((t) => ({ value: t, label: t }))
+const javaTypeOptions = SETTINGS_JAVA_TYPES.map((t) => ({ value: t, label: t }));
 
 /* ==================== 正则校验 ==================== */
 
 function regexError(rule: TypeMapping): string | null {
-  const pattern = String(rule.pattern ?? '').trim()
-  if (!pattern) return '正则不能为空'
+  const pattern = String(rule.pattern ?? "").trim();
+  if (!pattern) return "正则不能为空";
   try {
-    new RegExp(pattern, 'i')
-    return null
+    new RegExp(pattern, "i");
+    return null;
   } catch {
-    return '无效的正则表达式'
+    return "无效的正则表达式";
   }
 }
 
-const invalidCount = computed(() => rules.value.filter((r) => regexError(r)).length)
+const invalidCount = computed(() => rules.value.filter((r) => regexError(r)).length);
 
 /* ==================== 规则测试（实时，含未保存修改） ==================== */
 
-const testType = ref('VARCHAR(255)')
-const testTypeOptions = COMMON_DB_TYPES.map((t) => ({ value: t }))
+const testType = ref("VARCHAR(255)");
+const testTypeOptions = COMMON_DB_TYPES.map((t) => ({ value: t }));
 
 /** 编译草稿规则（跳过非法），返回 [index, regex, javaType] */
 const compiled = computed(() => {
-  const out: Array<{ index: number; re: RegExp; javaType: string }> = []
+  const out: Array<{ index: number; re: RegExp; javaType: string }> = [];
   rules.value.forEach((r, index) => {
-    if (regexError(r)) return
-    out.push({ index, re: new RegExp(r.pattern, 'i'), javaType: r.javaType })
-  })
-  return out
-})
+    if (regexError(r)) return;
+    out.push({ index, re: new RegExp(r.pattern, "i"), javaType: r.javaType });
+  });
+  return out;
+});
 
-const testRaw = computed(() => testType.value.trim())
+const testRaw = computed(() => testType.value.trim());
 
 /** 第一条命中（依序匹配语义） */
 const firstHit = computed(() => {
-  if (!testRaw.value) return null
+  if (!testRaw.value) return null;
   for (const c of compiled.value) {
-    if (c.re.test(testRaw.value)) return c
+    if (c.re.test(testRaw.value)) return c;
   }
-  return null
-})
+  return null;
+});
 
 /** 某行规则是否也命中测试输入（用于区分"生效/被抢先"） */
 function rowMatch(idx: number): boolean {
-  if (!testRaw.value) return false
-  const c = compiled.value.find((x) => x.index === idx)
-  return Boolean(c && c.re.test(testRaw.value))
+  if (!testRaw.value) return false;
+  const c = compiled.value.find((x) => x.index === idx);
+  return Boolean(c && c.re.test(testRaw.value));
 }
 
 /** 回退结果（无任何命中时导入将使用内置映射） */
-const fallbackType = computed(() => (testRaw.value ? getJavaTypeByType(testRaw.value) : ''))
+const fallbackType = computed(() => (testRaw.value ? getJavaTypeByType(testRaw.value) : ""));
 
 /* ==================== 索引类型草稿 ==================== */
 
-const indexTypes = ref<string[]>([])
-const newIndexType = ref('')
+const indexTypes = ref<string[]>([]);
+const newIndexType = ref("");
 
 watch(
   () => settingsStore.indexTypes,
   (v) => {
-    indexTypes.value = (v || []).map(String)
+    indexTypes.value = (v || []).map(String);
   },
   { immediate: true },
-)
+);
 
 function addIndexType() {
-  const v = newIndexType.value.trim().toUpperCase()
+  const v = newIndexType.value.trim().toUpperCase();
   if (!v) {
-    message.warning('索引类型不能为空')
-    return
+    message.warning("索引类型不能为空");
+    return;
   }
   if (indexTypes.value.includes(v)) {
-    message.warning(`索引类型已存在：${v}`)
-    return
+    message.warning(`索引类型已存在：${v}`);
+    return;
   }
-  indexTypes.value.push(v)
-  newIndexType.value = ''
+  indexTypes.value.push(v);
+  newIndexType.value = "";
 }
 
 function removeIndexType(idx: number) {
-  indexTypes.value.splice(idx, 1)
+  indexTypes.value.splice(idx, 1);
 }
 
-const indexTypeInvalid = computed(() => indexTypes.value.length === 0)
+const indexTypeInvalid = computed(() => indexTypes.value.length === 0);
 
 /* ==================== 代码生成（作者 + 表/列选项定义） ==================== */
 
-const author = ref('')
+const author = ref("");
 
 watch(
   () => settingsStore.author,
   (v) => {
-    author.value = String(v ?? '')
+    author.value = String(v ?? "");
   },
   { immediate: true },
-)
+);
 
 interface OptionDefDraft extends OptionSetting {
-  key: string // 客户端稳定 key（保存时剥离）
+  key: string; // 客户端稳定 key（保存时剥离）
 }
 
 function toDefDrafts(raw: OptionSetting[]): OptionDefDraft[] {
@@ -171,189 +171,189 @@ function toDefDrafts(raw: OptionSetting[]): OptionDefDraft[] {
     name: o.name,
     type: o.type,
     label: o.label,
-    remark: o.remark || '',
-    dict: o.dict || '',
-    key: uid('opt-'),
-  }))
+    remark: o.remark || "",
+    dict: o.dict || "",
+    key: uid("opt-"),
+  }));
 }
 
-const tableOptions = ref<OptionDefDraft[]>([])
-const columnOptions = ref<OptionDefDraft[]>([])
+const tableOptions = ref<OptionDefDraft[]>([]);
+const columnOptions = ref<OptionDefDraft[]>([]);
 
 watch(
   () => settingsStore.tableOptions,
   (v) => {
-    tableOptions.value = toDefDrafts(v)
+    tableOptions.value = toDefDrafts(v);
   },
   { immediate: true },
-)
+);
 watch(
   () => settingsStore.columnOptions,
   (v) => {
-    columnOptions.value = toDefDrafts(v)
+    columnOptions.value = toDefDrafts(v);
   },
   { immediate: true },
-)
+);
 
 /** 选项类型预设（OptionType 允许任意自定义字符串，auto-complete 可自由输入） */
-const optionTypeOptions = ['boolean', 'string', 'int', 'long', 'double'].map((t) => ({
+const optionTypeOptions = ["boolean", "string", "int", "long", "double"].map((t) => ({
   value: t,
   label: t,
-}))
+}));
 
 function addTableOption() {
   tableOptions.value.push({
-    key: uid('opt-'),
-    name: '',
-    type: 'boolean',
-    label: '',
-    remark: '',
-    dict: '',
-  })
+    key: uid("opt-"),
+    name: "",
+    type: "boolean",
+    label: "",
+    remark: "",
+    dict: "",
+  });
 }
 
 function removeTableOption(idx: number) {
-  tableOptions.value.splice(idx, 1)
+  tableOptions.value.splice(idx, 1);
 }
 
 function addColumnOption() {
   columnOptions.value.push({
-    key: uid('opt-'),
-    name: '',
-    type: 'boolean',
-    label: '',
-    remark: '',
-    dict: '',
-  })
+    key: uid("opt-"),
+    name: "",
+    type: "boolean",
+    label: "",
+    remark: "",
+    dict: "",
+  });
 }
 
 function removeColumnOption(idx: number) {
-  columnOptions.value.splice(idx, 1)
+  columnOptions.value.splice(idx, 1);
 }
 
 /** 选项定义校验：名称非空、合法标识符、列表内唯一 */
 function optionDefError(def: OptionSetting): string | null {
-  const name = String(def.name ?? '').trim()
-  if (!name) return '名称不能为空'
-  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) return '名称需为合法标识符（字母/数字/下划线）'
-  return null
+  const name = String(def.name ?? "").trim();
+  if (!name) return "名称不能为空";
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) return "名称需为合法标识符（字母/数字/下划线）";
+  return null;
 }
 
 function optionDefsInvalid(defs: OptionDefDraft[]): string | null {
-  const names = new Set<string>()
+  const names = new Set<string>();
   for (const d of defs) {
-    const err = optionDefError(d)
-    if (err) return `「${d.name || '未命名'}」${err}`
-    const name = d.name.trim()
-    if (names.has(name)) return `名称重复：${name}`
-    names.add(name)
+    const err = optionDefError(d);
+    if (err) return `「${d.name || "未命名"}」${err}`;
+    const name = d.name.trim();
+    if (names.has(name)) return `名称重复：${name}`;
+    names.add(name);
   }
-  return null
+  return null;
 }
 
-const tableOptionsInvalid = computed(() => optionDefsInvalid(tableOptions.value))
-const columnOptionsInvalid = computed(() => optionDefsInvalid(columnOptions.value))
+const tableOptionsInvalid = computed(() => optionDefsInvalid(tableOptions.value));
+const columnOptionsInvalid = computed(() => optionDefsInvalid(columnOptions.value));
 
-const optionsInvalid = computed(() => tableOptionsInvalid.value || columnOptionsInvalid.value)
+const optionsInvalid = computed(() => tableOptionsInvalid.value || columnOptionsInvalid.value);
 
 /* ==================== 主键与审计字段约定草稿 ==================== */
 
-const fieldConventions = ref<FieldConventions>(normalizeFieldConventions(undefined))
+const fieldConventions = ref<FieldConventions>(normalizeFieldConventions(undefined));
 
 watch(
   () => settingsStore.fieldConventions,
   (v) => {
-    fieldConventions.value = normalizeFieldConventions(v)
+    fieldConventions.value = normalizeFieldConventions(v);
   },
   { immediate: true },
-)
+);
 
 /** 恢复默认约定（仅本卡片草稿，需保存生效） */
 function resetFieldConventions() {
-  fieldConventions.value = normalizeFieldConventions(DEFAULT_FIELD_CONVENTIONS)
+  fieldConventions.value = normalizeFieldConventions(DEFAULT_FIELD_CONVENTIONS);
 }
 
 /** 约定类型候选项（与表编辑字段类型一致） */
-const convTypeOptions = COMMON_DB_TYPES.map((t) => ({ value: t }))
+const convTypeOptions = COMMON_DB_TYPES.map((t) => ({ value: t }));
 
 /** 按设置的规则推导 Java 类型（先规则后内置，与导入同语义） */
 function javaOf(dbType: string): string {
-  return settingsStore.matchJavaType(dbType) || getJavaTypeByType(dbType)
+  return settingsStore.matchJavaType(dbType) || getJavaTypeByType(dbType);
 }
 
 /** 字段约定校验：名称非空、合法标识符、六个名称（主键/四审计/逻辑删除）互不重复 */
 const fieldConventionsInvalid = computed(() => {
-  const fc = fieldConventions.value
+  const fc = fieldConventions.value;
   const names = [
     fc.primaryKey.name,
     ...AUDIT_FIELD_ROLES.map((role) => fc.auditFields[role].name),
     fc.logicDelete.name,
-  ]
+  ];
   for (const raw of names) {
-    const n = raw.trim()
-    if (!n) return '名称不能为空'
-    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(n)) return `「${raw}」需为合法标识符（字母/数字/下划线）`
+    const n = raw.trim();
+    if (!n) return "名称不能为空";
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(n)) return `「${raw}」需为合法标识符（字母/数字/下划线）`;
   }
   if (new Set(names.map((n) => n.trim())).size !== names.length)
-    return '名称重复：主键、审计与逻辑删除字段间需互不相同'
-  return null
-})
+    return "名称重复：主键、审计与逻辑删除字段间需互不相同";
+  return null;
+});
 
 /* ==================== 保存 / 放弃（设置整体，含 AI 区块） ==================== */
 
-const saving = reactive({ loading: false })
+const saving = reactive({ loading: false });
 
 /* AI 区块（独立契约组件，经 defineExpose 暴露 dirty / invalid / save / resetDraft） */
-const aiSection = ref<InstanceType<typeof AiSettingsSection> | null>(null)
-const aiDirty = computed(() => Boolean(aiSection.value?.dirty))
-const aiInvalid = computed(() => aiSection.value?.invalid ?? null)
+const aiSection = ref<InstanceType<typeof AiSettingsSection> | null>(null);
+const aiDirty = computed(() => Boolean(aiSection.value?.dirty));
+const aiInvalid = computed(() => aiSection.value?.invalid ?? null);
 
 const dirty = computed(
   () =>
     JSON.stringify(rules.value.map(({ key: _key, ...m }) => m)) !==
       JSON.stringify(settingsStore.typeMappings) ||
     JSON.stringify(indexTypes.value) !== JSON.stringify(settingsStore.indexTypes) ||
-    author.value.trim() !== String(settingsStore.author ?? '').trim() ||
+    author.value.trim() !== String(settingsStore.author ?? "").trim() ||
     JSON.stringify(tableOptions.value.map(({ key: _k, ...o }) => o)) !==
       JSON.stringify(settingsStore.tableOptions) ||
     JSON.stringify(columnOptions.value.map(({ key: _k, ...o }) => o)) !==
       JSON.stringify(settingsStore.columnOptions) ||
     JSON.stringify(fieldConventions.value) !== JSON.stringify(settingsStore.fieldConventions) ||
     aiDirty.value,
-)
+);
 
 function resetDraft() {
-  rules.value = settingsStore.typeMappings.map((m) => ({ ...m, key: uid('mapping-') }))
-  indexTypes.value = settingsStore.indexTypes.map(String)
-  author.value = String(settingsStore.author ?? '')
-  tableOptions.value = toDefDrafts(settingsStore.tableOptions)
-  columnOptions.value = toDefDrafts(settingsStore.columnOptions)
-  fieldConventions.value = normalizeFieldConventions(settingsStore.fieldConventions)
-  aiSection.value?.resetDraft()
+  rules.value = settingsStore.typeMappings.map((m) => ({ ...m, key: uid("mapping-") }));
+  indexTypes.value = settingsStore.indexTypes.map(String);
+  author.value = String(settingsStore.author ?? "");
+  tableOptions.value = toDefDrafts(settingsStore.tableOptions);
+  columnOptions.value = toDefDrafts(settingsStore.columnOptions);
+  fieldConventions.value = normalizeFieldConventions(settingsStore.fieldConventions);
+  aiSection.value?.resetDraft();
 }
 
 async function save() {
   if (invalidCount.value) {
-    message.warning(`存在 ${invalidCount.value} 条空或无效的正则表达式，请修正后再保存`)
-    return
+    message.warning(`存在 ${invalidCount.value} 条空或无效的正则表达式，请修正后再保存`);
+    return;
   }
   if (indexTypeInvalid.value) {
-    message.warning('索引类型列表不能为空，至少保留一个类型')
-    return
+    message.warning("索引类型列表不能为空，至少保留一个类型");
+    return;
   }
   if (optionsInvalid.value) {
-    message.warning(`选项定义无效：${optionsInvalid.value}`)
-    return
+    message.warning(`选项定义无效：${optionsInvalid.value}`);
+    return;
   }
   if (fieldConventionsInvalid.value) {
-    message.warning(`字段约定无效：${fieldConventionsInvalid.value}`)
-    return
+    message.warning(`字段约定无效：${fieldConventionsInvalid.value}`);
+    return;
   }
   if (aiInvalid.value) {
-    message.warning(`AI 设置无效：${aiInvalid.value}`)
-    return
+    message.warning(`AI 设置无效：${aiInvalid.value}`);
+    return;
   }
-  saving.loading = true
+  saving.loading = true;
   try {
     await settingsStore.save({
       indexTypes: indexTypes.value.map(String),
@@ -363,7 +363,7 @@ async function save() {
       tableOptions: tableOptions.value.map(({ key: _k, ...o }) => ({
         ...o,
         name: o.name.trim(),
-        type: o.type.trim() || 'boolean',
+        type: o.type.trim() || "boolean",
         label: o.label.trim() || o.name.trim(),
         remark: o.remark?.trim(),
         dict: o.dict?.trim(),
@@ -371,49 +371,49 @@ async function save() {
       columnOptions: columnOptions.value.map(({ key: _k, ...o }) => ({
         ...o,
         name: o.name.trim(),
-        type: o.type.trim() || 'boolean',
+        type: o.type.trim() || "boolean",
         label: o.label.trim() || o.name.trim(),
         remark: o.remark?.trim(),
         dict: o.dict?.trim(),
       })),
-    })
-    if (aiSection.value?.dirty) await aiSection.value.save()
-    message.success('设置已保存')
+    });
+    if (aiSection.value?.dirty) await aiSection.value.save();
+    message.success("设置已保存");
   } catch (e: unknown) {
-    message.error(errorMessageOf(e, '保存失败'))
+    message.error(errorMessageOf(e, "保存失败"));
   } finally {
-    saving.loading = false
+    saving.loading = false;
   }
 }
 
 /* ==================== 分区导航（点击平滑滚动 + 滚动高亮） ==================== */
 
 const sections = [
-  { id: 'sec-type-mapping', label: '列默认类型', icon: SlidersHorizontal },
-  { id: 'sec-index-types', label: '索引类型', icon: Layers },
-  { id: 'sec-field-conventions', label: '字段约定', icon: KeyRound },
-  { id: 'sec-codegen', label: '代码生成', icon: Code2 },
-  { id: 'sec-ai', label: 'AI', icon: Bot },
-]
+  { id: "sec-type-mapping", label: "列默认类型", icon: SlidersHorizontal },
+  { id: "sec-index-types", label: "索引类型", icon: Layers },
+  { id: "sec-field-conventions", label: "字段约定", icon: KeyRound },
+  { id: "sec-codegen", label: "代码生成", icon: Code2 },
+  { id: "sec-ai", label: "AI", icon: Bot },
+];
 
-const scrollEl = ref<HTMLElement>()
-const activeSection = ref(sections[0]!.id)
+const scrollEl = ref<HTMLElement>();
+const activeSection = ref(sections[0]!.id);
 
 function scrollToSection(id: string) {
-  activeSection.value = id
-  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  activeSection.value = id;
+  document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 /** 滚动监听：当前命中分区高亮（顶部 80px 缓冲带内首个分区） */
 function onSettingsScroll() {
-  const el = scrollEl.value
-  if (!el) return
-  let current = sections[0]!.id
+  const el = scrollEl.value;
+  if (!el) return;
+  let current = sections[0]!.id;
   for (const s of sections) {
-    const sec = document.getElementById(s.id)
-    if (sec && sec.offsetTop <= el.scrollTop + 80) current = s.id
+    const sec = document.getElementById(s.id);
+    if (sec && sec.offsetTop <= el.scrollTop + 80) current = s.id;
   }
-  activeSection.value = current
+  activeSection.value = current;
 }
 </script>
 
@@ -518,7 +518,7 @@ function onSettingsScroll() {
                           : '未命中当前测试输入'
                     "
                   >
-                    {{ firstHit && firstHit.index === idx ? '生效' : rowMatch(idx) ? '命中' : '—' }}
+                    {{ firstHit && firstHit.index === idx ? "生效" : rowMatch(idx) ? "命中" : "—" }}
                   </span>
                   <button class="row-del" type="button" title="删除规则" @click="removeRule(idx)">
                     <Trash2 :size="12" />
@@ -703,7 +703,7 @@ function onSettingsScroll() {
                   class="conv-tag"
                   :class="AUDIT_FIELD_NOT_NULL[role] ? 'required' : 'optional'"
                 >
-                  {{ AUDIT_FIELD_NOT_NULL[role] ? '非空' : '可空' }}
+                  {{ AUDIT_FIELD_NOT_NULL[role] ? "非空" : "可空" }}
                 </span>
                 <span class="conv-dash">—</span>
               </div>
@@ -897,7 +897,7 @@ function onSettingsScroll() {
             invalidCount
               ? `存在 ${invalidCount} 条无效规则，保存已禁用`
               : indexTypeInvalid
-                ? '索引类型列表为空，保存已禁用'
+                ? "索引类型列表为空，保存已禁用"
                 : optionsInvalid
                   ? `选项定义无效：${optionsInvalid}`
                   : fieldConventionsInvalid
@@ -905,8 +905,8 @@ function onSettingsScroll() {
                     : aiInvalid
                       ? `AI 设置无效：${aiInvalid}`
                       : dirty
-                        ? '有未保存的修改'
-                        : '全部更改已保存'
+                        ? "有未保存的修改"
+                        : "全部更改已保存"
           }}
         </span>
         <div class="foot-actions">

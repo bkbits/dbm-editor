@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount } from 'vue'
-import type { TableNavigate } from '@/types/model'
-import { useCanvasStore } from '@/stores/canvas'
-import { useModelStore } from '@/stores/model'
-import { useUiStore } from '@/stores/ui'
-import { NAVIGATE_TYPE_LABEL } from '@/utils/navigate'
+import { computed, onBeforeUnmount } from "vue";
+import type { TableNavigate } from "@/types/model";
+import { useCanvasStore } from "@/stores/canvas";
+import { useModelStore } from "@/stores/model";
+import { useUiStore } from "@/stores/ui";
+import { NAVIGATE_TYPE_LABEL } from "@/utils/navigate";
 import {
   anchorOf,
   bezierPath,
@@ -15,55 +15,55 @@ import {
   type Point,
   type Rect,
   type Side,
-} from '@/utils/geometry'
+} from "@/utils/geometry";
 
 const props = defineProps<{
-  navigate: TableNavigate
+  navigate: TableNavigate;
   /** NN 且中间表可见时：连线经由中间表 */
-  routeThroughMapping: boolean
-}>()
+  routeThroughMapping: boolean;
+}>();
 
-const canvas = useCanvasStore()
-const model = useModelStore()
-const ui = useUiStore()
+const canvas = useCanvasStore();
+const model = useModelStore();
+const ui = useUiStore();
 
-const nav = computed(() => props.navigate)
+const nav = computed(() => props.navigate);
 
 function rectOfTable(tableId: string): Rect | null {
-  const t = model.tableById(tableId)
-  if (!t) return null
-  const size = canvas.cardSizes[tableId] || { w: 268, h: 120 }
-  return { x: t.x ?? 0, y: t.y ?? 0, w: size.w, h: size.h }
+  const t = model.tableById(tableId);
+  if (!t) return null;
+  const size = canvas.cardSizes[tableId] || { w: 268, h: 120 };
+  return { x: t.x ?? 0, y: t.y ?? 0, w: size.w, h: size.h };
 }
 
 /** 命中/连线几何 */
 const geo = computed(() => {
-  const selfRect = rectOfTable(nav.value.self)
-  const targetRect = rectOfTable(nav.value.target)
-  if (!selfRect || !targetRect) return null
+  const selfRect = rectOfTable(nav.value.self);
+  const targetRect = rectOfTable(nav.value.target);
+  if (!selfRect || !targetRect) return null;
 
   if (nav.value.self === nav.value.target) {
-    const loop = selfLoopPath(selfRect)
+    const loop = selfLoopPath(selfRect);
     return {
       d: loop.d,
-      selfAnchor: anchorOf(selfRect, 'n'),
-      targetAnchor: anchorOf(selfRect, 'e'),
+      selfAnchor: anchorOf(selfRect, "n"),
+      targetAnchor: anchorOf(selfRect, "e"),
       selfDir: { x: 1, y: -1 },
       targetDir: { x: 1, y: -1 },
       mid: loop.mid,
-    }
+    };
   }
 
   if (props.routeThroughMapping && nav.value.mappingTable) {
-    const mapRect = rectOfTable(nav.value.mappingTable)
+    const mapRect = rectOfTable(nav.value.mappingTable);
     if (mapRect) {
-      const [sSide, mSide1] = chooseSides(selfRect, mapRect)
-      const [mSide2, tSide] = chooseSides(mapRect, targetRect)
-      const a = anchorOf(selfRect, sSide)
-      const m1 = anchorOf(mapRect, mSide1)
-      const m2 = anchorOf(mapRect, mSide2)
-      const b = anchorOf(targetRect, tSide)
-      const d = `${bezierPath(a, sSide, m1, mSide1)} ${bezierPath(m2, mSide2, b, tSide)}`
+      const [sSide, mSide1] = chooseSides(selfRect, mapRect);
+      const [mSide2, tSide] = chooseSides(mapRect, targetRect);
+      const a = anchorOf(selfRect, sSide);
+      const m1 = anchorOf(mapRect, mSide1);
+      const m2 = anchorOf(mapRect, mSide2);
+      const b = anchorOf(targetRect, tSide);
+      const d = `${bezierPath(a, sSide, m1, mSide1)} ${bezierPath(m2, mSide2, b, tSide)}`;
       return {
         d,
         selfAnchor: a,
@@ -71,13 +71,13 @@ const geo = computed(() => {
         selfDir: dirBetween(rectCenter(selfRect), rectCenter(mapRect)),
         targetDir: dirBetween(rectCenter(targetRect), rectCenter(mapRect)),
         mid: pointOnBezier(a, sSide, m1, mSide1, 0.5),
-      }
+      };
     }
   }
 
-  const [sSide, tSide] = chooseSides(selfRect, targetRect)
-  const a = anchorOf(selfRect, sSide)
-  const b = anchorOf(targetRect, tSide)
+  const [sSide, tSide] = chooseSides(selfRect, targetRect);
+  const a = anchorOf(selfRect, sSide);
+  const b = anchorOf(targetRect, tSide);
   return {
     d: bezierPath(a, sSide, b, tSide),
     selfAnchor: a,
@@ -85,45 +85,45 @@ const geo = computed(() => {
     selfDir: dirBetween(a, b),
     targetDir: dirBetween(b, a),
     mid: pointOnBezier(a, sSide, b, tSide, 0.5),
-  }
-})
+  };
+});
 
 function dirBetween(a: Point, b: Point): { x: number; y: number } {
-  const dx = b.x - a.x
-  const dy = b.y - a.y
-  const len = Math.hypot(dx, dy) || 1
-  return { x: dx / len, y: dy / len }
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len = Math.hypot(dx, dy) || 1;
+  return { x: dx / len, y: dy / len };
 }
 
 /** 端点基数标记：type 字符即 self/target 两侧的 '1'/'N' */
-const selfMark = computed(() => (nav.value.type[0] === '1' ? '1' : 'N'))
-const targetMark = computed(() => (nav.value.type[1] === '1' ? '1' : 'N'))
+const selfMark = computed(() => (nav.value.type[0] === "1" ? "1" : "N"));
+const targetMark = computed(() => (nav.value.type[1] === "1" ? "1" : "N"));
 
-const markOffset = 26
+const markOffset = 26;
 const selfMarkPos = computed(() => {
-  const g = geo.value
-  if (!g) return { x: 0, y: 0 }
+  const g = geo.value;
+  if (!g) return { x: 0, y: 0 };
   return {
     x: g.selfAnchor.x + g.selfDir.x * markOffset,
     y: g.selfAnchor.y + g.selfDir.y * markOffset,
-  }
-})
+  };
+});
 const targetMarkPos = computed(() => {
-  const g = geo.value
-  if (!g) return { x: 0, y: 0 }
+  const g = geo.value;
+  if (!g) return { x: 0, y: 0 };
   return {
     x: g.targetAnchor.x + g.targetDir.x * markOffset,
     y: g.targetAnchor.y + g.targetDir.y * markOffset,
-  }
-})
+  };
+});
 
 /** NN 中间表胶囊（中间表隐藏时：-N--中间表名+--N-） */
 const pill = computed(() => {
-  if (nav.value.type !== 'NN' || !nav.value.mappingTable || props.routeThroughMapping) return null
-  const t = model.tableById(nav.value.mappingTable)
-  if (!t || !geo.value) return null
-  const label = t.tableName
-  const w = label.length * 7.2 + 34
+  if (nav.value.type !== "NN" || !nav.value.mappingTable || props.routeThroughMapping) return null;
+  const t = model.tableById(nav.value.mappingTable);
+  if (!t || !geo.value) return null;
+  const label = t.tableName;
+  const w = label.length * 7.2 + 34;
   return {
     x: geo.value.mid.x - w / 2,
     y: geo.value.mid.y - 11,
@@ -131,75 +131,75 @@ const pill = computed(() => {
     h: 22,
     label,
     tableId: nav.value.mappingTable,
-  }
-})
+  };
+});
 
-const typeLabel = computed(() => NAVIGATE_TYPE_LABEL[nav.value.type])
+const typeLabel = computed(() => NAVIGATE_TYPE_LABEL[nav.value.type]);
 
 /** 悬停/选中提示（单行）：关联属性对 + 末尾附导航关系说明（如 多对多） */
 const tipText = computed(() => {
-  const a = nav.value.selfPropertyName
-  const b = nav.value.targetPropertyName
-  return `${a} ⇄ ${b}（${typeLabel.value}）`
-})
+  const a = nav.value.selfPropertyName;
+  const b = nav.value.targetPropertyName;
+  return `${a} ⇄ ${b}（${typeLabel.value}）`;
+});
 
-const isHovered = computed(() => canvas.hoveredNavigateId === nav.value.id)
-const isSelected = computed(() => canvas.selectedNavigateId === nav.value.id)
+const isHovered = computed(() => canvas.hoveredNavigateId === nav.value.id);
+const isSelected = computed(() => canvas.selectedNavigateId === nav.value.id);
 /** 悬停卡片时，其关联线段联动切换到悬停风格（含 NN 中间表） */
 const isRelatedHover = computed(() => {
-  const h = canvas.hoveredTableId
-  return Boolean(h) && isEndpoint(h)
-})
+  const h = canvas.hoveredTableId;
+  return Boolean(h) && isEndpoint(h);
+});
 /** 选中卡片（单选/多选/框选）时，其关联线段联动切换到选中风格（含 NN 中间表） */
 const isRelatedSelected = computed(() => {
-  return canvas.selectedIds.some(isEndpoint)
-})
+  return canvas.selectedIds.some(isEndpoint);
+});
 /** 线段的关联端点：两端表 + NN 经由的中间表（线段同样“连着”它） */
 function isEndpoint(tableId: string): boolean {
   return (
     tableId === nav.value.self || tableId === nav.value.target || tableId === nav.value.mappingTable
-  )
+  );
 }
 
-const tipWidth = computed(() => tipText.value.length * 7.6 + 20)
+const tipWidth = computed(() => tipText.value.length * 7.6 + 20);
 
 function onEnter() {
-  canvas.setHoveredNavigate(nav.value.id)
+  canvas.setHoveredNavigate(nav.value.id);
 }
 function onLeave() {
-  canvas.setHoveredNavigate('')
+  canvas.setHoveredNavigate("");
 }
 function onClick() {
-  canvas.setSelectedNavigate(nav.value.id)
+  canvas.setSelectedNavigate(nav.value.id);
 }
 function onDblClick() {
-  ui.openNavigateEdit(nav.value.id)
+  ui.openNavigateEdit(nav.value.id);
 }
 function onContext(e: MouseEvent) {
-  const local = canvas.localPoint(e)
+  const local = canvas.localPoint(e);
   canvas.openMenu({
-    kind: 'edge',
+    kind: "edge",
     x: local.x,
     y: local.y,
     world: canvas.screenToWorld(local),
     navigateId: nav.value.id,
-  })
+  });
 }
 function showMappingTable() {
   if (nav.value.mappingTable) {
-    canvas.showTable(nav.value.mappingTable)
+    canvas.showTable(nav.value.mappingTable);
     // 中间表可能落在当前视口外（种子布局或用户曾拖远后隐藏）：
     // 解除隐藏后将其带入视野，否则用户看不到任何变化，以为点击无效
-    canvas.ensureTableVisible(nav.value.mappingTable)
+    canvas.ensureTableVisible(nav.value.mappingTable);
   }
 }
 
 /* 卸载时清理自身悬停/选中态：线段可能因端点表隐藏/删除/导航删除而卸载，
    若不清理，重新渲染后会残留悬停/选中样式 */
 onBeforeUnmount(() => {
-  if (canvas.hoveredNavigateId === nav.value.id) canvas.setHoveredNavigate('')
-  if (canvas.selectedNavigateId === nav.value.id) canvas.setSelectedNavigate(nav.value.id)
-})
+  if (canvas.hoveredNavigateId === nav.value.id) canvas.setHoveredNavigate("");
+  if (canvas.selectedNavigateId === nav.value.id) canvas.setSelectedNavigate(nav.value.id);
+});
 </script>
 
 <template>
