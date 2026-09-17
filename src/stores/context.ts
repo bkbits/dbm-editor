@@ -14,7 +14,7 @@
  *   各仓库下一次动作即走新 api（配合 DBManagerView 的切换重载逻辑）
  */
 import { inject, type InjectionKey } from "vue";
-import type { ManagerApi } from "@/types/model";
+import type { ManagerApi } from "@/types/manager";
 import { createThemeStore, type ThemeStore } from "./theme";
 import { createUiStore, type UiStore } from "./ui";
 import { createSettingsStore, type SettingsStore } from "./settings";

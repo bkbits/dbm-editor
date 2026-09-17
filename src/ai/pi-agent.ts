@@ -42,9 +42,9 @@ import type {
   ChatMessage,
   ChatToolSpec,
   ChatUsage,
-  ManagerApi,
   ThinkingIntensity,
-} from "@/types/model";
+} from "@/types/ai";
+import type { ManagerApi } from "@/types/manager";
 import { errorMessageOf } from "@/api/manager-api";
 
 /* ==================== 基础常量与辅助 ==================== */

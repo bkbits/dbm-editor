@@ -3,7 +3,8 @@
  * （由 src/stores/ai.ts 按逻辑拆分而来：本文件只放界面展示形态的类型定义
  *   与工厂依赖声明，不含任何运行逻辑）
  */
-import type { ChatToolSpec, ManagerApi } from "@/types/model";
+import type { ChatToolSpec } from "@/types/ai";
+import type { ManagerApi } from "@/types/manager";
 import type { DictStore } from "../dict";
 import type { ModelStore } from "../model";
 import type { SettingsStore } from "../settings";

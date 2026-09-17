@@ -8,7 +8,7 @@
  *   （Pinia 时代的全局激活实例机制已随状态注入体系改造移除）
  */
 import { computed, inject, type ComputedRef, type InjectionKey } from "vue";
-import type { ManagerApi } from "@/types/model";
+import type { ManagerApi } from "@/types/manager";
 import { DemoManagerApi } from "./demo-manager-api";
 
 /** 注入键：值为当前 api 的响应式引用（ComputedRef），保证 prop 切换可传导 */

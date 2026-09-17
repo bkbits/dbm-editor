@@ -22,7 +22,7 @@ bun install && bun run build   # 产出 dist/DBManager.js + DBManager.d.ts
 
 ### 2. 实现 ManagerApi 数据契约
 
-契约在包类型导出 `types/model.ts` 中定义，**全部方法返回 Promise**（对接 HTTP/IPC/文件 IO 零调整），校验失败以 `reject` 抛出中文业务提示，UI 侧 `await` 消费并自带失败回滚：
+契约在包类型导出中定义（源码 `src/types/` 三文件：`manager.ts` = ManagerApi 接口，`model.ts` = 实体与 DTO，`ai.ts` = AI 设置与 chat completions 契约），**全部方法返回 Promise**（对接 HTTP/IPC/文件 IO 零调整），校验失败以 `reject` 抛出中文业务提示，UI 侧 `await` 消费并自带失败回滚：
 
 ```ts
 import type { ManagerApi, Settings, LoadResultVO, ManagerTable,

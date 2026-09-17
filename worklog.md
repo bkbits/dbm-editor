@@ -1188,3 +1188,23 @@ Stage Summary:
 - 交付物：scripts/e2e-regress-43-47-a.sh（45 断言）+ scripts/e2e-regress-43-47-b.sh（22 断言）入库可复跑；截图 4 张（docs/screenshots/regress-43-47-*.png）；本次会话未提交（用户未要求）
 - 待跟进：task35/36/37/39/40/41/42 等历史 E2E 脚本路径硬编码为 Linux 沙箱（`/home/z/my-project/dbm-work`）且依赖 `rg`/同源代理，本机未复跑；如需完整历史回归可先适配脚本路径与启动方式（本次回归已用 regress-a/b 覆盖画布/模型/表格编辑以外的全部主链路）
 
+---
+Task ID: 49
+Agent: main (Zed)
+Task: src/types 拆分——model.ts 按职责拆为 manager.ts（ManagerApi 契约）/ ai.ts（AI 与 chat completions 契约）/ model.ts（其余非 AI 类型），并分流全仓引用
+
+Work Log:
+- 现状：`src/types/` 仅 model.ts（631 行 / 48 个导出符号），全仓 39 个文件从 `@/types/model` 具名导入
+- 拆分（按段切片）：manager.ts = ManagerApi 接口（原 L490-631，含接口文档注释）；ai.ts = AI 段（原 L342-444：ThinkingIntensity / AiModelConfig / AiSettings / ChatToolCall / ChatMessage / ChatToolSpec / ChatCompletionRequest / ChatUsage / ChatCompletionDelta / ChatCompletionResult）；model.ts = 其余（表/字段/索引/导航/分类、字典、模板、设置、主键与审计字段约定、代码生成与数据库导入），三文件各自新增中文文件头说明职责与互引关系
+- 依赖方向：ai.ts 与 model.ts 互不引用；manager.ts 单向引用两者（AiSettings / ChatCompletion* 来自 ai，DBTable / Dict / DictCategory / LoadResultVO / ManagerTable / Settings / TableCategory / TableNavigate / Template / UpdateTablePosDTO 来自 model），无循环
+- 引用分流：迁移脚本 tmp/split-types.mjs 按类型名归属把 39 个文件的 `import type { ... } from "@/types/model"` 改写为 ai / manager / model 三路（16 个文件实际发生改写，其余 23 个仍全为 model 类型、语句原样保留）；src/index.ts 增补 `export type * from "./types/ai" | "./types/manager"` 保持库导出面不变
+- 脚本缺陷与修复：首版正则 `[\s\S]*?` 会跨过其它 import 语句的 `}` 伸展匹配（pi-agent.ts 中 pi-agent-core / pi-ai 的类型导入被卷入并按非法名错位重建），已回退源码重来；捕获组收紧为 `[^}]*` 并加「导入名白名单」守卫（`Name` / `Name as Alias` 之外立即抛错，不再静默写坏），重跑后 16 文件改写干净
+- 验证：vue-tsc 全绿；vp check 104 文件格式 + 94 文件 lint 全绿；check-readme 32 标题通过；`bun run build` 成功
+- 产物级等价性证据（类型级改动零行为变更）：构建前后 JS 同为 2352676 字节，字节差异共 210 处且全部为「作用域样式哈希」（被改写过的 .vue 组件的 `data-v-xxxxxxxx` 指纹随内容变化）；把 data-v 哈希归一化后两份产物字节完全一致（cmp 通过）；d.ts 20906 → 21475 字节（三文件新头注释与声明归并所致，导出面不变）。另：本次构建可复现（同源连跑两次 md5 一致），且发现跨会话重建可能因 .vue 内容变动导致作用域哈希漂移——属预期现象、与本次改动无关
+- 文档同步：README（宿主接入示例改 `@/types/manager`、「数据模型概览」与项目结构 types/ 行改三文件说明）、AGENTS.md（契约定义位置 + 目录导读三行）、skills/DBManager/SKILL.md（契约位置表述）
+- 中间产物：tmp/split-types.mjs 与构建对照产物（before/after/norm js、build-a.js、after-src 备份）用完即删
+
+Stage Summary:
+- 交付物：`src/types/{manager,ai,model}.ts` 三文件（170 / 111 / 388 行），职责单一；全仓引用按归属分流，无 barrel 中转；库入口导出 ai/manager/model 三模块，公开类型面无变化
+- 关键决策：① manager.ts 仅承载 ManagerApi 接口本身，其余 DTO 与实体留在 model.ts（依用户「model.ts 包含非 AI 部分所有类型定义」的表述）；② 不设 `export *` 中转 barrel，避免掩盖类型真实归属；③ 依赖单向（manager → ai / model）无环
+- 证据链：以「归一化作用域哈希后产物字节一致」作为零行为变更的决定性证据（延续 Task 47 的产物级方法论）；dev server 未运行故未做浏览器冒烟（类型级改动无运行时面）

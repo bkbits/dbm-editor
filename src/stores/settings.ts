@@ -11,7 +11,8 @@
 import { reactive } from "vue";
 import { message } from "antdv-next";
 import { useDBManagerContext } from "./context";
-import type { ManagerApi, OptionSetting, Settings, TypeMapping } from "@/types/model";
+import type { ManagerApi } from "@/types/manager";
+import type { OptionSetting, Settings, TypeMapping } from "@/types/model";
 import { errorMessageOf } from "@/api/manager-api";
 import { uid } from "@/utils/id";
 import { normalizeFieldConventions } from "@/utils/fieldConvention";

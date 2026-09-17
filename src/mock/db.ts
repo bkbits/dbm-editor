@@ -4,9 +4,8 @@
  * 由 DemoManagerApi 直接读写；原 axios mock 分发层已被 ManagerApi 体系取代。
  * 持久化键保持 v2 不变，读取时按需迁移（设置形态 / hidden 字段 / 模板种子版本）。
  */
+import type { AiModelConfig, AiSettings, ThinkingIntensity } from "@/types/ai";
 import type {
-  AiModelConfig,
-  AiSettings,
   CodeTemplate,
   Dict,
   DictCategory,
@@ -17,7 +16,6 @@ import type {
   TableCategory,
   TableIndex,
   TableNavigate,
-  ThinkingIntensity,
   TypeMapping,
 } from "@/types/model";
 import { DEFAULT_AI_GLOBAL_RULES } from "@/ai/defaults";

@@ -4,9 +4,9 @@
  *   无运行逻辑。ModelStore 由 stores/model/store.ts 的组装结果 `satisfies` 校验，
  *   各 part 文件以 `ThisType<ModelStore>` 取得一致的 this 上下文）
  */
+import type { ManagerApi } from "@/types/manager";
 import type {
   DBTable,
-  ManagerApi,
   ManagerTable,
   Table,
   TableAddPayload,

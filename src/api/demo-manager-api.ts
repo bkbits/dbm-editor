@@ -25,12 +25,15 @@ import type {
   ChatCompletionResult,
   ChatUsage,
   ChatMessage,
+  ThinkingIntensity,
+} from "@/types/ai";
+import type { ManagerApi } from "@/types/manager";
+import type {
   DBTable,
   Dict,
   DictCategory,
   DictValue,
   LoadResultVO,
-  ManagerApi,
   ManagerTable,
   OptionSetting,
   Settings,
@@ -40,7 +43,6 @@ import type {
   TableIndex,
   TableNavigate,
   Template,
-  ThinkingIntensity,
   TypeMapping,
   UpdateTablePosDTO,
 } from "@/types/model";

@@ -6,7 +6,8 @@
 import { reactive } from "vue";
 import { message } from "antdv-next";
 import { useDBManagerContext } from "./context";
-import type { Dict, DictCategory, ManagerApi } from "@/types/model";
+import type { ManagerApi } from "@/types/manager";
+import type { Dict, DictCategory } from "@/types/model";
 import { errorMessageOf } from "@/api/manager-api";
 import { uid } from "@/utils/id";
 

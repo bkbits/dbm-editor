@@ -9,7 +9,7 @@
  */
 import { computed, reactive, watch } from "vue";
 import { Bot, Plus, RotateCcw, Trash2 } from "@lucide/vue";
-import type { AiModelConfig, ThinkingIntensity } from "@/types/model";
+import type { AiModelConfig, ThinkingIntensity } from "@/types/ai";
 import { DEFAULT_AI_GLOBAL_RULES } from "@/ai/defaults";
 import { useAiStore } from "@/stores/ai";
 import { useUiStore } from "@/stores/ui";

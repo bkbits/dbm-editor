@@ -324,12 +324,12 @@ Eta 语法：`<% %>` 逻辑、`<%= %>` 输出、`<%# %>` 自定义注释标签�
 
 ```ts
 import DBManagerView from '@/views/DBManagerView.vue'
-import type { ManagerApi } from '@/types/model'
+import type { ManagerApi } from '@/types/manager'
 
 const myApi: ManagerApi = {
   // 实现全部异步方法（均返回 Promise）：设置读写 / 数据库导入 /
   // 模型加载与全量保存 / 分类・表・导航细粒度 CRUD / 字典与模板
-  // CRUD / 代码替换（详见 src/types/model.ts 的 ManagerApi 接口）
+  // CRUD / 代码替换（详见 src/types/manager.ts 的 ManagerApi 接口）
   ...
 }
 ```
@@ -399,7 +399,7 @@ Logger.setLevel("INFO"); // 或 Logger.level = 'INFO' / Logger.getLevel()
 
 ## 数据模型概览
 
-核心类型定义于 `src/types/model.ts`（与《图形数据库模型编辑工具需求规格说明书》保持一致），各实体职责速览：
+核心类型定义于 `src/types/`（与《图形数据库模型编辑工具需求规格说明书》保持一致）——`manager.ts` 放 ManagerApi 契约，`model.ts` 放其余非 AI 实体与 DTO，`ai.ts` 放 AI 设置与 chat completions 契约；各实体职责速览：
 
 | 实体                                         | 职责与关键约束                                                                                                                                                                |
 | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -440,7 +440,7 @@ Logger.setLevel("INFO"); // 或 Logger.level = 'INFO' / Logger.getLevel()
    │  ├─ ai/               # AI 仓库子模块：index.ts（统一出口）+ types（展示模型与契约）/ task-list（任务清单解析）/ tool-schema（工具参数 schema）/ codegen / prompt / tools（工具注册表）/ store（会话状态与编排）
    │  ├─ canvas/           # 画布仓库子模块：index.ts（统一出口）+ types（类型与 CanvasStore 契约）/ constants / viewport（视口与坐标）/ pointer（指针状态机）/ touch（触屏手势）/ selection（选择与菜单）/ cards（卡片状态）/ layout（自动美化与对齐）/ clipboard / store（状态、getter 与组装）
    │  └─ model/            # 模型仓库子模块：index.ts（统一出口）+ types（类型与 ModelStore 契约）/ helpers / loader（加载与全量动作）/ vo（字段索引与 VO 投影）/ categories / tables / navigates / clipboard / import / snapshot / store（状态、getter 与组装）
-   ├─ types/               # 数据模型类型（含 ManagerApi 契约，与规格说明书一致）
+   ├─ types/               # 契约类型三文件：manager.ts（ManagerApi 接口）/ model.ts（实体与 DTO）/ ai.ts（AI 设置与 chat completions 契约）
    ├─ utils/               # 字符串 / Java 类型映射 / 导航推导 / 几何 / 力导向布局 / Eta 渲染 / 高亮
    ├─ styles/              # --dbm- 设计令牌（静态基线）/ antd 主题同步层 / 全局样式 / hljs 配色（库构建时内联进 JS）
    ├─ views/               # DBManagerView（页面封装+状态注入入口）/ EditorView / DictView / TemplateView / SettingsView / AiView

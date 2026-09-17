@@ -10,7 +10,7 @@
 import { reactive } from "vue";
 import { message } from "antdv-next";
 import { useDBManagerContext } from "../context";
-import type { AiModelConfig, AiSettings } from "@/types/model";
+import type { AiModelConfig, AiSettings } from "@/types/ai";
 import { errorMessageOf } from "@/api/manager-api";
 import { DEFAULT_MAX_TOOL_ROUNDS } from "@/api/demo-manager-api";
 import {

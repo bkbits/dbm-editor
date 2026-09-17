@@ -57,7 +57,7 @@ release. Add a tool name to select part of the graph. For example, run
 
 ### ManagerApi 数据契约
 
-- 契约定义在 `src/types/model.ts`：全部方法返回 **Promise**（校验失败 reject 中文业务提示）；UI 侧 `await` 消费，「本地先行 → await api → 失败回滚」事务模式。
+- 契约定义在 `src/types/manager.ts`（实体与 DTO 在 `src/types/model.ts`、AI 契约在 `src/types/ai.ts`）：全部方法返回 **Promise**（校验失败 reject 中文业务提示）；UI 侧 `await` 消费，「本地先行 → await api → 失败回滚」事务模式。
 - 演示实现 `src/api/demo-manager-api.ts`（内存 + localStorage），带 `withCallLogging` 调用日志 Proxy。
 - `updateTablePos` 为批量 DTO（`{ tables: [{ tableId, pos }] }`），多表拖拽仅一次调用。
 - 修改契约时同步更新 README 的 ManagerApi 清单与 DemoManagerApi 章节。
@@ -107,7 +107,9 @@ release. Add a tool name to select part of the graph. For example, run
 ```
 src/
 ├─ index.ts              # 库导出入口（DBManagerView + 契约类型）
-├─ types/model.ts        # ManagerApi 契约（异步签名）
+├─ types/manager.ts      # ManagerApi 契约（异步签名）
+├─ types/model.ts        # 非 AI 实体与 DTO 类型（表/字段/索引/导航/字典/模板/设置）
+├─ types/ai.ts           # AI 设置与 openai compatible chat completions 契约
 ├─ api/                  # DemoManagerApi 演示实现 + 注入工具
 ├─ stores/               # 全套仓库（context.ts 汇总 provide/inject；ai/ canvas/ model/ 为按逻辑拆分的子模块，见下）
 ├─ stores/ai/            # AI 仓库：index.ts（统一出口）+ types / task-list / tool-schema / codegen / prompt / tools / store

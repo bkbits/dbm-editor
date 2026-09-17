@@ -14,7 +14,7 @@
  */
 import { computed, provide, watch } from "vue";
 import { theme as antdTheme } from "antdv-next";
-import type { ManagerApi } from "@/types/model";
+import type { ManagerApi } from "@/types/manager";
 import "@/styles/index.scss";
 import { MANAGER_API_KEY, sharedDemoApi } from "@/api/manager-api";
 import { createDBManagerState, DBMANAGER_STATE_KEY } from "@/stores/context";
