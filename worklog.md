@@ -1111,3 +1111,80 @@ Work Log:
 Stage Summary:
 - 关键决策：nanoid 用 customAlphabet 定制字符集而非默认 nanoid()（默认含 -/_）；21 位碰撞概率与 UUID v4 相当
 - 语义变化：新 id 纯随机，无旧实现的时间有序性；devDependencies 中 @types/nanoid@^3.0.0 为官方废弃 stub（nanoid v6 自带类型），建议后续移除
+
+---
+Task ID: 45
+Agent: main (Zed)
+Task: AI 仓库按逻辑拆分（src/stores/ai.ts 1721 行 → src/stores/ai/ 八文件 + barrel 导出）
+
+Work Log:
+- 拆分边界划定（按职责）：types.ts 展示模型与类型契约（会话消息 / 任务项 / 工具记录 / zip / 替换 / 依赖与钩子）；task-list.ts 任务清单块解析与渲染（状态映射、正则、parseAiTaskList、syncTasksFromContent、模板头部常量）；tool-schema.ts 工具参数 JSON Schema（obj/str/strArr/int/bool 构建器 + 十二个领域 schema + objectTool/plainTool/NO_ARGS）；codegen.ts 代码生成共用逻辑（FILE_CONTENT_CAP、resolveTableIds、generateFilesOf）；prompt.ts 系统提示与上下文压缩（TASK_LIST_PROMPT、buildSystemPrompt、prettyJson、COMPACT_*）；tools.ts buildAgentTools 工具注册表；store.ts createAiStore/AiStore/useAiStore + clone；index.ts barrel
+- 迁移手法：按行区间 sed 机械抽取原文件正文（内容零改写，仅核对接缝），各文件新增中文文件头与最小 import；跨文件使用处补 export —— types.ts 4 个（ToolDomain/ToolInvokeCtx/AgentTool/AgentHooks）、task-list.ts 4 个（两个模板头部常量 + renderTaskBlock + syncTasksFromContent）、codegen.ts 3 个、prompt.ts 5 个、tools.ts 1 个；tool-schema.ts 采用文件末尾集中 export 块而非内联 export（内联会加长「紧凑书写契约参数」的风格行，触发 oxfmt 折行与尾逗号重排，实测探针验证）
+- 对外兼容：index.ts 显式再导出拆分前的 14 个公开导出（AiChatMessage/AiChatToolCall/AiTaskStatus/AiTaskItem/AiToolRecord/AiZipDownload/AiReplaceFile/AiPendingReplace/AiDeps/TASK_STATUS_LABEL/parseAiTaskList/AiStore/createAiStore/useAiStore），stores/context.ts、views/AiView.vue、components/settings/AiSettingsSection.vue 导入路径与用法零改动
+- 验证：bun run typecheck 全绿；vp check 81 文件格式 + 71 文件 lint 全绿（无需 --fix）；bun run build 库构建通过（dist/DBManager.js 2.16MB + DBManager.d.ts，CSS 已内联）；等价性核验——声明集合与拆分前完全一致（59 vs 59，diff 为空）、逐文件「去空白后」内容比对七文件全等（含出口块外的 tool-schema.ts）、产物 d.ts 无内部路径泄漏（grep stores/ai = 0）
+- 顺带同步：src/ai/pi-agent.ts 四处与 src/ai/skills.ts 一处注释中指向旧路径 stores/ai.ts 的表述改为新路径（stores/ai 模块 / stores/ai/tools.ts）；worklog 历史条目不动
+
+Stage Summary:
+- 交付物：src/stores/ai.ts（1721 行）删除，改为 src/stores/ai/ 下八文件共 1834 行（types 132 / task-list 78 / tool-schema 214 / codegen 36 / prompt 99 / tools 507 / store 738 / index 30），模块最大文件 738 行（原 1721 行）
+- 关键决策：① 类型与运行逻辑分离（types.ts 仅类型，供各文件共享）；② 工具参数 schema 独立成文件保留「紧凑书写」风格，导出集中在文件末尾以避开格式化器对长行的重排；③ barrel 显式列名而非 export *，既不扩大公开面也可立刻发现遗漏；④ 提示词独立成 prompt.ts 便于单独调整文案
+- 风险与注意：模块内新增依赖方向为 store → tools/prompt/task-list/codegen → tool-schema/types，无环；store.ts 与 stores/context.ts 的既有运行时循环（provide/inject 惰性取值）保持不变；tmp/ 目录本次引入的中间文件（前缀片段、原始副本、比对产物）已全部删除，记录同步清理
+
+---
+Task ID: 46
+Agent: main (Zed)
+Task: 画布与模型仓库按逻辑拆分（canvas.ts 1047 行 → src/stores/canvas/ 11 文件；model.ts 726 行 → src/stores/model/ 12 文件）
+
+Work Log:
+- 与 ai.ts 拆分的结构差异：ai.ts 的 1000 余行是模块级辅助（类型/schema/提示词/工具表），工厂仅 680 行；canvas/model 恰好相反——逻辑全在单个 reactive 工厂闭包内，方法之间靠 this.xxx 互调（canvas 250 处、model 137 处），直接搬运会全部丢失 this 上下文。故选「显式接口 + part 工厂 + ThisType」组合方案
+- 接口由编译器生成（免手写与偏差）：新建临时探针 src/stores/__probe.ts（declare const deps + 导出 createXStore 结果），以临时 tsconfig 跑 vue-tsc --emitDeclarationOnly，得到两仓库的完整结构声明（__probe.d.ts 313 行），转写为 CanvasStore（91 成员含 5 getter）/ ModelStore（50 成员含 8 getter）接口
+- part 模式（先以探针验证再铺开）：`export function xxxMethods(deps) { return { …原方法… } satisfies ThisType<CanvasStore> & Partial<CanvasStore>; }` —— this 上下文由 ThisType 提供（探针中故意写错类型，错误提示证实 this 已解析为接口），成员签名由 Partial<CanvasStore> 校验，组装处 `reactive({ …state, getter, ...各 part }) satisfies CanvasStore` 校验「无遗漏、无多余」
+- 画布 11 文件：types（类型 + CanvasStore 契约）/ constants（缩放上下限）/ viewport（初始化与坐标换算 + 视口缩放平移适配动画 + onWheel）/ pointer（指针状态机：平移/框选/拖卡/连线 + 命中测试）/ touch（触屏手势 + 长按菜单 + 折叠基线，含原模块级手势私有状态）/ selection（选择集、悬停、菜单开关）/ cards（尺寸/展开/索引/隐藏）/ layout（自动美化 + 对齐分布）/ clipboard（复制粘贴）/ store（状态字段 35 + getter 5 + 组装 + useCanvasStore）/ index（barrel）
+- 模型 12 文件：types（类型 + ModelStore 契约 + ModelSnapshot）/ helpers（clone / sameEntity）/ loader（init / refresh / saveAll / applyTables / syncToApi / rollback）/ vo（字段索引装配与 VO 投影）/ categories / tables（含位置批量持久化）/ navigates（含反转）/ clipboard / import（从数据库导入）/ snapshot / store（状态 8 + getter 13 + 组装 + useModelStore）/ index（barrel）
+- 迁移手法：sed 按行区间机械搬运（正文零改写），仅新增文件头与最小 import；跨文件使用处补 export（helpers 的 clone/sameEntity、touch.ts 的 touchPts 供 pointer.ts 判断触摸来源）；三处区间边界原本会漏掉的方法 JSDoc（autoLayout / addNavigate / buildCopyDraft）已补回；模块内依赖单向（store → 各 part → types/helpers），无环
+- 验证：bun run typecheck 全绿；vp check 102 文件格式 + 92 文件 lint 全绿（清掉 13 处多余/缺失 import）；bun run build 通过（dist/DBManager.js + .d.ts，CSS 已内联）；结构等价性——成员名集合与原类型逐一相等（canvas 91 = 91、model 50 = 50），顶层声明集合比对只增不减（新增 part 工厂与具名草稿接口，type → interface 等价），产物 d.ts 无内部路径泄漏
+- 文档：README / AGENTS.md 目录导读补 canvas/ 与 model/ 子模块明细；README 自检 32 标题通过
+
+Stage Summary:
+- 交付物：最大单文件由 1047 行降至 234 行（pointer.ts）/ 146 行（tables.ts）；模块总量 1298 / 920 行（含文件头与 import 开销）；公开 API 与导入路径完全不变（barrel 同名导出），views / components / stores/context 零改动
+- 关键决策：① 接口由编译器生成而非手写（探针产物转写），保证签名与原实现一致且可校验；② 状态字段与 getter 留在 store.ts（getter 不可经展开复制，会造成取值时点变化），仅方法拆入 part；③ part 工厂一次性调用、方法仍位于传入 reactive 的同一对象字面量内，运行时 this 绑定与响应式语义与拆分前完全一致；④ 触屏手势的模块级私态随 touch.ts 归位，仅 touchPts 导出共享
+- 待跟进：本轮为纯结构迁移（无行为变更），未做浏览器实测；如需可跑 task35/36/37 E2E 与双主题抽查作为回归确认
+
+---
+Task ID: 47
+Agent: main (Zed)
+Task: src/stores/ 全量补 JSDoc（画布 / 模型 / AI / 平铺仓库四路并行，仅插入注释行）
+
+Work Log:
+- 审计先行：临时脚本 tmp/jsdoc-audit.mjs（TypeScript 编译器 API 扇扫，覆盖函数声明 / 方法 / getter / setter / 箭头函数属性，判据为节点无 JSDoc）扇出全目录 172 处缺注释（已知中 7 个平铺文件 65 处、画布 54、模型 35、AI 18）
+- 四路并行补注共 175 处：① 画布 54——7 个 part 工厂写明职责域与「this 上下文由 ThisType<CanvasStore> 提供」约定、createCanvasStore 写明「字段 + getter + part 组装，经 satisfies CanvasStore 校验」、方法与 getter 点出副作用与边界（拖卡首次越阈抽快照、粘贴按 24px 递推设位、隐藏表同步移出选中集、缩放夹取与 1px 抖动忽略、布局批量位置一次提交）；② 模型 35——part 工厂同款约定、createModelStore 组装与 getter 派生语义、契约失败回滚；③ AI 18——schema 构建器参数与生成形态、各工具的副作用（zip 缓存注册 / 释放、替换确认挂起、上下文估算与压缩降级、轮数上限）；④ 平铺七文件 65 处 + 主动为 context.ts 三处 getApi 简写加补 3 处——工厂惰性依赖语义、设置快照与列类型匹配语义、ui 开关所控界面态
+- 写法：全部为「注释行 + 原行」纯前置插入，未改代码 / 未重命名 / 未调序 / 未动 import；单行 /** */ 优先，每行 ≤ 100 字符以避免 oxfmt 重排；注释写「是什么 / 为什么 / 副作用」，不覆盖既有说明
+- 验证：审计复跑合计待补 0；bun run typecheck 全绿；vp check 102 文件格式 + 92 文件 lint 全绿；七个已入库平铺文件 git diff --numstat 为纯插入（context.ts 21 增 / 1 删，余六文件 0 删；该 1 删为给箭头属性挂注释而拆行，并补 oxfmt 所需尾逗号）；三个未跟踪模块（ai/ canvas/ model/）无 git 基线，改以**产物级证据**：构建产物 dist/DBManager.js 与 dist/DBManager.d.ts 与补注前逐字节一致（cmp 通过，2352676 / 20906 字节）——注释不参与打包，可证全量代码语义未变
+- 收尾：子代理分别追加的 Task 47/48 两段 worklog 已合并为本条；tmp/jsdoc-audit.mjs 与产物快照用完即删
+
+Stage Summary:
+- 交付物：175 处 JSDoc（覆盖审计所列 172 处 + context.ts 主动补 3 处），分布 画布 54 / 模型 35 / AI 18 / 平铺 68；代码零改动
+- 关键决策：① 以编译器 API 作「缺注释」判据（而非正则），避免误报嵌套回调；② 以构建产物逐字节一致作为「仅注释」的决定性证据，弥补三个新拆分目录尚无 git 基线的缺口；③ 保持仓库既有的中文散文式注释风格，未引入 @param/@returns 标签体系
+- 待跟进：无 UI / 行为变更，故未做浏览器验证；按约束未提交、未推送
+
+---
+Task ID: 48
+Agent: main (Zed)
+Task: 验证 Task 43-47 全部修改并执行回归测试（静态四项校验 + 双套浏览器回归 + 构建产物核验）
+
+Work Log:
+- 范围界定（读 worklog 定位）：Task 43 格式化基线切换为 oxfmt 默认 + AI 全局规则默认文本增强（提交 0eef4ba）、Task 44 uid 改 nanoid + 行尾归一（提交 8801485）、Task 45 AI 仓库拆分 stores/ai.ts → stores/ai/ 八文件、Task 46 画布/模型仓库拆分（canvas/ 11 文件、model/ 12 文件）、Task 47 三仓库全量补 JSDoc；本次验证时工作区含 45/46/47 未提交改动（D ai.ts/canvas.ts/model.ts + 三个新目录 + 七个平铺文件 JSDoc 增改）
+- 静态校验（四项全绿）：`bun run typecheck` 无错；`./node_modules/.bin/vp check` 102 文件格式 + 92 文件 lint 全绿；`python scripts/check-readme.py` 32 标题/锚点/表格全通过；`bun run build` 成功（dist/DBManager.js 2,163.97 kB + DBManager.d.ts，CSS 已内联，产物体积 2352676 / 20906 字节与 Task 47 记录逐字节一致——反向证明 Task 45-47 三轮拆分/补注零行为变更）
+- 构建产物核验：d.ts 对 `stores/ai`/`stores/canvas`/`stores/model` 内部路径泄漏计数 0；JS 外部引用仅 vue / antdv-next / @lucide/vue 三项（与 peerDependencies 一致，无 vue 运行时内联）
+- 浏览器回归 A（`tmp/regress-a.sh`，45 断言全绿，agent-browser 真实输入 + 用户已启动的 localhost:3000 dev server）：重置演示数据后初态 10 卡片 / 10 导航线 / 3 分类 / 3 NN 胶囊 / 大纲 13 行；Ctrl+A 全选 10 与 Ctrl+D 取消；真实鼠标拖拽卡片位移后 console 中 `updateTablePos()` 仅 1 次（批量契约保持）且 Ctrl+Z 位置复原；新增表保存后卡片 11 张且新表 id 匹配 `^t-[0-9a-zA-Z]{21}$`、默认字段 id 匹配 `^c-[0-9a-zA-Z]{21}$`（nanoid 定制字符集生效，Task 44）；Delete 确认删除 → 9 张 → Ctrl+Z 恢复 10 张；Ctrl+C/Ctrl+V 粘贴 11 张 → 撤销 10 张；自动美化表坐标变化 → 撤销后 localStorage 坐标复原；NN 胶囊点击显示隐藏中间表；大纲眼睛隐藏/显示；双击卡片打开表编辑对话框且取消后隐藏、双击导航线打开「编辑导航」对话框；五页切换渲染（字典 ≥5 项 / 模板 ≥4 项 / AI 页 / 设置页 / 编辑器页）；亮暗双主题切换；设置页 AI 全局规则默认文本含「# 术语」「输出任务报告」「一轮问答只负责添加一个元素」且「恢复默认」按钮一键找回；全程页面错误 0 与控制台 ERROR 0
+- 浏览器回归 B（`tmp/regress-b.sh`，22 断言全绿，mock SSE 4833 端口直连——mock 自带 CORS `*` 故无需同源代理）：设置页配置服务地址与模型并保存；系统提示含能力域清单（sys 流入）+ 工具定义注册 30+ 项；历史回放第二轮角色序列 `system,user,assistant,user`；参数校验链路（removeCategory 缺参 → typebox「Validation failed / categoryId」→ 补参 getSettings success → 会话不中断）；执行失败链路（api 中文「分类下仍有 5 张表」回填带「工具执行失败：」前缀）；同轮双工具串行（getSettings → getTables，`assistant,tool,tool` 回填序列）；usage 收口（上下文占用 + 输出 token 标签）
+- 排障记录（断言方法学，均为测试脚本问题而非产品缺陷）：① antdv 弹层关闭后 DOM 保留 → 所有 modal 判定从「存在性」改为「可见性」（`offsetParent` / `getComputedStyle(wrap).display`），并修正按钮点击只在可见弹层内查找，否则会点到残留弹层的同名按钮；② `autoLayout()` 末尾自带 `fitAll()`（视口变化不进历史），自动美化撤销断言改比 localStorage world 坐标而非屏幕坐标；③ 「Ctrl+Z 撤销隐藏表」非历史行为——`setTableHidden` 拆分前后（HEAD 版 canvas.ts L810-830 vs canvas/stores 新文件）均只做乐观更新 + 失败回滚、不入快照，属既有设计；④ 新增表后视口自动聚焦新表（其余卡片移出视口）属既有交互，断言改用合成 dblclick / 大纲入口规避坐标依赖
+- 截图留档：docs/screenshots/regress-43-47-editor.png（编辑器页亮色）、regress-43-47-dark.png（暗色）、regress-43-47-settings.png（设置页 AI 默认规则）、regress-43-47-ai.png（AI 工具页含工具记录与 token 统计）；VLM 复核编辑器页与 AI 页视觉正常
+- 中间产物：回归脚本先置于 tmp/ 并登记 temp.md，验证通过后按用户要求收编入仓库——`scripts/e2e-regress-43-47-a.sh`（45 断言）/ `scripts/e2e-regress-43-47-b.sh`（22 断言）：ROOT 改为脚本位置动态推导（`dirname $0/..` + `pwd -W` 兼容 MSYS/Linux）、dev server 改为「检测 3000 端口已有实例则复用，否则自行启动并在退出时回收」、回退脚本中的 mock 端口与日志路径可配（`PORT` / `MOCK_PORT`，日志入 tmp/）；收编后两个脚本重跑均 ALL_GREEN（45/22）；排障截图与 mock 请求日志用完即删
+- 文档同步：README 常用命令表新增两行回归脚本（含断言数与覆盖点）、项目结构 scripts/ 行补「Task 43-47 回归脚本」；`vp check --fix` 重排 README 表格对齐后复跑全绿（102 格式 + 92 lint）；README 自检 32 标题通过（本机需 `PYTHONIOENCODING=utf-8 python scripts/check-readme.py`，否则中文 Windows 控制台 GBK 编码报 UnicodeEncodeError）
+
+Stage Summary:
+- 结论：Task 43-47 全部修改通过回归——静态四项 + 浏览器 67 条断言（45 + 22）全绿，页面错误与控制台 ERROR 均为 0；三轮仓库拆分与 JSDoc 补注经「产物逐字节一致 + 结构/行为断言」双重确认零回归
+- 关键决策：① 以用户已启动的 3000 dev server 做回归（不重复起服务），AI mock 直连跨域端口而非同源代理（mock 自带 CORS）；② 断言一律走可见性与 world 坐标，规避 antdv 弹层 DOM 保留与 fitAll 视口变化两类假阳性；③ 三个新拆分目录无 git 基线时以构建产物字节一致作为等价性证据链延续
+- 交付物：scripts/e2e-regress-43-47-a.sh（45 断言）+ scripts/e2e-regress-43-47-b.sh（22 断言）入库可复跑；截图 4 张（docs/screenshots/regress-43-47-*.png）；本次会话未提交（用户未要求）
+- 待跟进：task35/36/37/39/40/41/42 等历史 E2E 脚本路径硬编码为 Linux 沙箱（`/home/z/my-project/dbm-work`）且依赖 `rg`/同源代理，本机未复跑；如需完整历史回归可先适配脚本路径与启动方式（本次回归已用 regress-a/b 覆盖画布/模型/表格编辑以外的全部主链路）
+

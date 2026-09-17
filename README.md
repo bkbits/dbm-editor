@@ -71,27 +71,29 @@ bun run dev
 
 ### 常用命令速查
 
-| 命令                              | 说明                                                                                                                                               |
-| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `bun run dev`（= `vp dev`）       | 启动开发服务器（localhost:3000，热更新）                                                                                                           |
-| `bun run build`（= `vp build`）   | 库构建：产出 `dist/DBManager.js` + `dist/DBManager.d.ts` 两个文件（CSS 已内联进 JS，详见[库构建与宿主接入](#库构建与宿主接入)）                    |
-| `bun run build:pages`             | Pages 演示站构建：应用模式产出 `dist/`（index.html + assets，相对路径 base，见[GitHub Pages 自动发布](#github-pages-自动发布)）                    |
-| `bun run preview`                 | 本地预览生产构建                                                                                                                                   |
-| `bun run typecheck`               | 全量类型检查（`vue-tsc --noEmit`）                                                                                                                 |
-| `vp check`                        | Vite+ 内置：格式 + lint + 类型检查（staged 提交时自动执行）                                                                                        |
-| `vp install`                      | 安装依赖                                                                                                                                           |
-| `bun scripts/eta-smoke.mjs`       | Eta 模板引擎 API 冒烟测试（模板功能改动前的快速回归）                                                                                              |
-| `node scripts/ai-sse-mock.mjs`    | AI E2E 模拟服务（openai compatible SSE，脚本化三轮 AGENT 对话：代码生成 → 代码替换 → Markdown 总结；配合 `AI_MOCK_PROXY=1 vp dev` 同源代理使用）   |
-| `bash scripts/e2e-task35.sh`      | AI 工具与设置页全流程 E2E（32 项断言：设置导航/统一保存、AGENT 三轮对话、zip 下载、替换确认、markstream 渲染、双主题）                             |
-| `bash scripts/e2e-task36.sh`      | 字段约定与表编辑 E2E（26 项断言：逻辑删除约定设置/持久化、一键添加、勾选互斥转移、左右固定列同步滚动）                                             |
-| `bash scripts/e2e-task37.sh`      | 字段表多表同步滚动架构 E2E（31 项断言：六表结构/列宽分配/行高与列宽对齐约束/横纵滚动同步/滚轮转发/elementFromPoint 采样/删除逻辑字段）             |
-| `bash scripts/e2e-task39.sh`      | 思考块滚动跟随 E2E（12 项断言：贴底自动跟随/上翻停跟/回底恢复/完成收起/重开贴底）                                                                  |
-| `bash scripts/e2e-task40.sh`      | token 用量统计与能力记录 E2E（20 项断言：上下文占用/问答花费/实时速度/refresh 能力/记录清空）                                                      |
-| `bash scripts/e2e-task41.sh`      | AI 工具八项增强 E2E（32 项断言：选中样式/85% 自动压缩/轮数上限/思考块铺满与高频贴底/技能加载/任务清单四态与暂停注入/建议列表）                     |
-| `bash scripts/e2e-task42.sh`      | 全局规则默认文本 E2E（13 项断言：新库默认/清空恢复默认/保存持久化/旧库空值不被覆盖/默认规则流入系统提示）                                          |
-| `bash scripts/e2e-task43.sh`      | pi-agent-core 内核专项 E2E（21 项断言：系统提示与 37 工具流入/历史回放种子/typebox 参数校验失败重试/api 中文错误前缀回填/同轮双工具串行/会话统计） |
-| `python3 scripts/check-readme.py` | README 链接 / 锚点 / 表格自检                                                                                                                      |
-| `bash scripts/package.sh`         | 打包源码为交付 zip（`download/graph-db-model-editor.zip`，含 skills/DBManager 技能文档）                                                           |
+| 命令                                  | 说明                                                                                                                                               |
+| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bun run dev`（= `vp dev`）           | 启动开发服务器（localhost:3000，热更新）                                                                                                           |
+| `bun run build`（= `vp build`）       | 库构建：产出 `dist/DBManager.js` + `dist/DBManager.d.ts` 两个文件（CSS 已内联进 JS，详见[库构建与宿主接入](#库构建与宿主接入)）                    |
+| `bun run build:pages`                 | Pages 演示站构建：应用模式产出 `dist/`（index.html + assets，相对路径 base，见[GitHub Pages 自动发布](#github-pages-自动发布)）                    |
+| `bun run preview`                     | 本地预览生产构建                                                                                                                                   |
+| `bun run typecheck`                   | 全量类型检查（`vue-tsc --noEmit`）                                                                                                                 |
+| `vp check`                            | Vite+ 内置：格式 + lint + 类型检查（staged 提交时自动执行）                                                                                        |
+| `vp install`                          | 安装依赖                                                                                                                                           |
+| `bun scripts/eta-smoke.mjs`           | Eta 模板引擎 API 冒烟测试（模板功能改动前的快速回归）                                                                                              |
+| `node scripts/ai-sse-mock.mjs`        | AI E2E 模拟服务（openai compatible SSE，脚本化三轮 AGENT 对话：代码生成 → 代码替换 → Markdown 总结；配合 `AI_MOCK_PROXY=1 vp dev` 同源代理使用）   |
+| `bash scripts/e2e-task35.sh`          | AI 工具与设置页全流程 E2E（32 项断言：设置导航/统一保存、AGENT 三轮对话、zip 下载、替换确认、markstream 渲染、双主题）                             |
+| `bash scripts/e2e-task36.sh`          | 字段约定与表编辑 E2E（26 项断言：逻辑删除约定设置/持久化、一键添加、勾选互斥转移、左右固定列同步滚动）                                             |
+| `bash scripts/e2e-task37.sh`          | 字段表多表同步滚动架构 E2E（31 项断言：六表结构/列宽分配/行高与列宽对齐约束/横纵滚动同步/滚轮转发/elementFromPoint 采样/删除逻辑字段）             |
+| `bash scripts/e2e-task39.sh`          | 思考块滚动跟随 E2E（12 项断言：贴底自动跟随/上翻停跟/回底恢复/完成收起/重开贴底）                                                                  |
+| `bash scripts/e2e-task40.sh`          | token 用量统计与能力记录 E2E（20 项断言：上下文占用/问答花费/实时速度/refresh 能力/记录清空）                                                      |
+| `bash scripts/e2e-task41.sh`          | AI 工具八项增强 E2E（32 项断言：选中样式/85% 自动压缩/轮数上限/思考块铺满与高频贴底/技能加载/任务清单四态与暂停注入/建议列表）                     |
+| `bash scripts/e2e-task42.sh`          | 全局规则默认文本 E2E（13 项断言：新库默认/清空恢复默认/保存持久化/旧库空值不被覆盖/默认规则流入系统提示）                                          |
+| `bash scripts/e2e-task43.sh`          | pi-agent-core 内核专项 E2E（21 项断言：系统提示与 37 工具流入/历史回放种子/typebox 参数校验失败重试/api 中文错误前缀回填/同轮双工具串行/会话统计） |
+| `bash scripts/e2e-regress-43-47-a.sh` | Task 43-47 回归 A（45 项断言：画布/模型 CRUD 与撤销、nanoid id 格式、剪贴板、隐藏/显示、自动美化、五页渲染、双主题、AI 全局规则默认文本）          |
+| `bash scripts/e2e-regress-43-47-b.sh` | Task 43-47 回归 B（22 项断言：AI 工具链路——系统提示与工具流入/历史回放/typebox 校验失败重试/api 错误前缀回填/同轮双工具串行/usage 收口）           |
+| `python3 scripts/check-readme.py`     | README 链接 / 锚点 / 表格自检                                                                                                                      |
+| `bash scripts/package.sh`             | 打包源码为交付 zip（`download/graph-db-model-editor.zip`，含 skills/DBManager 技能文档）                                                           |
 
 ## 库构建与宿主接入
 
@@ -423,7 +425,7 @@ Logger.setLevel("INFO"); // 或 Logger.level = 'INFO' / Logger.getLevel()
 ├─ vite.config.ts          # Vite+ 配置（@ 别名 / 端口 3000 / allowedHosts / lint / fmt / staged / 库构建）
 ├─ tsconfig.json
 ├─ docs/screenshots/       # 界面截图
-├─ scripts/                # 开发辅助脚本（Eta 冒烟 / README 自检 / 库产物 CSS 内联 / 打包 / AI E2E 模拟服务）
+├─ scripts/                # 开发辅助脚本（Eta 冒烟 / README 自检 / 库产物 CSS 内联 / 打包 / AI E2E 模拟服务 / Task 43-47 回归脚本）
 ├─ skills/DBManager/       # 本仓库使用方法技能文档（SKILL.md，随仓库发布）
 └─ src/
    ├─ index.ts             # 库入口（导出 DBManagerView 组件 + ManagerApi 契约类型）
@@ -435,6 +437,9 @@ Logger.setLevel("INFO"); // 或 Logger.level = 'INFO' / Logger.getLevel()
    ├─ mock/                # 种子数据 + demo 内存数据库（localStorage 持久化）
    ├─ ai/                  # AI 内核：pi-agent.ts（pi-agent-core 适配层：StreamFn/工具转换/种子重建）+ defaults.ts（默认全局规则）+ skills.ts（内置技能库）
    ├─ stores/              # 状态注入体系：context（工厂+provide/inject）+ model / canvas / dict / template / theme / ui / history / settings / ai 九个 reactive 仓库
+   │  ├─ ai/               # AI 仓库子模块：index.ts（统一出口）+ types（展示模型与契约）/ task-list（任务清单解析）/ tool-schema（工具参数 schema）/ codegen / prompt / tools（工具注册表）/ store（会话状态与编排）
+   │  ├─ canvas/           # 画布仓库子模块：index.ts（统一出口）+ types（类型与 CanvasStore 契约）/ constants / viewport（视口与坐标）/ pointer（指针状态机）/ touch（触屏手势）/ selection（选择与菜单）/ cards（卡片状态）/ layout（自动美化与对齐）/ clipboard / store（状态、getter 与组装）
+   │  └─ model/            # 模型仓库子模块：index.ts（统一出口）+ types（类型与 ModelStore 契约）/ helpers / loader（加载与全量动作）/ vo（字段索引与 VO 投影）/ categories / tables / navigates / clipboard / import / snapshot / store（状态、getter 与组装）
    ├─ types/               # 数据模型类型（含 ManagerApi 契约，与规格说明书一致）
    ├─ utils/               # 字符串 / Java 类型映射 / 导航推导 / 几何 / 力导向布局 / Eta 渲染 / 高亮
    ├─ styles/              # --dbm- 设计令牌（静态基线）/ antd 主题同步层 / 全局样式 / hljs 配色（库构建时内联进 JS）

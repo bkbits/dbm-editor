@@ -369,7 +369,7 @@ function safeParseArgs(json: string): Record<string, unknown> {
 
 /* ==================== 工具注册表 → pi AgentTool ==================== */
 
-/** 现有工具注册表条目（stores/ai.ts 内部形态的结构契约） */
+/** 现有工具注册表条目（stores/ai 中 AgentTool 的结构契约） */
 export interface PiToolSource {
   spec: ChatToolSpec;
   /** 工具改动后会话结束需同步刷新的仓库域（执行成功时上报） */
@@ -428,7 +428,7 @@ export function toPiTools(
 
 /* ==================== 会话历史 → pi transcript 种子 ==================== */
 
-/** 界面会话消息（stores/ai.ts AiChatMessage 的结构契约） */
+/** 界面会话消息（stores/ai 中 AiChatMessage 的结构契约） */
 export interface PiSeedMessage {
   role: "user" | "assistant";
   content: string;
@@ -441,7 +441,7 @@ export interface PiSeedMessage {
   createdAt: number;
 }
 
-/** 能力调用记录（stores/ai.ts AiToolRecord 的结构契约） */
+/** 能力调用记录（stores/ai 中 AiToolRecord 的结构契约） */
 export interface PiSeedToolRecord {
   callId: string;
   status: "running" | "success" | "error";
@@ -576,6 +576,6 @@ export function serializeMessagesForCompact(
   return joined;
 }
 
-/** 重新导出 Agent（stores/ai.ts 统一从此处引入 pi-agent-core 运行时） */
+/** 重新导出 Agent（stores/ai/store.ts 统一从此处引入 pi-agent-core 运行时） */
 export { Agent };
 export type { AgentEvent } from "@earendil-works/pi-agent-core";

@@ -54,30 +54,50 @@ export function createDBManagerState(getApi: () => ManagerApi): DBManagerState {
   // template / history / model 相互引用，先声明后回填（工厂内以惰性取值函数解耦）
   let model!: ModelStore;
   const template = createTemplateStore({
+    /** 惰性读取当前 ManagerApi（api prop 切换后，下一次动作即走新实例） */
     getApi,
+    /** 惰性读取模型仓库：model 稍后创建，闭包延迟求值以打破循环依赖 */
     getModel: () => model,
+    /** 惰性读取设置仓库：渲染取设置快照注入模板上下文 */
     getSettings: () => settings,
+    /** 惰性读取字典仓库：字典分类模板渲染取分类与字典数据 */
     getDict: () => dict,
   });
-  const history = createHistoryStore({ getModel: () => model });
+  const history = createHistoryStore({
+    /** 惰性读取模型仓库：撤销/重做取快照、同步持久层皆经此 */
+    getModel: () => model,
+  });
   model = createModelStore({
+    /** 惰性读取当前 ManagerApi（api prop 切换后，下一次动作即走新实例） */
     getApi,
+    /** 惰性读取历史仓库：增删改前捕获快照，变更失败时回滚 */
     getHistory: () => history,
+    /** 惰性读取设置仓库：类型映射规则、主键与审计字段约定 */
     getSettings: () => settings,
+    /** 惰性读取字典仓库：重置演示数据时一并重置其加载标志 */
     getDict: () => dict,
+    /** 惰性读取模板仓库：重置演示数据时一并重置其加载标志 */
     getTemplate: () => template,
   });
   const canvas = createCanvasStore({
+    /** 惰性读取模型仓库：表/关系数据与持久化均经此，画布不另存一份 */
     getModel: () => model,
+    /** 惰性读取 UI 仓库：连线完成即打开关系编辑对话框 */
     getUi: () => ui,
+    /** 惰性读取历史仓库：自动布局、对齐、粘贴前捕获快照 */
     getHistory: () => history,
   });
   // AI 仓库依赖 model / dict / template / settings（AGENT 工具执行与域同步刷新）
   const ai = createAiStore({
+    /** 惰性读取当前 ManagerApi（AGENT 调用与工具执行走同一实例） */
     getApi,
+    /** 惰性读取模型仓库：AGENT 工具读写表与关系 */
     getModel: () => model,
+    /** 惰性读取字典仓库：字典类工具与域数据刷新 */
     getDict: () => dict,
+    /** 惰性读取模板仓库：代码生成工具复用模板管线 */
     getTemplate: () => template,
+    /** 惰性读取设置仓库：代码生成注入设置上下文 */
     getSettings: () => settings,
   });
   return { theme, ui, settings, dict, template, history, model, canvas, ai };

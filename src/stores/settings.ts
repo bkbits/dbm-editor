@@ -16,6 +16,7 @@ import { errorMessageOf } from "@/api/manager-api";
 import { uid } from "@/utils/id";
 import { normalizeFieldConventions } from "@/utils/fieldConvention";
 
+/** 结构化深拷贝：切断与调用方对象的引用，避免 reactive 代理被外部改动 */
 function clone<T>(v: T): T {
   return JSON.parse(JSON.stringify(v)) as T;
 }
@@ -57,6 +58,11 @@ function normalizeOptionSettings(raw: unknown): OptionSetting[] {
     .map((o) => ({ ...o, label: o.label || o.name }));
 }
 
+/**
+ * 创建设置仓库（reactive 对象工厂，不依赖 Pinia；由 createDBManagerState 注入组件树）
+ *
+ * @param deps 依赖经工厂入参惰性取用：getApi 在每次读写时读取当前 ManagerApi
+ */
 export function createSettingsStore(deps: SettingsDeps) {
   /** 在途加载 Promise：并发调用方共享同一次加载并等待其完成；结束后清空（失败可重试） */
   let initInFlight: Promise<void> | null = null;
@@ -126,6 +132,10 @@ export function createSettingsStore(deps: SettingsDeps) {
       await initInFlight;
     },
 
+    /**
+     * 保存设置：api 校验并保存成功后才整体刷新本地字段（失败向上抛出，
+     * 由设置页捕获提示，本地保持旧值）；成功后置 loaded，无需再 init。
+     */
     async save(settings: Settings) {
       const saved = clone(settings);
       // 异步契约：api 保存成功后才更新本地状态（失败时本地保持旧值）

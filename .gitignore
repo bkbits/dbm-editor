@@ -43,5 +43,3 @@ agent-ctx/
 
 # 会话产物目录（不纳入版本管理）
 tool-results/
-
-worklog.md

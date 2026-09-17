@@ -15,6 +15,7 @@ import type { DictStore } from "./dict";
 import type { ModelStore } from "./model";
 import type { SettingsStore } from "./settings";
 
+/** 结构化深拷贝：切断与调用方对象的引用，避免 reactive 代理被外部改动 */
 function clone<T>(v: T): T {
   return JSON.parse(JSON.stringify(v)) as T;
 }
@@ -27,6 +28,12 @@ export interface TemplateDeps {
   getDict: () => DictStore;
 }
 
+/**
+ * 创建模板仓库（reactive 对象工厂，不依赖 Pinia；由 createDBManagerState 注入组件树）
+ *
+ * @param deps 依赖经工厂入参惰性取用：getApi / getModel / getSettings / getDict
+ *   均在调用时读取，便于 api 切换与循环引用解耦
+ */
 export function createTemplateStore(deps: TemplateDeps) {
   return reactive({
     loaded: false,
@@ -37,13 +44,16 @@ export function createTemplateStore(deps: TemplateDeps) {
     /** 实时编辑预览状态 */
     previewTableId: "",
 
+    /** 全部模板名（按 templates 顺序；供「启用模板」全选与模板选择器默认勾选） */
     get templateNames(): string[] {
       return this.templates.map((t) => t.name);
     },
+    /** 模板名集合（供重名校验 O(1) 判断；每次访问新建 Set，勿长期持有） */
     get templateNamesSet(): Set<string> {
       return new Set(this.templates.map((t) => t.name));
     },
 
+    /** 加载表模板与字典分类模板（幂等：已加载或在途时直接返回，不等待；失败提示且可重试） */
     async init() {
       if (this.loaded || this.loading) return;
       this.loading = true;
@@ -67,6 +77,10 @@ export function createTemplateStore(deps: TemplateDeps) {
         this.loading = false;
       }
     },
+    /**
+     * 保存模板：有 id 走更新、无 id 时本地生成 id 后新增（Template↔CodeTemplate 字段适配）。
+     * 成功后才回写本地列表，失败提示并抛出；返回入库对象的副本（含 id）。
+     */
     async saveTemplate(draft: CodeTemplate) {
       try {
         const api = deps.getApi();
@@ -91,6 +105,7 @@ export function createTemplateStore(deps: TemplateDeps) {
         throw e;
       }
     },
+    /** 删除模板（先落契约再改本地；失败提示并抛出，本地列表不变） */
     async removeTemplate(id: string) {
       try {
         await deps.getApi().removeTemplate(id);
@@ -112,6 +127,7 @@ export function createTemplateStore(deps: TemplateDeps) {
         throw e;
       }
     },
+    /** 新建模板草稿（id 空串表示未入库；名称避重：new_template、new_template_1…） */
     newTemplateDraft() {
       let name = "new_template";
       let n = 1;
@@ -309,6 +325,7 @@ export function createTemplateStore(deps: TemplateDeps) {
       return true;
     },
 
+    /** 生成模板 id（uid("tpl-")，与新增模板时同规则，供草稿先占位再入库） */
     newTemplateId(): string {
       return uid("tpl-");
     },

@@ -10,6 +10,7 @@ import type { Dict, DictCategory, ManagerApi } from "@/types/model";
 import { errorMessageOf } from "@/api/manager-api";
 import { uid } from "@/utils/id";
 
+/** 结构化深拷贝：切断与调用方对象的引用，避免 reactive 代理被外部改动 */
 function clone<T>(v: T): T {
   return JSON.parse(JSON.stringify(v)) as T;
 }
@@ -19,6 +20,11 @@ export interface DictDeps {
   getApi: () => ManagerApi;
 }
 
+/**
+ * 创建字典仓库（reactive 对象工厂，不依赖 Pinia；由 createDBManagerState 注入组件树）
+ *
+ * @param deps 依赖经工厂入参惰性取用：getApi 在每次动作时读取当前 ManagerApi
+ */
 export function createDictStore(deps: DictDeps) {
   return reactive({
     loaded: false,
@@ -46,9 +52,11 @@ export function createDictStore(deps: DictDeps) {
         );
       });
     },
+    /** 当前选中的字典（selectedDictId 无匹配时为 undefined，非 null） */
     get selectedDict(): Dict | undefined {
       return this.dicts.find((d) => d.id === this.selectedDictId);
     },
+    /** 全部字典键的有序列表（按 dicts 顺序，不做去重） */
     get dictKeys(): string[] {
       return this.dicts.map((d) => d.dictKey);
     },
@@ -85,6 +93,7 @@ export function createDictStore(deps: DictDeps) {
       };
     },
 
+    /** 首次加载分类与字典（幂等：已加载或在途时直接返回，不等待；失败提示且可重试） */
     async init() {
       if (this.loaded || this.loading) return;
       this.loading = true;
@@ -100,6 +109,10 @@ export function createDictStore(deps: DictDeps) {
         this.loading = false;
       }
     },
+    /**
+     * 保存字典分类草稿：无 id 时本地生成 id 后新增，有 id 时更新。
+     * 契约先行（api 成功后才回写本地列表），失败提示并抛出，调用方可保持对话框开启。
+     */
     async saveDictCategory(draft: DictCategory) {
       try {
         const category = clone(draft);
@@ -119,6 +132,7 @@ export function createDictStore(deps: DictDeps) {
         throw e;
       }
     },
+    /** 删除字典分类（先落契约再改本地；失败提示并抛出，本地列表不变） */
     async removeDictCategory(id: string) {
       try {
         await deps.getApi().removeDictCategory(id);
@@ -128,6 +142,10 @@ export function createDictStore(deps: DictDeps) {
         throw e;
       }
     },
+    /**
+     * 保存字典草稿：无 id 时本地生成 id 后新增，有 id 时更新；新增后自动选中该字典。
+     * 契约先行（api 成功后才回写本地），失败提示并抛出；返回入库用的副本。
+     */
     async saveDict(draft: Dict) {
       try {
         const dict = clone(draft);
@@ -148,6 +166,7 @@ export function createDictStore(deps: DictDeps) {
         throw e;
       }
     },
+    /** 删除字典（先落契约再改本地；删除选中项时回退到首个，失败提示并抛出） */
     async removeDict(id: string) {
       try {
         await deps.getApi().removeDict(id);

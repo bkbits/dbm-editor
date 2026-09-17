@@ -109,7 +109,10 @@ src/
 ├─ index.ts              # 库导出入口（DBManagerView + 契约类型）
 ├─ types/model.ts        # ManagerApi 契约（异步签名）
 ├─ api/                  # DemoManagerApi 演示实现 + 注入工具
-├─ stores/               # 全套仓库（context.ts 汇总 provide/inject，含 ai 仓库）
+├─ stores/               # 全套仓库（context.ts 汇总 provide/inject；ai/ canvas/ model/ 为按逻辑拆分的子模块，见下）
+├─ stores/ai/            # AI 仓库：index.ts（统一出口）+ types / task-list / tool-schema / codegen / prompt / tools / store
+├─ stores/canvas/        # 画布仓库：index.ts（统一出口）+ types / constants / viewport / pointer / touch / selection / cards / layout / clipboard / store
+├─ stores/model/         # 模型仓库：index.ts（统一出口）+ types / helpers / loader / vo / categories / tables / navigates / clipboard / import / snapshot / store
 ├─ views/                # DBManagerView + 编辑器/字典/模板/AI 工具/设置五页
 ├─ components/           # 画布/对话框/大纲/顶栏组件
 ├─ styles/               # variables.scss(基线) / antd-theme.scss(同步) / global / hljs
