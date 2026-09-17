@@ -12,6 +12,7 @@
  * - AiToolRecordsPane：右侧能力调用记录（默认收起详情；代码生成记录提供
  *   zip 下载），经 ref 暴露 locate(callId) 供聊天区芯片点击定位
  * - AiReplaceConfirmModal：代码替换触发时的文件清单确认框
+ * - AiDangerConfirmModal：resetDemo / removeAll 等危险工具触发时的确认框
  * 本文件仅负责三栏布局与跨面板联动（芯片点击 → 右侧记录定位）。
  */
 import { ref } from "vue";
@@ -19,6 +20,7 @@ import AiTaskPanel from "./ai/AiTaskPanel.vue";
 import AiChatPane from "./ai/AiChatPane.vue";
 import AiToolRecordsPane from "./ai/AiToolRecordsPane.vue";
 import AiReplaceConfirmModal from "./ai/AiReplaceConfirmModal.vue";
+import AiDangerConfirmModal from "./ai/AiDangerConfirmModal.vue";
 
 /** 右侧记录面板引用：接收聊天区工具芯片的 locate 事件并定位对应记录 */
 const recordsPane = ref<InstanceType<typeof AiToolRecordsPane> | null>(null);
@@ -39,6 +41,9 @@ const recordsPane = ref<InstanceType<typeof AiToolRecordsPane> | null>(null);
 
     <!-- 代码替换确认：先列出将被覆盖的文件，用户确认后才写回 -->
     <AiReplaceConfirmModal />
+
+    <!-- 危险操作确认：resetDemo / removeAll 等先经用户确认再执行 -->
+    <AiDangerConfirmModal />
   </div>
 </template>
 

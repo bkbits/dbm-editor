@@ -8,6 +8,7 @@ import type { ManagerApi } from "@/types/manager";
 import type {
   DBTable,
   ManagerTable,
+  ModelElements,
   Table,
   TableAddPayload,
   TableCategory,
@@ -59,7 +60,8 @@ export interface ModelStore {
   refresh(): Promise<void>;
   saveAll(): Promise<void>;
   applyTables(tables: ManagerTable[]): void;
-  syncToApi(): Promise<void>;
+  /** 当前运行时状态的完整模型元素快照（saveAll / AI saveAll 工具共用） */
+  modelElementsOf(): ModelElements;
   rollback(snap: ModelSnapshot): void;
 
   /* 字段 / 索引装配与 VO 投影 */

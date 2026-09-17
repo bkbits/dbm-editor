@@ -4,15 +4,15 @@
  *   运行内核为 @earendil-works/pi-agent-core 的 Agent 循环，经 src/ai/pi-agent.ts
  *   适配层接入。「模型流式输出 → 工具调用 → 结果回填 → 继续生成」由 Agent 驱动，
  *   经 subscribe 事件镜像到界面会话态（消息流式 / 工具记录 / 任务清单 / token 统计），
- *   轮数上限防失控；工具对模型等数据的改动在会话结束后按域同步刷新，
- *   保证画布 / 字典 / 模板 / 设置页与数据一致。）
+ *   轮数上限防失控；写类工具经各仓库「本地先行 + 契约落盘」方法直接同步运行时
+ *   状态，会话结束无需按域刷新——刷新职责落在 reload 系列工具上。）
  */
 import { reactive } from "vue";
 import { message } from "antdv-next";
 import { useDBManagerContext } from "../context";
-import type { AiModelConfig, AiSettings } from "@/types/ai";
+import type { AIProviderConfig, AiModelConfig, AiSettings } from "@/types/ai";
 import { errorMessageOf } from "@/api/manager-api";
-import { DEFAULT_MAX_TOOL_ROUNDS } from "@/api/demo-manager-api";
+import { DEFAULT_MAX_TOOL_ROUNDS } from "@/api/demo/helpers";
 import {
   Agent,
   createChatStreamFn,
@@ -41,6 +41,7 @@ import type {
   AgentHooks,
   AiChatMessage,
   AiDeps,
+  AiPendingDanger,
   AiPendingReplace,
   AiTaskItem,
   AiToolRecord,
@@ -51,11 +52,31 @@ import type {
 function clone<T>(v: T): T {
   return JSON.parse(JSON.stringify(v)) as T;
 }
+
+/** 当前生效模型的二元组（供应商连接信息 + 模型配置） */
+export interface AiModelPair {
+  provider: AIProviderConfig;
+  model: AiModelConfig;
+}
+
+/** 模型下拉选项值（供应商 id 与模型 id 的复合键，分隔符取不可见字符防歧义） */
+export const MODEL_KEY_SEP = "\u0000";
+
+/** 复合键打包 / 拆包 */
+export function modelKeyOf(providerId: string, modelId: string): string {
+  return `${providerId}${MODEL_KEY_SEP}${modelId}`;
+}
+export function splitModelKey(key: string): { providerId: string; modelId: string } | null {
+  const idx = key.indexOf(MODEL_KEY_SEP);
+  if (idx <= 0) return null;
+  return { providerId: key.slice(0, idx), modelId: key.slice(idx + MODEL_KEY_SEP.length) };
+}
+
 /* ==================== 仓库 ==================== */
 
 /**
  * 创建 AI 仓库实例（reactive 工厂形态：每个宿主实例一份，经上下文注入子树，不依赖 Pinia）。
- * deps 每次调用时懒取（api / 模型 / 字典 / 模板 / 设置），避免 api 切换后拿到旧实例。
+ * deps 每次调用时懒取（AIApi / 模型 / 字典 / 模板 / 设置），避免 api 切换后拿到旧实例。
  */
 export function createAiStore(deps: AiDeps) {
   /** 在途加载 Promise：并发调用方共享同一次加载；失败可重试 */
@@ -66,9 +87,9 @@ export function createAiStore(deps: AiDeps) {
     loaded: false,
     loading: false,
     /** AI 设置（已保存态；编辑草稿由设置页 AI 区块本地管理） */
-    aiSettings: { baseUrl: "", apiKey: "", models: [], globalRules: "" } as AiSettings,
-    /** 当前选中模型 id（缺省取模型列表第一个） */
-    selectedModelId: "",
+    aiSettings: { providers: [], globalRules: "" } as AiSettings,
+    /** 运行时模型选择（仅内存，不持久化；缺省回落 AI 设置中的默认模型） */
+    selectedModel: null as { providerId: string; modelId: string } | null,
 
     /* ---------- 会话状态 ---------- */
     messages: [] as AiChatMessage[],
@@ -79,6 +100,8 @@ export function createAiStore(deps: AiDeps) {
     zipDownloads: {} as Record<string, AiZipDownload>,
     /** 待确认的代码替换（弹窗展示文件清单，用户确认/取消后 resolve） */
     pendingReplace: null as AiPendingReplace | null,
+    /** 待确认的危险操作（resetDemo / removeAll 弹窗确认后 resolve） */
+    pendingDanger: null as AiPendingDanger | null,
 
     /* ---------- 任务清单（左侧任务面板；由模型按模板同步） ---------- */
     tasks: [] as AiTaskItem[],
@@ -91,16 +114,57 @@ export function createAiStore(deps: AiDeps) {
     /** 上一次任务的输出速度（tok/s；任务结束后保留，供空闲时展示） */
     lastSpeedTokSec: 0,
 
-    /** 模型下拉选项 */
+    /** 模型下拉选项（全部供应商 × 全部模型，显示为「供应商名/模型名」） */
     get modelOptions(): Array<{ value: string; label: string }> {
-      return this.aiSettings.models.map((m) => ({ value: m.id, label: m.name || m.id }));
+      const out: Array<{ value: string; label: string }> = [];
+      for (const p of this.aiSettings.providers) {
+        for (const m of p.models) {
+          out.push({ value: modelKeyOf(p.id, m.id), label: `${p.name}/${m.name || m.id}` });
+        }
+      }
+      return out;
     },
-    /** 当前生效模型配置 */
-    get currentModel(): AiModelConfig | undefined {
+
+    /** 当前生效模型二元组：运行时选择 → 设置默认模型 → 首个可用模型 */
+    get currentModelPair(): AiModelPair | undefined {
+      const pick = (
+        key: { providerId: string; modelId: string } | null | undefined,
+      ): AiModelPair | undefined => {
+        if (!key) return undefined;
+        const provider = this.aiSettings.providers.find((p) => p.id === key.providerId);
+        const model = provider?.models.find((m) => m.id === key.modelId);
+        return provider && model ? { provider: clone(provider), model: clone(model) } : undefined;
+      };
       return (
-        this.aiSettings.models.find((m) => m.id === this.selectedModelId) ||
-        this.aiSettings.models[0]
+        pick(this.selectedModel) ||
+        pick(this.aiSettings.currentModel) ||
+        this.aiSettings.providers
+          .filter((p) => p.models.length)
+          .map<AiModelPair | undefined>((p) =>
+            p.models[0] ? { provider: clone(p), model: clone(p.models[0]) } : undefined,
+          )
+          .find(Boolean)
       );
+    },
+
+    /** 当前生效模型配置（展示层兼容形态：仅模型配置） */
+    get currentModel(): AiModelConfig | undefined {
+      return this.currentModelPair?.model;
+    },
+
+    /** 模型下拉当前值（复合键；写入即切换运行时模型，不持久化） */
+    get selectedModelKey(): string {
+      const cur = this.currentModelPair;
+      return cur ? modelKeyOf(cur.provider.id, cur.model.id) : "";
+    },
+    set selectedModelKey(key: string) {
+      const parsed = splitModelKey(String(key ?? ""));
+      if (parsed) this.selectedModel = parsed;
+    },
+
+    /** 未配置判断：无供应商或无任何可用模型 */
+    get unconfigured(): boolean {
+      return !this.currentModelPair;
     },
 
     /** 单次任务工具调用轮数上限（设置项，缺省 50） */
@@ -118,20 +182,17 @@ export function createAiStore(deps: AiDeps) {
         this.loading = true;
         initInFlight = (async () => {
           try {
-            const s = await deps.getApi().getAiSettings();
+            const s = await deps.getAIApi().getAISettings();
             this.aiSettings = {
-              baseUrl: String(s.baseUrl ?? ""),
-              apiKey: String(s.apiKey ?? ""),
-              models: Array.isArray(s.models) ? s.models.map(clone) : [],
+              providers: Array.isArray(s.providers) ? s.providers.map(clone) : [],
+              ...(s.currentModel ? { currentModel: { ...s.currentModel } } : {}),
               globalRules: String(s.globalRules ?? ""),
               maxToolRounds:
                 Math.floor(Number(s.maxToolRounds)) >= 1
                   ? Math.min(500, Math.floor(Number(s.maxToolRounds)))
                   : DEFAULT_MAX_TOOL_ROUNDS,
             };
-            if (!this.aiSettings.models.some((m) => m.id === this.selectedModelId)) {
-              this.selectedModelId = this.aiSettings.models[0]?.id ?? "";
-            }
+            this.selectedModel = null; // 重置运行时选择，回落设置中的默认模型
             this.loaded = true;
           } catch (e) {
             message.error(errorMessageOf(e, "AI 设置加载失败"));
@@ -144,31 +205,53 @@ export function createAiStore(deps: AiDeps) {
       await initInFlight;
     },
 
-    /** 保存 AI 设置（api 校验通过后更新本地已保存态） */
+    /** 保存 AI 设置（AIApi 校验通过后更新本地已保存态；运行时选择失效时回落） */
     async saveSettings(settings: AiSettings) {
       const saved: AiSettings = {
-        baseUrl: String(settings.baseUrl ?? "").trim(),
-        apiKey: String(settings.apiKey ?? ""),
-        models: (settings.models || []).map(clone),
+        providers: (settings.providers || []).map(clone),
+        ...(settings.currentModel ? { currentModel: { ...settings.currentModel } } : {}),
         globalRules: String(settings.globalRules ?? ""),
         maxToolRounds:
           Math.floor(Number(settings.maxToolRounds)) >= 1
             ? Math.min(500, Math.floor(Number(settings.maxToolRounds)))
             : DEFAULT_MAX_TOOL_ROUNDS,
       };
-      await deps.getApi().saveAiSettings(saved);
+      await deps.getAIApi().setAISettings(saved);
       this.aiSettings = saved;
-      if (!this.aiSettings.models.some((m) => m.id === this.selectedModelId)) {
-        this.selectedModelId = this.aiSettings.models[0]?.id ?? "";
-      }
+      // 运行时选择仍有效则保留，否则回落保存后的默认模型
+      const stillValid = this.selectedModel
+        ? saved.providers.some(
+            (p) =>
+              p.id === this.selectedModel!.providerId &&
+              p.models.some((m) => m.id === this.selectedModel!.modelId),
+          )
+        : false;
+      if (!stillValid) this.selectedModel = null;
       this.loaded = true;
+    },
+
+    /** 设置当前 AI 模型（仅运行时状态，不持久化；供 AI 的 setCurrentModel 工具与模型下拉共用） */
+    setCurrentModel(providerId: string, modelId: string) {
+      const provider = this.aiSettings.providers.find((p) => p.id === providerId);
+      const model = provider?.models.find((m) => m.id === modelId);
+      if (!provider || !model) {
+        throw new Error(`模型不存在：${providerId}/${modelId}（可用模型见 getAISettings 结果）`);
+      }
+      this.selectedModel = { providerId, modelId };
+      return {
+        providerId,
+        providerName: provider.name,
+        modelId,
+        modelName: model.name || model.id,
+      };
     },
 
     /* ---------- 会话操作 ---------- */
 
-    /** 中止当前生成（Agent 循环与流式请求一并 abort，消息标记为已中止；待确认的替换一并取消） */
+    /** 中止当前生成（Agent 循环与流式请求一并 abort，消息标记为已中止；待确认的操作一并取消） */
     stop() {
       this.resolveReplace(false);
+      this.resolveDanger(false);
       this.abortController?.abort();
       activeAgent?.abort();
     },
@@ -232,7 +315,7 @@ export function createAiStore(deps: AiDeps) {
       a.remove();
     },
 
-    /* ---------- 代码替换确认 ---------- */
+    /* ---------- 代码替换 / 危险操作确认 ---------- */
 
     /** 弹窗回调：确认 / 取消待确认的代码替换 */
     resolveReplace(ok: boolean) {
@@ -242,10 +325,18 @@ export function createAiStore(deps: AiDeps) {
       pending.resolve(ok);
     },
 
+    /** 弹窗回调：确认 / 取消待确认的危险操作 */
+    resolveDanger(ok: boolean) {
+      const pending = this.pendingDanger;
+      if (!pending) return;
+      this.pendingDanger = null;
+      pending.resolve(ok);
+    },
+
     /**
      * 发送用户消息并运行 AGENT 循环：
      * 流式输出（思考 / 正文）→ 工具调用 → 结果回填 → 继续生成，直至最终回答。
-     * 全局规则非空时附加在系统提示中；工具改动过的域在结束时同步刷新仓库。
+     * 全局规则非空时附加在系统提示中；对话经 AIApi.chat 按供应商协议分派。
      *
      * 任务清单：模型按系统提示中的模板输出【任务清单·汇报/同步】块，
      * 流式期间实时解析进 this.tasks（左侧任务面板）；用户中止时执行中的任务转暂停，
@@ -257,20 +348,20 @@ export function createAiStore(deps: AiDeps) {
       const content = String(text ?? "").trim();
       if (!content || this.running) return;
       await this.init();
-      if (!this.aiSettings.baseUrl || !this.aiSettings.models.length) {
+      if (!this.aiSettings.providers.length || !this.currentModelPair) {
         this.messages.push({
           id: uid("ai-"),
           role: "assistant",
           content:
-            "尚未配置 AI 服务：请先在「系统设置 → AI」中填写 openai compatible 服务地址（以 /v1 结尾）并添加模型，保存后再来对话。",
+            "尚未配置 AI 服务：请先在「系统设置 → AI」中添加供应商（选择对话协议、填写服务地址）并添加模型，保存后再来对话。",
           status: "error",
           createdAt: Date.now(),
         });
         return;
       }
-      const model = this.currentModel!;
+      const pair = this.currentModelPair;
       const maxRounds = this.maxToolRounds;
-      /* 界面态钩子：zip 缓存注册 + 代码替换确认（绑定本仓库实例） */
+      /* 界面态钩子：zip 缓存注册 + 代码替换确认 + 危险操作确认（绑定本仓库实例） */
       const hooks: AgentHooks = {
         /** 注册（或覆盖）某次调用的 zip 下载缓存：同 callId 旧 URL 先释放，避免内存泄漏 */
         registerZip: (callId, blob, fileName, fileCount) => {
@@ -292,9 +383,13 @@ export function createAiStore(deps: AiDeps) {
           new Promise<boolean>((resolve) => {
             this.pendingReplace = { files, resolve };
           }),
+        /** 危险操作确认：挂起 pendingDanger（界面据此弹窗），用户确认/取消由 resolveDanger 落地 */
+        requestDangerConfirm: (title, description, confirmText) =>
+          new Promise<boolean>((resolve) => {
+            this.pendingDanger = { title, description, confirmText, resolve };
+          }),
       };
       const tools = buildAgentTools(deps, hooks);
-      const dirtyDomains = new Set<string>();
 
       /* ---------- 暂停任务同步：上轮被中止的任务在下轮发给模型 ---------- */
       const pausedTasks = this.tasks.filter((t) => t.status === "paused");
@@ -335,7 +430,7 @@ export function createAiStore(deps: AiDeps) {
       }, 500);
 
       const sysPrompt = buildSystemPrompt(this.aiSettings.globalRules || "");
-      const piModel = piModelOf(model);
+      const piModel = piModelOf(pair.model, pair.provider.id);
 
       /* ---------- 上下文自动压缩（compact）---------- */
 
@@ -365,8 +460,9 @@ export function createAiStore(deps: AiDeps) {
       ): Promise<boolean> => {
         const serialized = serializeMessagesForCompact(messages);
         if (!serialized) return false;
-        const res = await deps.getApi().chatComplete({
-          model: model.id,
+        const res = await deps.getAIApi().chat({
+          provider: pair.provider,
+          model: pair.model.id,
           messages: [
             { role: "system", content: COMPACT_SYSTEM_PROMPT },
             { role: "user", content: `请压缩以下对话历史：\n\n${serialized}` },
@@ -411,10 +507,8 @@ export function createAiStore(deps: AiDeps) {
         this.contextUsed = turnBaseTotal + estTokens(turnDeltaChars);
       };
 
-      /** pi 工具注册表（执行成功上报脏域；subscribe 镜像共享本仓库实例态） */
-      const piTools = toPiTools(tools, (domains) => {
-        for (const d of domains) dirtyDomains.add(d);
-      });
+      /** pi 工具注册表（执行体即本仓库工具，写类经各仓库同步运行时状态） */
+      const piTools = toPiTools(tools);
 
       let agent: InstanceType<typeof Agent> | null = null;
       let unsubscribe: (() => void) | null = null;
@@ -436,11 +530,11 @@ export function createAiStore(deps: AiDeps) {
         }
 
         agent = new Agent({
-          streamFn: createChatStreamFn(() => deps.getApi()),
+          streamFn: createChatStreamFn(() => deps.getAIApi(), pair.provider),
           initialState: {
             systemPrompt: sysPrompt,
             model: piModel,
-            thinkingLevel: piThinkingLevelOf(model),
+            thinkingLevel: piThinkingLevelOf(pair.model),
             messages: seed,
             tools: piTools,
           },
@@ -666,8 +760,6 @@ export function createAiStore(deps: AiDeps) {
             createdAt: Date.now(),
           });
         }
-        // 工具改动过的域：同步刷新对应仓库（画布/字典/模板/设置页保持一致）
-        await this.syncDirtyStores(dirtyDomains);
       } catch (e) {
         const aborted = controller.signal.aborted || (e as Error)?.name === "AbortError";
         const last = [...this.messages].reverse().find((m) => m.role === "assistant");
@@ -696,47 +788,6 @@ export function createAiStore(deps: AiDeps) {
         this.abortController = null;
         activeAgent = null;
         unsubscribe?.();
-      }
-    },
-
-    /** 按域同步刷新被工具改动的仓库（失败静默，不阻断会话） */
-    async syncDirtyStores(domains: Set<string>) {
-      if (domains.has("model")) {
-        try {
-          await deps.getModel().refresh();
-        } catch {
-          /* 刷新失败不打断会话 */
-        }
-      }
-      if (domains.has("dict")) {
-        const dict = deps.getDict();
-        try {
-          dict.loaded = false;
-          dict.loading = false;
-          await dict.init();
-        } catch {
-          /* ignore */
-        }
-      }
-      if (domains.has("template")) {
-        const tpl = deps.getTemplate();
-        try {
-          tpl.loaded = false;
-          tpl.loading = false;
-          await tpl.init();
-        } catch {
-          /* ignore */
-        }
-      }
-      if (domains.has("settings")) {
-        const settings = deps.getSettings();
-        try {
-          settings.loaded = false;
-          settings.loading = false;
-          await settings.init();
-        } catch {
-          /* ignore */
-        }
       }
     },
   });

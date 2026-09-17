@@ -17,6 +17,10 @@ echo "=============================================="
 echo "== 字典 / 字典分类 / 模板域 E2E =="
 echo "=============================================="
 open_app
+# 全新库开始（重置演示数据不再重置设置：清 localStorage 保证设置 / AI 设置为默认初态）
+agent-browser eval "localStorage.clear()" >/dev/null 2>&1
+agent-browser open "$BASE_URL" >/dev/null 2>&1
+sleep 2
 reset_demo
 
 echo "== 1. 字典页渲染与选中联动 =="

@@ -33,7 +33,7 @@ release. Add a tool name to select part of the graph. For example, run
 ## 项目概览
 
 - **定位**：Vue 3 组件库 + 演示应用。构建产物为单文件库 `dist/DBManager.js`（ES 模块）与 `dist/DBManager.d.ts`，导出 `DBManagerView` 组件与 `ManagerApi` 契约类型；`vue`、`antdv-next`、`@lucide/vue` 为 peerDependencies（external，宿主项目提供）。
-- **能力**：可视化设计表结构（字段/索引/分类）、表间导航关系连线、数据字典、模板代码生成（Eta）、导入数据库结构、亮暗双主题、AI 工具（openai compatible AGENT 对话式操作）。
+- **能力**：可视化设计表结构（字段/索引/分类）、表间导航关系连线、数据字典、模板代码生成（Eta）、导入数据库结构、亮暗双主题、AI 工具（多供应商多模型、三协议 AGENT 对话式操作）。
 - **技术栈**：Vue 3.5 `<script setup>` + TypeScript + antdv-next + Vite Plus（vp CLI）+ Sass；包管理器 **bun**（`bun install` / `bun run xxx`）。
 - **仓库**：GitHub `bkbits/dbm-editor`（main 分支）。远程 token 已写入本地 `.git/config`，**严禁入库或外泄**。
 
@@ -56,12 +56,13 @@ release. Add a tool name to select part of the graph. For example, run
 - 全部状态为组件实例级：`DBManagerView.vue` 调 `createDBManagerState()` 创建整套仓库（theme/ui/model/canvas/dict/template/settings/history/ai），经 `provide/inject` 注入子树；子组件用 `useXxxStore()` 取用（`src/stores/context.ts` 汇总）。
 - **禁止**引入 Pinia 等应用级全局单例，禁止在模块顶层创建跨实例共享状态（`sharedDemoApi` 演示单例除外）。
 
-### ManagerApi 数据契约
+### ManagerApi / AIApi 双契约体系
 
-- 契约定义在 `src/types/manager.ts`（实体与 DTO 在 `src/types/model.ts`、AI 契约在 `src/types/ai.ts`）：全部方法返回 **Promise**（校验失败 reject 中文业务提示）；UI 侧 `await` 消费，「本地先行 → await api → 失败回滚」事务模式。
-- 演示实现 `src/api/demo-manager-api.ts`（内存 + localStorage），带 `withCallLogging` 调用日志 Proxy。
+- 数据契约 `src/types/manager.ts`（实体与 DTO 在 `src/types/model.ts`）：全部方法返回 **Promise**（校验失败 reject 中文业务提示）；UI 侧 `await` 消费，「本地先行 → await api → 失败回滚」事务模式。`save(modelElements)` / `saveDicts` / `saveTemplates` 为**全量替换语义**（入参须为完整快照，不在列表中的元素会被删除）；模板集合含字典模板（id 固定 `tpl-dict-category`）。
+- AI 专属能力 `src/types/ai.ts` 的 `AIApi`（AI 设置读写 / 三协议对话 / fetch），与 ManagerApi 彻底分离：DBManagerView 新增 `aiApi` prop（缺省 `sharedDemoAIApi`）。
+- 演示实现 `src/api/demo-manager-api.ts` + `src/api/demo-ai-api.ts`（内存 + localStorage；`src/api/demo/ai/` 三协议流式客户端），均带 `withCallLogging` 调用日志 Proxy。
 - `updateTablePos` 为批量 DTO（`{ tables: [{ tableId, pos }] }`），多表拖拽仅一次调用。
-- 修改契约时同步更新 README 的 ManagerApi 清单与 DemoManagerApi 章节。
+- 修改契约时同步更新 README 的 ManagerApi / AIApi 清单与 DemoManagerApi 章节。
 
 ### 主题系统（CSS 变量三层）
 
@@ -110,8 +111,8 @@ src/
 ├─ index.ts              # 库导出入口（DBManagerView + 契约类型）
 ├─ types/manager.ts      # ManagerApi 契约（异步签名）
 ├─ types/model.ts        # 非 AI 实体与 DTO 类型（表/字段/索引/导航/字典/模板/设置）
-├─ types/ai.ts           # AI 设置与 openai compatible chat completions 契约
-├─ api/                  # DemoManagerApi 演示实现 + 注入工具；demo/ 子目录（helpers 归一校验与日志代理 + chat-complete SSE 客户端）
+├─ types/ai.ts           # 多供应商 AI 设置 / 三协议归一对话契约 / AIApi 接口
+├─ api/                  # 注入体系（manager-api / ai-api）+ DemoManagerApi / DemoAIApi 演示实现；demo/ 子目录（helpers 归一校验与日志代理 + ai/ 三协议流式客户端）
 ├─ stores/               # 全套仓库（context.ts 汇总 provide/inject；ai/ canvas/ model/ 为按逻辑拆分的子模块，见下）
 ├─ stores/ai/            # AI 仓库：index.ts（统一出口）+ types / task-list / tool-schema / codegen / prompt / tools / store
 ├─ stores/canvas/        # 画布仓库：index.ts（统一出口）+ types / constants / viewport / pointer / touch / selection / cards / layout / clipboard / store

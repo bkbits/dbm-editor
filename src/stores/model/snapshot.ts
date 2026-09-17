@@ -2,6 +2,7 @@
  * 模型仓库：快照与恢复
  * （撤销重做快照的取出 / 写回，以及演示数据重置）
  */
+import { seedDicts, seedModelElements, seedTemplates } from "@/mock/seed";
 import { clone } from "./helpers";
 import type { ModelDeps, ModelSnapshot, ModelStore } from "./types";
 
@@ -31,22 +32,28 @@ export function snapshotMethods(deps: ModelDeps) {
       this.navigates = clone(snap.navigates);
     },
 
-    /** 重置为演示数据（demo api 提供 resetDemo；正式实现下等价于重新加载） */
+    /**
+     * 重置为演示数据：库内嵌种子快照（模型元素 / 字典 / 模板）经全量替换
+     * 契约（save / saveDicts / saveTemplates）落盘——设置与 AI 设置不受
+     * 影响；随后重载各仓库使运行时状态与库一致。大纲面板重置按钮与
+     * AI 的 resetDemo 工具共用本方法。
+     */
     async resetDemoData() {
       const api = deps.getApi();
-      await api.resetDemo?.();
-      // 全量刷新各仓库（经工厂依赖引用，无模块环问题）
+      await api.save(seedModelElements());
+      await api.saveDicts(seedDicts());
+      await api.saveTemplates(seedTemplates());
+      // 全量刷新各仓库（经工厂依赖引用，无模块环问题）；设置不重置
       const dict = deps.getDict();
       const templateStore = deps.getTemplate();
-      const settings = deps.getSettings();
-      for (const s of [this, dict, templateStore, settings] as Array<{
+      for (const s of [this, dict, templateStore] as Array<{
         loaded: boolean;
         loading: boolean;
       }>) {
         s.loaded = false;
         s.loading = false;
       }
-      await Promise.all([this.init(), dict.init(), templateStore.init(), settings.init()]);
+      await Promise.all([this.init(), dict.init(), templateStore.init()]);
     },
   } satisfies ThisType<ModelStore> & Partial<ModelStore>;
 }

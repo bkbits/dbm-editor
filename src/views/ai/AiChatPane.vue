@@ -87,7 +87,8 @@ const speedTokSec = computed(() =>
 
 /* ==================== 空态引导 ==================== */
 
-const unconfigured = computed(() => !ai.aiSettings.baseUrl || !ai.aiSettings.models.length);
+/** 未配置判断：无供应商或无任何可用模型 */
+const unconfigured = computed(() => ai.unconfigured);
 
 const suggestions = [
   "查询当前模型里有哪些分类和表",
@@ -138,8 +139,8 @@ watch(
         <span class="empty-icon"><Bot :size="22" :stroke-width="1.8" /></span>
         <h2>AI 工具</h2>
         <p v-if="unconfigured" class="empty-sub">
-          尚未配置 AI 服务，请先到「系统设置 → AI」填写 openai compatible 服务地址（以 /v1
-          结尾）并添加模型。
+          尚未配置 AI 服务，请先到「系统设置 →
+          AI」添加供应商（选择对话协议、填写服务地址）并添加模型。
           <a class="empty-link" @click="gotoSettings">前往配置 <Settings2 :size="11" /></a>
         </p>
         <p v-else class="empty-sub">
@@ -172,10 +173,10 @@ watch(
     <div class="chat-input">
       <div class="input-top">
         <a-select
-          v-model:value="ai.selectedModelId"
+          v-model:value="ai.selectedModelKey"
           :options="ai.modelOptions"
           size="small"
-          style="width: 210px"
+          style="width: 240px"
           placeholder="选择模型"
           :disabled="!ai.modelOptions.length"
         />

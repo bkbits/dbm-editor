@@ -140,7 +140,7 @@ export function createSettingsStore(deps: SettingsDeps) {
     async save(settings: Settings) {
       const saved = clone(settings);
       // 异步契约：api 保存成功后才更新本地状态（失败时本地保持旧值）
-      await deps.getApi().saveSettings(saved);
+      await deps.getApi().setSettings(saved);
       this.indexTypes = (saved.indexTypes || []).map(String);
       this.typeMappings = (saved.typeMappings || []).map(clone);
       this.author = String(saved.author ?? "");

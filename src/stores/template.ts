@@ -1,7 +1,10 @@
 /**
- * 模板仓库：表模板/字典分类模板 CRUD + 代码生成（zip 打包下载 / 上传替换）
+ * 模板仓库：表模板/字典模板 CRUD + 代码生成（zip 打包下载 / 上传替换）
  * （reactive 对象工厂形态，由 DBManagerView 经上下文注入，不依赖 Pinia；
- *   模板读写经 ManagerApi，Template.templateName ↔ 应用内部 CodeTemplate.name 适配）
+ *   模板读写经 ManagerApi，Template.templateName ↔ 应用内部 CodeTemplate.name 适配；
+ *   契约的模板集合含字典模板（id 固定 tpl-dict-category）：init 时拆分合并
+ *   列表（templates 仅表模板 + dictCategoryTemplate 独立态），
+ *   templatesSnapshot 输出含字典模板的完整快照供 AI saveTemplates 工具用）
  */
 import { reactive } from "vue";
 import { message } from "antdv-next";
@@ -9,6 +12,7 @@ import JSZip from "jszip";
 import { useDBManagerContext } from "./context";
 import type { ManagerApi } from "@/types/manager";
 import type { CodeTemplate, GeneratedFile, TableVO, Template } from "@/types/model";
+import { DICT_TEMPLATE_ID } from "@/types/model";
 import { errorMessageOf } from "@/api/manager-api";
 import { renderDictCategoryTemplate, renderTemplate } from "@/utils/render";
 import { uid } from "@/utils/id";
@@ -54,23 +58,21 @@ export function createTemplateStore(deps: TemplateDeps) {
       return new Set(this.templates.map((t) => t.name));
     },
 
-    /** 加载表模板与字典分类模板（幂等：已加载或在途时直接返回，不等待；失败提示且可重试） */
+    /** 加载模板集合（契约 getTemplates 返回含字典模板的合并列表，此处拆分存储：
+     *  templates 仅表模板 + dictCategoryTemplate 独立态，UI 面不感知合并形态） */
     async init() {
       if (this.loaded || this.loading) return;
       this.loading = true;
       try {
         const api = deps.getApi();
-        this.templates = (await api.getTemplates()).map((t) => ({
-          id: t.id,
-          name: t.templateName,
-          content: t.content,
-        }));
-        const dictTpl = await api.getDictCategoryTemplate();
-        this.dictCategoryTemplate = {
-          id: dictTpl.id,
-          name: dictTpl.templateName,
-          content: dictTpl.content,
-        };
+        const all = await api.getTemplates();
+        this.templates = all
+          .filter((t) => t.id !== DICT_TEMPLATE_ID)
+          .map((t) => ({ id: t.id, name: t.templateName, content: t.content }));
+        const dictTpl = all.find((t) => t.id === DICT_TEMPLATE_ID);
+        this.dictCategoryTemplate = dictTpl
+          ? { id: dictTpl.id, name: dictTpl.templateName, content: dictTpl.content }
+          : null;
         this.loaded = true;
       } catch (e) {
         message.error(errorMessageOf(e, "模板加载失败"));
@@ -116,17 +118,42 @@ export function createTemplateStore(deps: TemplateDeps) {
         throw e;
       }
     },
-    /** 保存字典分类模板（仅一个，无新增/删除） */
+    /** 保存字典分类模板（契约集合中的一员，id 固定；走 updateTemplate 语义） */
     async saveDictCategoryTemplate(draft: CodeTemplate) {
       try {
-        const spec: Template = { id: draft.id, templateName: draft.name, content: draft.content };
-        await deps.getApi().updateDictCategoryTemplate(spec);
-        this.dictCategoryTemplate = { id: draft.id, name: draft.name, content: draft.content };
+        const spec: Template = {
+          id: draft.id || DICT_TEMPLATE_ID,
+          templateName: draft.name,
+          content: draft.content,
+        };
+        await deps.getApi().updateTemplate(spec);
+        this.dictCategoryTemplate = {
+          id: DICT_TEMPLATE_ID,
+          name: draft.name,
+          content: draft.content,
+        };
         return this.dictCategoryTemplate;
       } catch (e) {
         message.error(errorMessageOf(e, "字典分类模板保存失败"));
         throw e;
       }
+    },
+
+    /** 当前运行时状态的完整模板快照（含字典模板；AI saveTemplates 工具用） */
+    templatesSnapshot(): Template[] {
+      const out: Template[] = this.templates.map((t) => ({
+        id: t.id,
+        templateName: t.name,
+        content: t.content,
+      }));
+      if (this.dictCategoryTemplate) {
+        out.push({
+          id: DICT_TEMPLATE_ID,
+          templateName: this.dictCategoryTemplate.name,
+          content: this.dictCategoryTemplate.content,
+        });
+      }
+      return out;
     },
     /** 新建模板草稿（id 空串表示未入库；名称避重：new_template、new_template_1…） */
     newTemplateDraft() {

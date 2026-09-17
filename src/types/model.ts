@@ -371,12 +371,19 @@ export interface DBTable {
   indexes: DBIndex[]; // 索引列表
 }
 
-/** 模型加载结果：分类、表与导航关系的完整模型 */
-export interface LoadResultVO {
+/**
+ * 模型元素集合：分类、表与导航关系的完整模型。
+ * ManagerApi.load 的返回形态与 ManagerApi.save 的入参形态（完整快照，
+ * 全量替换语义——不在列表中的元素会被删除）。
+ */
+export interface ModelElements {
   categories: TableCategory[]; // 表分类列表
   tables: ManagerTable[]; // 表列表（含字段与索引）
   navigates: TableNavigate[]; // 导航关系列表
 }
+
+/** 字典模板的固定 id（模板集合中承担按分类生成字典代码的一条，saveTemplates 须包含） */
+export const DICT_TEMPLATE_ID = "tpl-dict-category";
 
 /**
  * 完整表定义：规格中 Table 的完整语义（元信息 + 字段 + 索引），

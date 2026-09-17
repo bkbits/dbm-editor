@@ -19,20 +19,21 @@
 
 ## 技术栈
 
-| 分类      | 选型                                                                                                                                                              |
-| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 包管理器  | [bun](https://bun.sh)                                                                                                                                             |
-| 工具链    | [Vite+](https://viteplus.dev)（`vp` 统一 CLI：dev / build / lint / fmt，`vite-plus` 本地包 + `@voidzero-dev/vite-plus-core` 别名）                                |
-| 前端框架  | Vue 3（Composition API + `<script setup>`）                                                                                                                       |
-| UI 组件库 | antdv-next                                                                                                                                                        |
-| 图标库    | @lucide/vue                                                                                                                                                       |
-| 状态管理  | 组件级状态注入（Vue `reactive` + `provide`/`inject`，无 Pinia 依赖）                                                                                              |
-| 模板引擎  | Eta（代码生成）                                                                                                                                                   |
-| 样式      | Sass（scss 标准）                                                                                                                                                 |
-| 数据能力  | ManagerApi 接口体系（内置 DemoManagerApi 演示实现，可注入自定义实现）                                                                                             |
-| AI 内核   | [@earendil-works/pi-agent-core](https://github.com/earendil-works/pi) Agent 运行循环（注入式 StreamFn 复用内置 openai compatible SSE 客户端，浏览器零 Node 依赖） |
-| 代码高亮  | highlight.js + highlights-eta（Eta 模板语法）                                                                                                                     |
-| 打包下载  | JSZip                                                                                                                                                             |
+| 分类      | 选型                                                                                                                                                 |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 包管理器  | [bun](https://bun.sh)                                                                                                                                |
+| 工具链    | [Vite+](https://viteplus.dev)（`vp` 统一 CLI：dev / build / lint / fmt，`vite-plus` 本地包 + `@voidzero-dev/vite-plus-core` 别名）                   |
+| 前端框架  | Vue 3（Composition API + `<script setup>`）                                                                                                          |
+| UI 组件库 | antdv-next                                                                                                                                           |
+| 图标库    | @lucide/vue                                                                                                                                          |
+| 状态管理  | 组件级状态注入（Vue `reactive` + `provide`/`inject`，无 Pinia 依赖）                                                                                 |
+| 模板引擎  | Eta（代码生成）                                                                                                                                      |
+| 样式      | Sass（scss 标准）                                                                                                                                    |
+| 数据能力  | ManagerApi 接口体系（内置 DemoManagerApi 演示实现，可注入自定义实现）                                                                                |
+| AI 专属   | AIApi 接口（内置 DemoAIApi：AI 设置 / 三协议对话 / fetch，多供应商多模型）                                                                           |
+| AI 内核   | [@earendil-works/pi-agent-core](https://github.com/earendil-works/pi) Agent 运行循环（注入式 StreamFn 复用内置三协议流式客户端，浏览器零 Node 依赖） |
+| 代码高亮  | highlight.js + highlights-eta（Eta 模板语法）                                                                                                        |
+| 打包下载  | JSZip                                                                                                                                                |
 
 > 页面切换不使用 `vue-router`，通过 `v-if` 状态管理（见 `src/stores/ui.ts`）。
 
@@ -71,23 +72,23 @@ bun run dev
 
 ### 常用命令速查
 
-| 命令                                 | 说明                                                                                                                                                                                                |
-| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `bun run dev`（= `vp dev`）          | 启动开发服务器（localhost:3000，热更新）                                                                                                                                                            |
-| `bun run build`（= `vp build`）      | 库构建：产出 `dist/DBManager.js` + `dist/DBManager.d.ts` 两个文件（CSS 已内联进 JS，详见[库构建与宿主接入](#库构建与宿主接入)）                                                                     |
-| `bun run build:pages`                | Pages 演示站构建：应用模式产出 `dist/`（index.html + assets，相对路径 base，见[GitHub Pages 自动发布](#github-pages-自动发布)）                                                                     |
-| `bun run preview`                    | 本地预览生产构建                                                                                                                                                                                    |
-| `bun run typecheck`                  | 全量类型检查（`vue-tsc --noEmit`）                                                                                                                                                                  |
-| `vp check`                           | Vite+ 内置：格式 + lint + 类型检查（staged 提交时自动执行）                                                                                                                                         |
-| `vp install`                         | 安装依赖                                                                                                                                                                                            |
-| `bun scripts/eta-smoke.mjs`          | Eta 模板引擎 API 冒烟测试（模板功能改动前的快速回归）                                                                                                                                               |
-| `bash scripts/e2e/run-all.sh`        | E2E 全套件总入口（顺序执行四域并汇总；dev server 未运行则自起）                                                                                                                                     |
-| `bash scripts/e2e/model-elements.sh` | E2E · 模型元素域（56 项断言：画布初态/选择拖拽/新增删除撤销/复制粘贴/自动美化/NN 胶囊/隐藏显示/逻辑删除字段约定链路/SyncTable 固定列与同步滚动）                                                    |
-| `bash scripts/e2e/dict-template.sh`  | E2E · 字典与模板域（35 项断言：字典增删与保存/字典分类增删与占用拦截/表模板编辑预览保存删除/字典分类模板）                                                                                          |
-| `bash scripts/e2e/settings.sh`       | E2E · 设置域（36 项断言：分区导航/字段约定持久化/索引类型禁用/AI 统一保存/全局规则默认与恢复/旧库空值兼容/轮数上限）                                                                                |
-| `bash scripts/e2e/ai-agent.sh`       | E2E · AI 工具链域（90 项断言：pi 内核链路/系统提示与工具注册/历史回放/参数校验重试/错误前缀回填/双工具串行/代码生成替换链路/思考块贴底三态/技能/任务清单与暂停注入/85% 自动压缩/用量统计/轮数上限） |
-| `python3 scripts/check-readme.py`    | README 链接 / 锚点 / 表格自检                                                                                                                                                                       |
-| `bash scripts/package.sh`            | 打包源码为交付 zip（`download/graph-db-model-editor.zip`，含 skills/DBManager 技能文档）                                                                                                            |
+| 命令                                 | 说明                                                                                                                                                                                                                                                                                     |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bun run dev`（= `vp dev`）          | 启动开发服务器（localhost:3000，热更新）                                                                                                                                                                                                                                                 |
+| `bun run build`（= `vp build`）      | 库构建：产出 `dist/DBManager.js` + `dist/DBManager.d.ts` 两个文件（CSS 已内联进 JS，详见[库构建与宿主接入](#库构建与宿主接入)）                                                                                                                                                          |
+| `bun run build:pages`                | Pages 演示站构建：应用模式产出 `dist/`（index.html + assets，相对路径 base，见[GitHub Pages 自动发布](#github-pages-自动发布)）                                                                                                                                                          |
+| `bun run preview`                    | 本地预览生产构建                                                                                                                                                                                                                                                                         |
+| `bun run typecheck`                  | 全量类型检查（`vue-tsc --noEmit`）                                                                                                                                                                                                                                                       |
+| `vp check`                           | Vite+ 内置：格式 + lint + 类型检查（staged 提交时自动执行）                                                                                                                                                                                                                              |
+| `vp install`                         | 安装依赖                                                                                                                                                                                                                                                                                 |
+| `bun scripts/eta-smoke.mjs`          | Eta 模板引擎 API 冒烟测试（模板功能改动前的快速回归）                                                                                                                                                                                                                                    |
+| `bash scripts/e2e/run-all.sh`        | E2E 全套件总入口（顺序执行四域并汇总；dev server 未运行则自起）                                                                                                                                                                                                                          |
+| `bash scripts/e2e/model-elements.sh` | E2E · 模型元素域（56 项断言：画布初态/选择拖拽/新增删除撤销/复制粘贴/自动美化/NN 胶囊/隐藏显示/逻辑删除字段约定链路/SyncTable 固定列与同步滚动）                                                                                                                                         |
+| `bash scripts/e2e/dict-template.sh`  | E2E · 字典与模板域（35 项断言：字典增删与保存/字典分类增删与占用拦截/表模板编辑预览保存删除/字典分类模板）                                                                                                                                                                               |
+| `bash scripts/e2e/settings.sh`       | E2E · 设置域（43 项断言：分区导航/字段约定持久化/索引类型禁用/AI 多供应商配置与地址协议校验/统一保存/全局规则默认与恢复/旧库单供应商形态迁移/轮数上限）                                                                                                                                  |
+| `bash scripts/e2e/ai-agent.sh`       | E2E · AI 工具链域（118 项断言：pi 内核链路/51 工具注册/历史回放/参数校验重试/错误前缀回填/双工具串行/genCodeZip-genCodeReplace 链路/reload 四工具/AIApi 三协议对话/AI 设置工具/撤销链路/removeAll-resetDemo 危险确认/fetch/思考块贴底三态/技能/任务清单/85% 自动压缩/用量统计/轮数上限） |
+| `python3 scripts/check-readme.py`    | README 链接 / 锚点 / 表格自检                                                                                                                                                                                                                                                            |
+| `bash scripts/package.sh`            | 打包源码为交付 zip（`download/graph-db-model-editor.zip`，含 skills/DBManager 技能文档）                                                                                                                                                                                                 |
 
 ## 库构建与宿主接入
 
@@ -183,7 +184,7 @@ createApp(() => h(DBManagerView, { api: myApi }))
 - 分类树（名称 / 包路径 / 表数量），选中高亮、可折叠、支持增删改
 - 表名点击 → 画布卡片联动高亮并平滑居中；画布卡片点击 → 大纲联动高亮
 - 隐藏表在大纲中以闭眼图标标识，可一键显示/隐藏
-- 面板底部「重置演示数据」按钮：恢复内置演示数据（`resetDemo()`，DemoManagerApi 扩展方法）
+- 面板底部「重置演示数据」按钮：将库内嵌种子数据（模型元素 / 字典 / 模板）经全量替换契约（`save` / `saveDicts` / `saveTemplates`）落盘并重载各仓库（设置与 AI 设置不受影响；AI 的 `resetDemo` 工具同源）
 
 ### 编辑对话框
 
@@ -267,27 +268,29 @@ Eta 语法：`<% %>` 逻辑、`<%= %>` 输出、`<%# %>` 自定义注释标签�
 - **索引类型**：索引类型列表管理（增删，自动转大写、去重校验）。「编辑表」对话框的索引类型下拉选项与数据库导入的索引类型归一化均使用该列表；至少保留一个类型
 - **字段约定（主键 / 审计 / 逻辑删除）**：主键字段约定（默认 `id` / `BIGINT`，每表强制拥有且固定为第一个字段，不可修改、不可排序，Java 类型按「列默认类型」规则自动推导）、审计字段约定（创建人 `create_by` / 创建时间 `create_time` 强制非空，更新人 `update_by` / 更新时间 `update_time` 可空；创建/更新人默认 `BIGINT`，创建/更新时间默认 `DATETIME`；数据库蛇形命名，Java 属性名自动转小驼峰）与**逻辑删除字段约定**（默认 `deleted` / `TINYINT`，软删除标记字段，每表至多一个，强制非空）。名称与类型均可编辑（类型可自动补全）；审计与逻辑删除字段可单独设定 Java 类型（可自动补全、可清空，**留空 = 按「列默认类型」规则自动推导且随类型联动**，设定后建列固定使用该值；主键 Java 类型始终为自动推导），需为合法标识符且六个名称互不重复；非空约束为固定语义随字段角色而定；「恢复默认」一键回置 id/create_by/create_time/update_by/update_time/deleted（Java 类型全部回到自动推导）；「编辑表」对话框据此固定主键首字段并提供审计与逻辑删除字段一键增删（建列时取约定的 Java 类型）
 - **代码生成**：作者（生成 javadoc 的 `@author`，留空则省略该标签）与表/列选项元定义（名称/类型/标签/说明/字典）。默认表选项为 `query`/`add`/`update`/`remove`（驱动 mapper/service/controller 分支），默认列选项为 `show`/`query`/`add`/`update`/`remove`（驱动 controller 查询条件与 vue 列表/表单）；选项类型支持 `boolean`/`string`/`int`/`long`/`double` 及自定义，名称需为合法标识符且列表内唯一
-- **AI（openai compatible）**：AI 供应商设置——服务地址（必须以 `/v1` 结尾，如 `https://api.example.com/v1`）与 API Key（Bearer 鉴权，本地服务可留空）；模型列表（模型 id / 展示名称 / 是否支持思考 / 思考强度 `low|medium|high|xhigh|max` / 输入输出上下文长度，id 非空唯一）；工具调用轮数上限（默认 50，范围 1-500，达到上限自动中止防失控）；全局规则（多行文本，非空时作为规则文本附加在 AI 工具每次调用的系统提示中；**新库默认带任务流程约定文本**——七步任务流程（读取设置 → 刷新重载 → 分析需求 → 制定队列清单 → 按清单执行 → 刷新校验 → 校验结果）与三条遵守规则（技能层层递进加载 / 一轮工具调用只更新一个元素 / 大量增删分批实施），「恢复默认」一键找回）。独立契约（`getAiSettings` / `saveAiSettings`），但保存/放弃随整页底部操作栏**统一驱动**（AI 草稿独立校验，无效时连同提示一并禁用保存；已保存的空规则不会被种子默认覆盖，尊重主动清空）
+- **AI（多供应商 / 多模型）**：供应商列表——每张供应商卡片含名称（空则自动命名「供应商N」）、**对话协议**（`OpenAI Chat Completions` / `OpenAI Responses` / `Anthropic Messages` 三选一）、服务地址（openai 系必须以 `/v1` 结尾，如 `https://api.example.com/v1`；anthropic 兼容带或不带 `/v1`）与 API Key（openai 系 Bearer 鉴权、anthropic 系 `x-api-key`，本地服务可留空），以及该供应商下的**模型列表**（模型 id / 展示名称 / 是否支持思考 / 思考强度 `low|medium|high|xhigh|max` / 输入输出上下文长度，模型 id 供应商内唯一、可跨供应商重名——模型唯一标识为「供应商 id + 模型 id」二元组）；**默认模型**（`供应商名/模型名` 形态展示，AI 工具页启动时选中的模型，会话内切换不写回设置）；工具调用轮数上限（默认 50，范围 1-500，达到上限自动中止防失控）；全局规则（多行文本，非空时作为规则文本附加在 AI 工具每次调用的系统提示中；**新库默认带任务流程约定文本**——七步任务流程（读取设置 → 刷新重载 → 分析需求 → 制定队列清单 → 按清单执行 → 刷新校验 → 校验结果）与三条遵守规则（技能层层递进加载 / 一轮工具调用只更新一个元素 / 大量增删分批实施），「恢复默认」一键找回）。AI 设置经独立契约 `AIApi`（`getAISettings` / `setAISettings`）读写，保存/放弃随整页底部操作栏**统一驱动**（AI 草稿独立校验，无效时连同提示一并禁用保存；已保存的空规则不会被种子默认覆盖，尊重主动清空）；旧库单供应商形态读取时自动迁移为一个默认供应商
 - 设置保存后持久化（DemoManagerApi + localStorage），整页统一保存 / 放弃修改（含 AI 区块，两部分契约先后落盘）
 
 ### AI 工具（AGENT 对话式操作）
 
 顶栏「AI 工具」进入 AGENT 对话界面，用自然语言直接操作模型数据与代码生成：
 
-- **能力装载**：自动将 ManagerApi 全部能力（去除 AI 设置与 chatComplete 两项；`replace` 为 zip 二进制参数不可 JSON 化，由「代码替换」工具承担）+ 代码生成 + 代码替换 + 技能加载（`loadSkill`）注册为可调用工具，按「流式输出 → 工具调用 → 结果回填 → 继续生成」循环直至最终回答（轮数上限为 AI 设置项，默认 50，范围 1-500，防失控）
-- **AGENT 运行内核（pi-agent-core）**：「模型流式 → 工具调用 → 结果回填 → 继续生成」循环由 [`@earendil-works/pi-agent-core`](https://github.com/earendil-works/pi) 的 `Agent` 驱动（`src/ai/pi-agent.ts` 适配层）：网络层注入自定义 `StreamFn`——把既有 openai compatible SSE 客户端（鉴权、CORS、错误文案不变）翻译为 pi AssistantMessageEvent 事件协议，pi 自带的 openai/anthropic/google SDK 为 Node 端懒加载实现、浏览器不可用，注入式 StreamFn 是官方推荐的接入方式；工具注册表经 typebox `Type.Unsafe` 零改造包原始 JSON Schema（入参先经 pi 校验与类型矫正，缺必填参数转英文 `Validation failed` 错误结果回填重试，执行失败加「工具执行失败：」前缀回填）；会话历史（含 compact 边界）每次发送重建为 pi transcript 种子，事件流（message_update / tool_execution / turn_end）镜像到界面会话态；同轮多工具串行执行；agent-core 主入口静态闭包 103 文件零 Node 依赖、零 provider SDK，浏览器打包零 stub 直接可用
+- **能力装载（51 工具）**：按域分层的 AGENT 工具集——模型元素基础操作（`reload` / `saveAll` / `undo` / `undoAll` / `redo` / `clearHistory` / `resetDemo` / `removeAll`）、表分类（`getTableCategories` / `addTableCategory` / `updateTableCategory` / `removeTableCategory`）、表（`getTables` / `getTable` / `addTable` / `updateTable` / `removeTable` / `updateTablePos` / `importTablesFromDB`）、导航（`getNavigates` / `addNavigate` / `updateNavigate` / `removeNavigate`）、字典（`reloadDicts` / `saveDicts` / `getDictCategories` / `getDicts` / `getDict` / `addDict` / `updateDict` / `removeDict`）、模板（`reloadTemplates` / `saveTemplates` / `getTemplates` / `getTemplate` / `getDictTemplate` / `addTemplate` / `updateTemplate` / `removeTemplate`）、代码生成三件套（`genCode` 单模板单表返回内容 / `genCodeZip` 打包 zip 供下载 / `genCodeReplace` 写回源码）、设置（`getSettings` / `setSettings` / `reloadSettings`）、AI 设置（`getAISettings` / `setAISettings` / `reloadAISettings` / `setCurrentModel`）、扩展（`fetch` 网络请求 / `skill` 技能加载）。按「流式输出 → 工具调用 → 结果回填 → 继续生成」循环直至最终回答（轮数上限为 AI 设置项，默认 50，范围 1-500，防失控）
+- **工具分层原则**：读类工具仅读各仓库的运行时状态（不调接口）；写类工具（新增 / 更新 / 删除 / 保存）一律「本地先行 + 契约落盘 + 同步运行时状态」——复用各仓库既有的「本地先行 → await api → 失败回滚」事务方法，界面与 AI 走同一条路径、状态天然一致，**会话结束无需按域刷新**；刷新职责只落在 `reload` / `reloadDicts` / `reloadTemplates` / `reloadSettings` 四个读类工具上（UI 顶栏「刷新」按钮 = 四工具依次执行的等价语义）；危险操作（`resetDemo` / `removeAll` / `genCodeReplace`）先经前端弹窗确认
+- **AGENT 运行内核（pi-agent-core）**：「模型流式 → 工具调用 → 结果回填 → 继续生成」循环由 [`@earendil-works/pi-agent-core`](https://github.com/earendil-works/pi) 的 `Agent` 驱动（`src/ai/pi-agent.ts` 适配层）：网络层注入自定义 `StreamFn`——把 AIApi 三协议客户端的归一增量（鉴权、CORS、错误文案不变）翻译为 pi AssistantMessageEvent 事件协议，pi 自带的 openai/anthropic/google SDK 为 Node 端懒加载实现、浏览器不可用，注入式 StreamFn 是官方推荐的接入方式；供应商连接信息在 send 时确定后闭包捕获（会话期间模型与供应商固定）；工具注册表经 typebox `Type.Unsafe` 零改造包原始 JSON Schema（入参先经 pi 校验与类型矫正，缺必填参数转英文 `Validation failed` 错误结果回填重试，执行失败加「工具执行失败：」前缀回填）；会话历史（含 compact 边界）每次发送重建为 pi transcript 种子，事件流（message_update / tool_execution / turn_end）镜像到界面会话态；同轮多工具串行执行
 - **默认规则**：系统提示内置任务执行流程（① 读取最新设置与数据作为任务上下文参考，修改任何元素前先读取其当前值，避免给予脏数据执行任务；② 有不明确之处先提供可选项让用户选择；③ 复杂任务先创建分步任务计划并按模板汇报，涉及特定领域先加载对应技能；④ 按计划执行；⑤ 按需校验执行结果）与必须遵守的规则（树形表不自关联导航而用 `parentIdColumn`；每表开头必须主键 id 字段；按需添加审计字段/逻辑删除字段（每表至多一个）/索引；字段尽量非空；按需关联字典；字典值键不用数字而用代表含义的首字母大写）
 - **全局规则**：AI 设置中的全局规则非空时附加在系统提示中（优先级最高）；新库默认带任务流程约定文本（`src/ai/defaults.ts`，设置页可一键恢复默认，旧库已保存值含主动清空不受影响）
-- **内置技能库**：六个领域技能（`table-design` 表结构设计 / `navigate` 导航关系 / `dict` 字典设计 / `codegen` 代码生成与替换 / `import-db` 数据库导入 / `canvas-layout` 画布布局），按「部分」组织（如主键与约定字段、级联策略选择）；模型通过 `loadSkill(skill, parts?)` 工具按需加载（单独占用一轮工具调用，只加载相关部分可节省上下文）；聊天区与右侧记录以独立蓝色书本样式展示加载了哪个技能的哪些部分
+- **内置技能库**：六个领域技能（`table-design` 表结构设计 / `navigate` 导航关系 / `dict` 字典设计 / `codegen` 代码生成与替换 / `import-db` 数据库导入 / `canvas-layout` 画布布局），按「部分」组织（如主键与约定字段、级联策略选择）；模型通过 `skill(skill, parts?)` 工具按需加载（单独占用一轮工具调用，只加载相关部分可节省上下文）；聊天区与右侧记录以独立蓝色书本样式展示加载了哪个技能的哪些部分
 - **任务清单**：系统提示内置「汇报 / 同步」任务清单消息模板，复杂任务先分步规划并汇报，状态变化随时同步；界面解析模板驱动左侧任务面板（执行中 / 未开始 / 已完成 / 暂停四态醒目样式：状态色条 + 徽标 + 汇总芯片，流式期间实时刷新）；用户中止时执行中任务自动转暂停，下一轮发送把暂停中的任务同步给模型继续完成；模板块从助手正文中剥离，不在正文重复展示
 - **上下文自动压缩**：已用上下文达模型输入上下文长度的 85% 时，在轮边界自动发起压缩请求（历史序列化为带截断上限的文本，保留任务目标 / 已完成操作 / 任务清单状态 / 待办），历史折叠为摘要后以摘要为基座继续对话；聊天区以居中分隔条提示「上下文已自动压缩」（悬浮可查看摘要），压缩后至少新增 4 条消息才允许再次压缩；占用超 80% 警告色、达 85% 强调色提示
 - **界面布局**：左侧为当前任务清单，中间上方为历史聊天数据，下方为文本输入框（Enter 发送 / Shift+Enter 换行，可随时停止生成、开启新会话）；右侧为能力调用记录（默认收起，点击展开查看参数与返回值；记录过多时不挤压变形，面板原本贴底时新记录自动跟随滚到底部；可单独清空，不影响对话）
 - **思考内容**：模型支持思考时，思考流以可收缩块展示（铺满消息体宽度）——正在输出时自动展开、完成后自动收起，亦可手动切换；块内停留在底部时新内容追加自动跟随滚到底部（高频分片下以程序滚动位置判定用户意图，避免滚动事件竞态误停跟），上翻查看即停跟、回底恢复
 - **token 用量统计**：输入区状态条展示上下文占用（已用 / 模型输入上下文长度）与输出速度（任务中实时估算、usage 到达后真实值收口，停止后显示上一次任务速度）；user 消息标注该问题累计输入 / 回答 token，assistant 消息标注本轮输出与速度
 - **消息渲染**：助手正文用 [markstream-vue](https://markstream.simonhe.me/zh/) 做流式 Markdown 渲染（`mode="chat"` 平滑出字，标题 / 列表 / 加粗 / 行内代码 / 围栏代码块 / 表格 / 引用，代码块配色与主题令牌对接，随亮暗主题切换）；助手消息附工具调用芯片，点击定位右侧对应记录；展示文本（正文 / 思考 / 调用参数与返回）均去头尾空白
-- **代码生成产物下载**：`generateCode` 生成后自动打包 zip 并缓存 Blob，调用记录行提供下载按钮（收起态迷你图标 / 展开态完整文件名与大小），会话内可重复点击下载
-- **代码替换确认**：`replaceCode` 触发时先弹出待覆盖文件清单（文件名 / 路径 / 表 / 模板 / 大小），用户「确认替换」后才写回，取消则向模型返回未执行
-- **数据同步**：工具改动过模型 / 字典 / 模板 / 设置时，会话结束自动按域刷新对应仓库，画布与各页面保持一致
+- **模型选择与多协议对话**：输入区模型下拉显示为「供应商名/模型名」，运行时切换（不持久化，重启回落设置中的默认模型）；对话按当前供应商的协议分派到 OpenAI Chat Completions（`{base}/chat/completions`）/ OpenAI Responses（`{base}/responses`）/ Anthropic Messages（`{base}/v1/messages` 或 `{base}/messages`），三协议的流式增量（正文 / 思考 / 工具调用 / 用量）归一到同一套增量契约，AI 设置工具可切换运行时模型（`setCurrentModel`）
+- **代码生成产物下载**：`genCodeZip` 生成后自动打包 zip 并缓存 Blob，调用记录行提供下载按钮（收起态迷你图标 / 展开态完整文件名与大小），会话内可重复点击下载；`genCode` 为单模板单表生成并直接返回代码内容
+- **代码替换确认**：`genCodeReplace` 触发时先弹出待覆盖文件清单（文件名 / 路径 / 表 / 模板 / 大小），用户「确认替换」后才写回，取消则向模型返回未执行；`resetDemo` / `removeAll` 同样先弹危险操作确认框（确认后才执行）
+- **运行时同步**：写类工具经各仓库「本地先行 + 契约落盘」方法直接同步运行时状态，画布与各页面即时一致；撤销 / 重做 / 清空历史等基础操作工具与画布快捷键（Ctrl+Z / Ctrl+Y）同源
 - **上下文防溢出**：工具结果回填模型上限 48k 字符（超限截断标注）；代码生成可选用 `includeContent` 附带文件内容（单文件 6k 截断）
 
 ### 主题
@@ -319,49 +322,68 @@ Eta 语法：`<% %>` 逻辑、`<%= %>` 输出、`<%# %>` 自定义注释标签�
 ```ts
 import DBManagerView from '@/views/DBManagerView.vue'
 import type { ManagerApi } from '@/types/manager'
+import type { AIApi } from '@/types/ai'
 
 const myApi: ManagerApi = {
   // 实现全部异步方法（均返回 Promise）：设置读写 / 数据库导入 /
-  // 模型加载与全量保存 / 分类・表・导航细粒度 CRUD / 字典与模板
+  // 模型加载与全量保存 / 表分类・表・导航细粒度 CRUD / 字典与模板
   // CRUD / 代码替换（详见 src/types/manager.ts 的 ManagerApi 接口）
+  ...
+}
+
+const myAIApi: AIApi = {
+  // AI 专属能力（可选注入，缺省使用内置 DemoAIApi）：AI 设置读写 /
+  // 三协议对话（openai-chat / openai-responses / anthropic）/ fetch
+  // （详见 src/types/ai.ts 的 AIApi 接口）
   ...
 }
 ```
 
 ```vue
-<DBManagerView :api="myApi" />
-<!-- 不传 api 时使用内置 DemoManagerApi 演示实现（内存 + localStorage） -->
+<DBManagerView :api="myApi" :ai-api="myAIApi" />
+<!-- 不传 api 时使用内置 DemoManagerApi 演示实现（内存 + localStorage）；
+     不传 aiApi 时使用内置 DemoAIApi -->
 ```
 
 注入链路：
 
-- **DBManagerView** 解析 `api` 属性（缺省共享 `sharedDemoApi` 单例）后做两件事：`provide` 注入子组件（`useManagerApi()` 取用响应式引用）；调用 `createDBManagerState(() => api)` 创建整套状态仓库并 `provide` 注入子树——**每个 DBManagerView 实例一套状态**，不依赖 Pinia 等应用级全局单例
+- **DBManagerView** 解析 `api` / `aiApi` 属性（缺省共享 `sharedDemoApi` / `sharedDemoAIApi` 单例）后做两件事：`provide` 注入子组件（`useManagerApi()` / `useAIApi()` 取用响应式引用）；调用 `createDBManagerState(() => api, () => aiApi)` 创建整套状态仓库并 `provide` 注入子树——**每个 DBManagerView 实例一套状态**，不依赖 Pinia 等应用级全局单例
 - **状态仓库**（`src/stores/`）：theme / ui / model / canvas / dict / template / settings / history / ai 九个仓库均为 Vue `reactive` 对象（state 字段 + getter 访问器 + action 方法），子组件经 `useXxxStore()` 注入取用（函数名与早期 Pinia 版本一致）；仓库间相互引用与 api 读取均经工厂入参的惰性取值函数建立，切换 api 时 DBManagerView 自动全量重载各仓库数据
-- **子组件**（如数据库导入 / 代码替换对话框）通过 `useManagerApi()`（`src/api/manager-api.ts`）注入响应式引用，在合适位置 `await` 调用 `api.importFromDB()` / `api.replace(zip)` 等异步方法
-- **模型变更**遵循细粒度异步契约——每次操作先改本地状态，再 `await` 对应 api 方法（`addTable` / `updateTable` / `removeTable` / `updateTablePos` / `addNavigate` …）即时持久化，持久化失败（reject）自动回滚快照；撤销/重做恢复后通过 diff 同步（`syncToApi`）把持久层对齐到本地状态
+- **子组件**（如数据库导入 / 代码替换对话框）通过 `useManagerApi()`（`src/api/manager-api.ts`）注入响应式引用，在合适位置 `await` 调用 `api.importFromDB()` / `api.replace(zip)` 等异步方法；AI 专属能力经 `useAIApi()`（`src/api/ai-api.ts`）取用
+- **模型变更**遵循细粒度异步契约——每次操作先改本地状态，再 `await` 对应 api 方法（`addTable` / `updateTable` / `removeTable` / `updateTablePos` / `addNavigate` …）即时持久化，持久化失败（reject）自动回滚快照；撤销/重做恢复后经 `saveAll`（`api.save` 全量替换契约）把撤销后的完整状态落盘
 
 ### ManagerApi 接口清单
 
 全部方法均为**异步契约**（返回 `Promise`，校验失败 reject 中文业务提示），UI 侧统一 `await` 消费，对接真实后端（HTTP / IPC / 文件 IO）时无需再调整调用链路：
 
-| 方法                                                                              | 说明                                                                                                                                                     |
-| --------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `getSettings() / saveSettings(settings)`                                          | 应用设置读写（索引类型列表 + 列类型映射规则 + 代码生成配置：作者 / 表选项 / 列选项元定义）                                                               |
-| `importFromDB()`                                                                  | 从真实数据库读取表结构（含字段与索引，用于导入建模）                                                                                                     |
-| `load()`                                                                          | 加载完整模型（分类/表/导航），初次进入与点击「刷新」按钮时使用                                                                                           |
-| `save()`                                                                          | 全量保存模型，点击「保存所有」按钮或按 `Ctrl+S` 时调用                                                                                                   |
-| `getCategories() / addCategory / updateCategory / removeCategory`                 | 分类 CRUD                                                                                                                                                |
-| `getTables() / addTable / updateTable / removeTable / updateTablePos`             | 表 CRUD（含字段与索引；删除表一并删除其字段、索引与关联导航；拖动表卡片结束时用 `updateTablePos` 批量保存位置——`UpdateTablePosDTO`，多表同动仅一次调用） |
-| `getNavigates() / addNavigate / updateNavigate / removeNavigate`                  | 导航关系 CRUD                                                                                                                                            |
-| `getDictCategories() / addDictCategory / updateDictCategory / removeDictCategory` | 字典分类 CRUD（分类下仍有字典时删除被拒）                                                                                                                |
-| `getDictCategoryTemplate() / updateDictCategoryTemplate`                          | 字典分类模板读写（仅一个，每分类渲染一次）                                                                                                               |
-| `getDicts() / addDict / updateDict / removeDict`                                  | 字典 CRUD（含所属分类 categoryId）                                                                                                                       |
-| `getTemplates() / addTemplate / updateTemplate / removeTemplate`                  | 表模板 CRUD（每表渲染一次）                                                                                                                              |
-| `replace(zipFile)`                                                                | 上传 zip 产物代码，直接替换对应源码文件（zip 解析为真实异步，失败 reject 由调用方捕获）                                                                  |
-| `getAiSettings() / saveAiSettings(settings)`                                      | AI 设置读写（openai compatible 供应商地址 / API Key / 模型列表 / 全局规则；地址必须以 `/v1` 结尾，模型 id 非空唯一）                                     |
-| `chatComplete(request, onDelta?)`                                                 | openai compatible chat completions 标准流式接口：`onDelta` 逐片回调增量（正文 / 思考 / 工具调用），流结束 resolve 聚合结果；中止经 `request.signal`      |
+| 方法                                                                                  | 说明                                                                                                                                                     |
+| ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `getSettings() / setSettings(settings)`                                               | 应用设置读写（索引类型列表 + 列类型映射规则 + 代码生成配置：作者 / 表选项 / 列选项元定义）                                                               |
+| `importFromDB()`                                                                      | 从真实数据库读取表结构（含字段与索引，用于导入建模）                                                                                                     |
+| `load()`                                                                              | 加载完整模型元素（分类/表/导航，`ModelElements`），初次进入与点击「刷新」按钮时使用                                                                      |
+| `save(modelElements)`                                                                 | 全量保存模型（**替换语义**：不在入参中的分类/表/导航会被删除，入参须为完整快照），点击「保存所有」或 `Ctrl+S` 时调用                                     |
+| `getTableCategories() / addTableCategory / updateTableCategory / removeTableCategory` | 表分类 CRUD（删除时分类下仍有表则拒绝）                                                                                                                  |
+| `getTables() / addTable / updateTable / removeTable / updateTablePos`                 | 表 CRUD（含字段与索引；删除表一并删除其字段、索引与关联导航；拖动表卡片结束时用 `updateTablePos` 批量保存位置——`UpdateTablePosDTO`，多表同动仅一次调用） |
+| `getNavigates() / addNavigate / updateNavigate / removeNavigate`                      | 导航关系 CRUD                                                                                                                                            |
+| `getDictCategories() / addDictCategory / updateDictCategory / removeDictCategory`     | 字典分类 CRUD（分类下仍有字典时删除被拒）                                                                                                                |
+| `getDicts() / saveDicts(dicts) / addDict / updateDict / removeDict`                   | 字典 CRUD（含所属分类 categoryId；`saveDicts` 替换保存——不在列表中的字典会被删除，入参须为完整快照）                                                     |
+| `getTemplates() / saveTemplates(templates) / getTemplate(id) / getDictTemplate()`     | 模板读写：列表（含字典模板，id 固定 `tpl-dict-category`）/ 替换保存（入参须为含字典模板的完整快照）/ 按 id 查询 / 字典模板                               |
+| `addTemplate / updateTemplate / removeTemplate`                                       | 模板 CRUD（字典模板为固定模板不可删除）                                                                                                                  |
+| `replace(zipFile)`                                                                    | 上传 zip 产物代码，直接替换对应源码文件（zip 解析为真实异步，失败 reject 由调用方捕获）                                                                  |
 
-> 调用时机约定：应用视图启动即幂等预载 `getSettings()`（设置是编辑器/导入共用的全局配置）与 `load()`；此后各操作按细粒度契约即时调用对应方法。`DBColumn.notNull` 为 demo 扩展字段（真实实现可不提供，缺省视为可空）；`Table.hidden` 随模型数据持久化（隐藏态在刷新/重开后保持）；`resetDemo()` 为 DemoManagerApi 的扩展方法（重置为内置演示数据），正式实现无需提供。AI 相关：`AiSettings` 为独立设置契约（不并入 `Settings`）；`chatComplete` 的请求 / 增量 / 结果对齐 openai 规范子集（`reasoningEffort` 随请求下发、思考经 `reasoning_content` 流式回传、`tool_calls` 按 index 聚合）；AI 工具页将除 AI 设置与 chatComplete 外的全部 ManagerApi 能力 + 代码生成 / 代码替换注册为 AGENT 工具。
+> 调用时机约定：应用视图启动即幂等预载 `getSettings()`（设置是编辑器/导入共用的全局配置）与 `load()`；此后各操作按细粒度契约即时调用对应方法。`DBColumn.notNull` 为 demo 扩展字段（真实实现可不提供，缺省视为可空）；`Table.hidden` 随模型数据持久化（隐藏态在刷新/重开后保持）。AI 相关能力（AI 设置读写 / 对话 / fetch）不在 ManagerApi 中，见下方 AIApi。
+
+### AIApi 接口（AI 专属能力）
+
+AI 功能的全部专属调用经独立的 `AIApi` 接口（`src/types/ai.ts`），与数据能力彻底分离：
+
+| 方法                                        | 说明                                                                                                                                                                                                                                                                     |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `getAISettings() / setAISettings(settings)` | AI 设置读写（多供应商列表：协议 / 地址 / 密钥 / 模型列表 + 默认模型 + 全局规则 + 轮数上限；校验失败 reject 中文业务提示）                                                                                                                                                |
+| `chat(request, onDelta?)`                   | 统一对话接口（流式）：按 `request.provider.protocol` 分派到 OpenAI Chat Completions / OpenAI Responses / Anthropic Messages，三协议增量（正文 / 思考 / 工具调用 / 用量）归一为 `ChatCompletionDelta` 经 `onDelta` 回调，流结束 resolve 聚合结果；中止经 `request.signal` |
+| `fetch(request)`                            | 网络请求（AI 的 fetch 工具经此发起）：方法 / 请求头 / 请求体，响应体读为文本（超长截断）；错误转中文提示                                                                                                                                                                 |
+
+> 三协议 wire 细节（`src/api/demo/ai/`）：openai-chat 走 `{base}/chat/completions`（`reasoning_content` 思考流、`tool_calls` 按 index 聚合）；openai-responses 走 `{base}/responses`（input items 含 `function_call` / `function_call_output`，思考经 `response.reasoning_text.delta`，工具调用经 `response.output_item.added` + `function_call_arguments.delta`）；anthropic 走 `{base}/v1/messages`（`x-api-key` + `anthropic-version` 鉴权，system 独立字段、消息严格交替，思考经 `thinking_delta`、工具调用经 `tool_use` + `input_json_delta`，`max_tokens` 必填）。
 
 ### 统一日志 Logger（src/log/Logger.ts）
 
@@ -383,9 +405,11 @@ Logger.setLevel("INFO"); // 或 Logger.level = 'INFO' / Logger.getLevel()
 
 ![Logger 六方法与级别过滤](docs/screenshots/logger-levels.png)
 
-### DemoManagerApi（内置演示实现）
+### DemoManagerApi / DemoAIApi（内置演示实现）
 
-`src/api/demo-manager-api.ts`：数据存于内存（`src/mock/db.ts`）并持久化到 `localStorage`（`gdbme:db:v2`）。按契约全部方法返回 `Promise`：除 `replace` 的 zip 解析为真实异步外，其余方法内部同步完成后在微任务内 resolve；校验失败 reject 含中文业务提示的 `Error`。数据重置：左下大纲面板「重置演示数据」按钮。AI 契约演示语义：`getAiSettings` / `saveAiSettings` 读写 localStorage 中的 AI 设置（校验同 UI：地址以 `/v1` 结尾等）；`chatComplete` 经浏览器 `fetch` 直连 openai compatible 服务（SSE 逐行解析 `data:` 分片与 `[DONE]` 哨兵，`reasoning_content` 思考流、`tool_calls` 分片聚合），跨域受限于服务端 CORS 配置。E2E 冒烟：`scripts/e2e/mock/ai-mock.mjs` 为统一模拟服务（openai compatible SSE，自带 CORS，浏览器直连跨域端口即可；按最后一条 user 关键词路由全部场景分支：代码生成替换链路 / 参数校验 / 执行失败 / 双工具 / 任务清单 / 技能 / 压缩 / 循环 / 快速思考 / 刷新 / 超长思考流）。
+- `src/api/demo-manager-api.ts`（ManagerApi 演示实现）：数据存于内存（`src/mock/db.ts`）并持久化到 `localStorage`（`gdbme:db:v2`）。按契约全部方法返回 `Promise`：除 `replace` 的 zip 解析为真实异步外，其余方法内部同步完成后在微任务内 resolve；校验失败 reject 含中文业务提示的 `Error`。`save(modelElements)` / `saveDicts` / `saveTemplates` 为全量替换语义（整个集合校验通过后一次性写入）；模板集合含字典模板（id 固定 `tpl-dict-category`，演示库内部以独立字段存储、对外合并展示）。数据重置：左下大纲面板「重置演示数据」按钮（种子数据经全量替换契约落盘，设置与 AI 设置不受影响）
+- `src/api/demo-ai-api.ts`（AIApi 演示实现）：AI 设置读写 localStorage 中的 `aiSettings`（多供应商校验：id 唯一 / 协议合法 / openai 系地址以 `/v1` 结尾 / 模型 id 供应商内唯一）；`chat` 按供应商协议分派到 `src/api/demo/ai/` 的三协议流式客户端（sse.ts 共用 POST 建流与 SSE 迭代、wire.ts 归一消息与工具定义的协议转换、openai-chat / openai-responses / anthropic-messages 三个客户端），跨域受限于服务端 CORS 配置；`fetch` 经浏览器 fetch 代理（响应体 64k 截断）
+- E2E 冒烟：`scripts/e2e/mock/ai-mock.mjs` 为统一模拟服务（三协议 SSE + fetch 数据端点，自带 CORS，浏览器直连跨域端口即可；按最后一条 user 关键词路由全部场景分支：代码生成替换链路 / 参数校验 / 执行失败 / 双工具 / 任务清单 / 技能 / 压缩 / 循环 / 快速思考 / 刷新四工具 / AI 设置 / 撤销链路 / 清空与重置确认 / 网络请求 / 协议演示 / 超长思考流）
 
 所有方法经 Proxy 包装打印调用日志：每次契约调用输出 `[DemoManagerApi] <方法>() 入参` 与 `返回`（debug 级，异步方法**等待落定后**打印 resolved 值，reject 时以 error 级输出后原样透传拒绝）；内部辅助方法互调不打日志。联调时可在控制台按 `DemoManagerApi` 过滤，直接观测各契约方法的实际调用时机与参数（如应用启动即触发 `getSettings` / `load`）；`Logger.setLevel('INFO')` 可静默追踪噪音，`DISABLED` 可完全关闭。
 
@@ -393,7 +417,7 @@ Logger.setLevel("INFO"); // 或 Logger.level = 'INFO' / Logger.getLevel()
 
 ## 数据模型概览
 
-核心类型定义于 `src/types/`（与《图形数据库模型编辑工具需求规格说明书》保持一致）——`manager.ts` 放 ManagerApi 契约，`model.ts` 放其余非 AI 实体与 DTO，`ai.ts` 放 AI 设置与 chat completions 契约；各实体职责速览：
+核心类型定义于 `src/types/`（与《图形数据库模型编辑工具需求规格说明书》保持一致）——`manager.ts` 放 ManagerApi 契约，`model.ts` 放其余非 AI 实体与 DTO，`ai.ts` 放多供应商 AI 设置 / 三协议归一对话契约与 AIApi 接口；各实体职责速览：
 
 | 实体                                         | 职责与关键约束                                                                                                                                                                |
 | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -408,7 +432,7 @@ Logger.setLevel("INFO"); // 或 Logger.level = 'INFO' / Logger.getLevel()
 | `Settings` / `TypeMapping` / `OptionSetting` | 应用设置：索引类型列表 + 列类型正则映射规则（`sort` 升序依次匹配，取首条命中）+ 代码生成配置（作者 `author`、表选项 `tableOptions`、列选项 `columnOptions` 元定义）           |
 | `FieldConventions`                           | 字段约定：主键 `primaryKey` + 四角色审计字段 `auditFields` + 逻辑删除 `logicDelete`（名称 / 数据库类型 / 可选 Java 类型，旧数据缺省按内置默认补齐）                           |
 | `DBTable` / `DBColumn` / `DBIndex`           | 数据库导入契约形态（`importFromDB()` 返回）                                                                                                                                   |
-| `ManagerTable` / `LoadResultVO` / Payload    | ManagerApi 读写载荷：`ManagerTable`（表 + 字段 + 索引）、`LoadResultVO`（全量模型）、`TableAdd/UpdatePayload`（含 `rawNavigates` 替换语义）                                   |
+| `ManagerTable` / `ModelElements` / Payload   | ManagerApi 读写载荷：`ManagerTable`（表 + 字段 + 索引）、`ModelElements`（load 返回 / save 入参的完整快照）、`TableAdd/UpdatePayload`（含 `rawNavigates` 替换语义）           |
 
 实体关系：分类 1—N 表，表 1—N 字段/索引；导航两端经表名互相引用（NN 再经中间表名）；字段的 `dict` 键关联字典。唯一性校验（表名/字段名/索引名/字典键/值键/模板名）由 ManagerApi 实现层负责，DemoManagerApi 违例时抛出含中文提示的 `Error`。
 
@@ -419,13 +443,13 @@ Logger.setLevel("INFO"); // 或 Logger.level = 'INFO' / Logger.getLevel()
 ├─ vite.config.ts          # Vite+ 配置（@ 别名 / 端口 3000 / allowedHosts / lint / fmt / staged / 库构建）
 ├─ tsconfig.json
 ├─ docs/screenshots/       # 界面截图
-├─ scripts/                # 开发辅助脚本（Eta 冒烟 / README 自检 / 库产物 CSS 内联 / 打包）+ e2e/（E2E 套件：lib.sh 公共设施 + mock/ 统一 AI 模拟服务 + 四域脚本 + run-all）
+├─ scripts/                # 开发辅助脚本（Eta 冒烟 / README 自检 / 库产物 CSS 内联 / 打包）+ e2e/（E2E 套件：lib.sh 公共设施 + mock/ 统一 AI 模拟服务（三协议 SSE + fetch 数据端点）+ 四域脚本 + run-all）
 ├─ skills/DBManager/       # 本仓库使用方法技能文档（SKILL.md，随仓库发布）
 └─ src/
    ├─ index.ts             # 库入口（导出 DBManagerView 组件 + ManagerApi 契约类型）
    ├─ main.ts              # 演示应用入口（注册 antdv-next，无 Pinia）
    ├─ App.vue              # 根组件（渲染 DBManagerView，可传入自定义 api）
-   ├─ api/                 # ManagerApi 注入体系（manager-api）+ DemoManagerApi 演示实现（demo/：helpers 归一校验与日志代理 + chat-complete SSE 客户端）
+   ├─ api/                 # 注入体系（manager-api + ai-api）+ DemoManagerApi / DemoAIApi 演示实现（demo/：helpers 归一校验与日志代理 + ai/ 三协议流式客户端：sse / wire / openai-chat / openai-responses / anthropic-messages）
    ├─ composables/         # useDragSort 行拖拽排序（字段/设置规则共用）
    ├─ log/                 # 统一日志器 Logger（级别过滤：DEBUG/INFO/WARN/ERROR/FATAL/DISABLED）
    ├─ mock/                # demo 内存数据库（db.ts，localStorage 持久化）+ seed/（种子数据五模块：tables / dicts / templates / import-db / settings + barrel）
@@ -434,7 +458,7 @@ Logger.setLevel("INFO"); // 或 Logger.level = 'INFO' / Logger.getLevel()
    │  ├─ ai/               # AI 仓库子模块：index.ts（统一出口）+ types（展示模型与契约）/ task-list（任务清单解析）/ tool-schema（工具参数 schema）/ codegen / prompt / tools（工具注册表）/ store（会话状态与编排）
    │  ├─ canvas/           # 画布仓库子模块：index.ts（统一出口）+ types（类型与 CanvasStore 契约）/ constants / viewport（视口与坐标）/ pointer（指针状态机）/ touch（触屏手势）/ selection（选择与菜单）/ cards（卡片状态）/ layout（自动美化与对齐）/ clipboard / store（状态、getter 与组装）
    │  └─ model/            # 模型仓库子模块：index.ts（统一出口）+ types（类型与 ModelStore 契约）/ helpers / loader（加载与全量动作）/ vo（字段索引与 VO 投影）/ categories / tables / navigates / clipboard / import / snapshot / store（状态、getter 与组装）
-   ├─ types/               # 契约类型三文件：manager.ts（ManagerApi 接口）/ model.ts（实体与 DTO）/ ai.ts（AI 设置与 chat completions 契约）
+   ├─ types/               # 契约类型三文件：manager.ts（ManagerApi 接口）/ model.ts（实体与 DTO）/ ai.ts（多供应商 AI 设置 + 三协议归一对话契约 + AIApi 接口）
    ├─ utils/               # 字符串 / Java 类型映射 / 导航推导 / 几何 / 力导向布局 / Eta 渲染 / 高亮
    ├─ styles/              # --dbm- 设计令牌（静态基线）/ antd 主题同步层 / 全局样式 / hljs 配色（库构建时内联进 JS）
    ├─ views/               # DBManagerView（页面封装+状态注入入口）/ EditorView + 四域页（各自按面板拆分子模块）：
@@ -503,7 +527,7 @@ bun scripts/eta-smoke.mjs
 DemoManagerApi 的调用追踪为 debug 级：控制台执行 `Logger.setLevel('INFO')` 即静默，`'DISABLED'` 完全关闭（见[开发与调试](#开发与调试)）。
 
 **演示数据想恢复初始状态？**
-左侧大纲面板底部「重置演示数据」按钮（`resetDemo()`）。
+左侧大纲面板底部「重置演示数据」按钮（种子数据经 `save` / `saveDicts` / `saveTemplates` 全量替换契约落盘，设置与 AI 设置不受影响）。
 
 **数据存在哪里？**
 DemoManagerApi 将模型持久化到浏览器 `localStorage`（key 为 `gdbme:db:v2`）；清除站点数据即回到首次打开状态。

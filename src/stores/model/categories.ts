@@ -36,7 +36,7 @@ export function categoryMethods(deps: ModelDeps) {
         history.capture(snap);
         this.categories[idx] = clone(saved);
         try {
-          await api.updateCategory(clone(saved));
+          await api.updateTableCategory(clone(saved));
         } catch (e) {
           this.rollback(snap);
           throw e;
@@ -46,7 +46,7 @@ export function categoryMethods(deps: ModelDeps) {
         history.capture(snap);
         this.categories.push(clone(saved));
         try {
-          await api.addCategory(clone(saved));
+          await api.addTableCategory(clone(saved));
         } catch (e) {
           this.rollback(snap);
           throw e;
@@ -62,7 +62,7 @@ export function categoryMethods(deps: ModelDeps) {
       history.capture(snap);
       this.categories = this.categories.filter((c) => c.id !== id);
       try {
-        await deps.getApi().removeCategory(id);
+        await deps.getApi().removeTableCategory(id);
       } catch (e) {
         this.rollback(snap);
         throw e;

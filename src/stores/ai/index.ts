@@ -18,6 +18,7 @@ export type {
   AiChatMessage,
   AiChatToolCall,
   AiDeps,
+  AiPendingDanger,
   AiPendingReplace,
   AiReplaceFile,
   AiTaskItem,
@@ -26,5 +27,5 @@ export type {
   AiZipDownload,
 } from "./types";
 export { TASK_STATUS_LABEL, parseAiTaskList } from "./task-list";
-export { createAiStore, useAiStore } from "./store";
-export type { AiStore } from "./store";
+export { createAiStore, useAiStore, modelKeyOf, splitModelKey } from "./store";
+export type { AiStore, AiModelPair } from "./store";

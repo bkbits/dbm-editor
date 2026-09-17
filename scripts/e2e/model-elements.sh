@@ -19,6 +19,10 @@ echo "=============================================="
 echo "== 模型元素域 E2E（表分类 / 表 / 列 / 导航） =="
 echo "=============================================="
 open_app
+# 全新库开始（重置演示数据不再重置设置：清 localStorage 保证设置 / AI 设置为默认初态）
+agent-browser eval "localStorage.clear()" >/dev/null 2>&1
+agent-browser open "$BASE_URL" >/dev/null 2>&1
+sleep 2
 
 echo "== 0. 重置演示数据（确定初态） =="
 reset_demo

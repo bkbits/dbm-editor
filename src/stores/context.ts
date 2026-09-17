@@ -14,6 +14,7 @@
  *   各仓库下一次动作即走新 api（配合 DBManagerView 的切换重载逻辑）
  */
 import { inject, type InjectionKey } from "vue";
+import type { AIApi } from "@/types/ai";
 import type { ManagerApi } from "@/types/manager";
 import { createThemeStore, type ThemeStore } from "./theme";
 import { createUiStore, type UiStore } from "./ui";
@@ -45,8 +46,12 @@ export const DBMANAGER_STATE_KEY: InjectionKey<DBManagerState> = Symbol("dbmanag
  * 创建整套状态仓库（由 DBManagerView 在 setup 时调用，每实例一套）
  *
  * @param getApi 惰性读取当前生效的 ManagerApi（prop 切换后取到新实例）
+ * @param getAIApi 惰性读取当前生效的 AIApi（AI 设置 / 对话 / fetch 专用）
  */
-export function createDBManagerState(getApi: () => ManagerApi): DBManagerState {
+export function createDBManagerState(
+  getApi: () => ManagerApi,
+  getAIApi: () => AIApi,
+): DBManagerState {
   const theme = createThemeStore();
   const ui = createUiStore();
   const settings = createSettingsStore({ getApi });
@@ -87,12 +92,20 @@ export function createDBManagerState(getApi: () => ManagerApi): DBManagerState {
     /** 惰性读取历史仓库：自动布局、对齐、粘贴前捕获快照 */
     getHistory: () => history,
   });
-  // AI 仓库依赖 model / dict / template / settings（AGENT 工具执行与域同步刷新）
-  const ai = createAiStore({
-    /** 惰性读取当前 ManagerApi（AGENT 调用与工具执行走同一实例） */
+  // AI 仓库依赖 model / dict / template / settings / history + AIApi + 自身
+  // （getAI 先声明后回填，打破「工厂参数引用自身实例」的循环）
+  let ai!: AiStore;
+  ai = createAiStore({
+    /** 惰性读取当前 ManagerApi（AGENT 数据类工具走同一实例） */
     getApi,
+    /** 惰性读取当前 AIApi（AI 设置读写 / 三协议对话 / fetch 专用接口） */
+    getAIApi,
+    /** 惰性读取 AI 仓库自身（getAISettings / setAISettings 等 AI 设置工具执行） */
+    getAI: () => ai,
     /** 惰性读取模型仓库：AGENT 工具读写表与关系 */
     getModel: () => model,
+    /** 惰性读取历史仓库：undo / redo / clearHistory 工具 */
+    getHistory: () => history,
     /** 惰性读取字典仓库：字典类工具与域数据刷新 */
     getDict: () => dict,
     /** 惰性读取模板仓库：代码生成工具复用模板管线 */

@@ -20,31 +20,33 @@ git clone https://github.com/bkbits/dbm-editor && cd dbm-editor
 bun install && bun run build   # 产出 dist/DBManager.js + DBManager.d.ts
 ```
 
-### 2. 实现 ManagerApi 数据契约
+### 2. 实现 ManagerApi 数据契约与 AIApi（可选）
 
-契约在包类型导出中定义（源码 `src/types/` 三文件：`manager.ts` = ManagerApi 接口，`model.ts` = 实体与 DTO，`ai.ts` = AI 设置与 chat completions 契约），**全部方法返回 Promise**（对接 HTTP/IPC/文件 IO 零调整），校验失败以 `reject` 抛出中文业务提示，UI 侧 `await` 消费并自带失败回滚：
+契约在包类型导出中定义（源码 `src/types/` 三文件：`manager.ts` = ManagerApi 接口，`model.ts` = 实体与 DTO，`ai.ts` = 多供应商 AI 设置 / 三协议归一对话契约与 AIApi 接口），**全部方法返回 Promise**（对接 HTTP/IPC/文件 IO 零调整），校验失败以 `reject` 抛出中文业务提示，UI 侧 `await` 消费并自带失败回滚：
 
 ```ts
-import type { ManagerApi, Settings, LoadResultVO, ManagerTable,
+import type { ManagerApi, AIApi, Settings, ModelElements, ManagerTable,
   TableCategory, TableNavigate, Dict, Template, UpdateTablePosDTO } from 'bkbits/dbm-editor'
 
 const myApi: ManagerApi = {
   // —— 读（返回数据 Promise）——
   async getSettings(): Promise<Settings> { /* GET /settings */ },
-  async load(): Promise<LoadResultVO> { /* 一次性返回 categories/tables/navigates */ },
+  async load(): Promise<ModelElements> { /* 一次性返回 categories/tables/navigates */ },
   async getTables(): Promise<ManagerTable[]> { /* … */ },
-  async getCategories(): Promise<TableCategory[]> { /* … */ },
+  async getTableCategories(): Promise<TableCategory[]> { /* … */ },
   async getNavigates(): Promise<TableNavigate[]> { /* … */ },
   async getDicts(): Promise<Dict[]> { /* … */ },
-  async getTemplates(): Promise<Template[]> { /* … */ },
+  async getTemplates(): Promise<Template[]> { /* 含字典模板（id 固定 tpl-dict-category） */ },
   async importFromDB(): Promise<DBTable[]> { /* 连库读表结构，供导入对话框选择 */ },
 
-  // —— 写（Promise<void>；批量 DTO 一次调用）——
-  async saveSettings(s: Settings) { /* … */ },
-  async save() { /* Ctrl+S /「保存所有」触发 */ },
-  async addCategory(c: TableCategory) { /* … */ },
-  async updateCategory(c: TableCategory) { /* … */ },
-  async removeCategory(id: string) { /* … */ },
+  // —— 写（Promise<void>；全量替换语义的三个 save 需传完整快照）——
+  async setSettings(s: Settings) { /* … */ },
+  async save(m: ModelElements) { /* Ctrl+S /「保存所有」触发；不在快照中的元素会被删除 */ },
+  async saveDicts(dicts: Dict[]) { /* 替换保存：入参为完整快照 */ },
+  async saveTemplates(templates: Template[]) { /* 替换保存：入参须含字典模板 */ },
+  async addTableCategory(c: TableCategory) { /* … */ },
+  async updateTableCategory(c: TableCategory) { /* … */ },
+  async removeTableCategory(id: string) { /* … */ },
   async addTable(t: ManagerTable) { /* … */ },
   async updateTable(t: ManagerTable) { /* … */ },
   async removeTable(id: string) { /* … */ },
@@ -59,18 +61,18 @@ const myApi: ManagerApi = {
   async updateTemplate(t: Template) { /* … */ },
   async removeTemplate(id: string) { /* … */ },
   async replace(zip: Blob) { /* 代码替换：接收生成结果 zip */ },
+}
 
-  // —— AI（openai compatible）——
-  async getAiSettings(): Promise<AiSettings> { /* AI 设置：供应商地址(/v1 结尾) / apiKey / 模型列表 / 全局规则 */ },
-  async saveAiSettings(s: AiSettings) { /* … */ },
-  async chatComplete(req: ChatCompletionRequest, onDelta?: (d: ChatCompletionDelta) => void): Promise<ChatCompletionResult> { /* openai chat completions 标准流式（SSE）：onDelta 逐片回调（正文/思考/工具调用），流结束 resolve 聚合结果；中止经 req.signal */ },
-
-  // 可选扩展：重置演示数据（演示实现提供，真实后端可不实现）
-  async resetDemo() { /* … */ },
+// —— AI 专属能力（可选注入：缺省使用内置 DemoAIApi）——
+const myAIApi: AIApi = {
+  async getAISettings(): Promise<AiSettings> { /* 多供应商列表（协议/地址/密钥/模型）+ 默认模型 + 全局规则 + 轮数上限 */ },
+  async setAISettings(s: AiSettings) { /* … */ },
+  async chat(req: ChatCompletionRequest, onDelta?: (d: ChatCompletionDelta) => void): Promise<ChatCompletionResult> { /* 统一对话（流式）：按 req.provider.protocol 分派到 OpenAI Chat Completions / OpenAI Responses / Anthropic Messages，三协议增量归一为 onDelta 回调（正文/思考/工具调用/用量），流结束 resolve 聚合结果；中止经 req.signal */ },
+  async fetch(req: AIFetchRequest): Promise<AIFetchResult> { /* AI 的 fetch 工具经此发起网络请求 */ },
 }
 ```
 
-对接真实后端时把每个方法映射到 HTTP/IPC 即可；UI 调用链路（组件树、事务回滚、撤销 diff 同步）无需改动。内置演示实现 `DemoManagerApi`（内存 + localStorage）可作为参考（仓库 `src/api/demo-manager-api.ts`，带调用日志 Proxy，控制台可观测全部契约调用）。
+对接真实后端时把每个方法映射到 HTTP/IPC 即可；UI 调用链路（组件树、事务回滚、撤销全量落盘）无需改动。内置演示实现 `DemoManagerApi` + `DemoAIApi`（内存 + localStorage，`src/api/demo-manager-api.ts` / `src/api/demo-ai-api.ts`，带调用日志 Proxy，控制台可观测全部契约调用）。
 
 ### 3. 挂载组件
 
@@ -88,10 +90,10 @@ createApp(App).use(Antd).mount('#app')
 <!-- App.vue：不传 api 时使用内置演示实现；自定义实现经 prop 注入 -->
 <script setup lang="ts">
 import { DBManagerView } from 'bkbits/dbm-editor'
-import { myApi } from './api'
+import { myApi, myAIApi } from './api'
 </script>
 <template>
-  <DBManagerView :api="myApi" style="height: 100vh" />
+  <DBManagerView :api="myApi" :ai-api="myAIApi" style="height: 100vh" />
 </template>
 ```
 

@@ -4,19 +4,23 @@
  *
  * - 属性 api?: ManagerApi —— 注入自定义数据能力实现；缺省使用内置
  *   DemoManagerApi（内存 + localStorage 演示实现）
- * - 通过 provide/inject 向子组件分发 ManagerApi（useManagerApi()）与
- *   整套全局状态（createDBManagerState：theme/ui/model/canvas/dict/
- *   template/settings/history，子组件经各 useXxxStore() 取用）——
- *   状态为组件实例级，不依赖 Pinia 等应用级全局单例
+ * - 属性 aiApi?: AIApi —— 注入自定义 AI 能力实现（AI 设置 / 三协议对话 /
+ *   fetch）；缺省使用内置 DemoAIApi
+ * - 通过 provide/inject 向子组件分发 ManagerApi（useManagerApi()）、AIApi
+ *   （useAIApi()）与整套全局状态（createDBManagerState：theme/ui/model/
+ *   canvas/dict/template/settings/history/ai，子组件经各 useXxxStore() 取用）
+ *   ——状态为组件实例级，不依赖 Pinia 等应用级全局单例
  * - 页面切换仍使用 v-if（不使用 vue-router）
  * - 全局样式（CSS 变量/基础样式/高亮主题）随组件包内引入，
  *   宿主项目无需额外导入即可获得与演示一致的外观
  */
 import { computed, provide, watch } from "vue";
 import { theme as antdTheme } from "antdv-next";
+import type { AIApi } from "@/types/ai";
 import type { ManagerApi } from "@/types/manager";
 import "@/styles/index.scss";
 import { MANAGER_API_KEY, sharedDemoApi } from "@/api/manager-api";
+import { AI_API_KEY, sharedDemoAIApi } from "@/api/ai-api";
 import { createDBManagerState, DBMANAGER_STATE_KEY } from "@/stores/context";
 import AppHeader from "@/components/layout/AppHeader.vue";
 import EditorView from "@/views/EditorView.vue";
@@ -25,14 +29,21 @@ import TemplateView from "@/views/TemplateView.vue";
 import SettingsView from "@/views/SettingsView.vue";
 import AiView from "@/views/AiView.vue";
 
-const props = defineProps<{ api?: ManagerApi }>();
+const props = defineProps<{ api?: ManagerApi; aiApi?: AIApi }>();
 
 /** 当前生效的 api（响应式：随 prop 切换更新，缺省共享 demo 单例） */
 const apiRef = computed<ManagerApi>(() => props.api ?? sharedDemoApi);
 provide(MANAGER_API_KEY, apiRef);
 
-// 创建整套全局状态并注入子树（每实例一套；api 惰性读取，prop 切换后自动走新实例）
-const state = createDBManagerState(() => apiRef.value);
+/** 当前生效的 AIApi（响应式：随 prop 切换更新，缺省共享 demo AI 单例） */
+const aiApiRef = computed<AIApi>(() => props.aiApi ?? sharedDemoAIApi);
+provide(AI_API_KEY, aiApiRef);
+
+// 创建整套全局状态并注入子树（每实例一套；api / AIApi 惰性读取，prop 切换后自动走新实例）
+const state = createDBManagerState(
+  () => apiRef.value,
+  () => aiApiRef.value,
+);
 provide(DBMANAGER_STATE_KEY, state);
 
 // 应用主题（setup 同步执行，早于子树首次渲染，避免闪烁；原先由 main.ts 预挂载初始化）
@@ -46,8 +57,8 @@ const antdThemeConfig = computed(() => ({
 }));
 
 // api 切换时全量重载各仓库数据（不重置 UI 页面）；隐藏态随模型数据（Table.hidden）恢复
-watch(apiRef, (api, old) => {
-  if (old && api !== old) {
+watch([apiRef, aiApiRef], ([api, ai], [oldApi, oldAi]) => {
+  if ((oldApi && api !== oldApi) || (oldAi && ai !== oldAi)) {
     const stores = [state.model, state.dict, state.template, state.settings] as Array<{
       loaded: boolean;
       loading: boolean;

@@ -4,7 +4,7 @@
  * 由 DemoManagerApi 直接读写；原 axios mock 分发层已被 ManagerApi 体系取代。
  * 持久化键保持 v2 不变，读取时按需迁移（设置形态 / hidden 字段 / 模板种子版本）。
  */
-import type { AiModelConfig, AiSettings, ThinkingIntensity } from "@/types/ai";
+import type { AIProviderConfig, AiModelConfig, AiSettings, ThinkingIntensity } from "@/types/ai";
 import type {
   CodeTemplate,
   Dict,
@@ -75,7 +75,7 @@ export interface MockDB {
   /** 字典分类模板（仅一个；v6 新增：旧库读取时补种子） */
   dictCategoryTemplate: CodeTemplate;
   settings: Settings;
-  /** AI 设置（openai compatible 供应商 / 模型列表 / 全局规则；旧库读取时补空缺省） */
+  /** AI 设置（多供应商 / 多模型 / 默认模型 / 全局规则；旧库单供应商形态读取时迁移） */
   aiSettings: AiSettings;
 }
 
@@ -113,9 +113,7 @@ function createSeedDB(): MockDB {
     dictCategoryTemplate: clone(SEED_DICT_CATEGORY_TEMPLATE),
     settings: clone(SEED_SETTINGS),
     aiSettings: {
-      baseUrl: "",
-      apiKey: "",
-      models: [],
+      providers: [],
       // 新库开箱即带默认任务流程约定（旧库已保存值不受影响，含主动清空的空串）
       globalRules: DEFAULT_AI_GLOBAL_RULES,
     },
@@ -176,45 +174,122 @@ function normalizeSettings(raw: unknown): Settings {
 /** 思考强度合法档位（AI 模型配置校验用） */
 const THINKING_INTENSITIES: ThinkingIntensity[] = ["low", "medium", "high", "xhigh", "max"];
 
+/** 模型列表归一：模型 id 供应商内去重、思考强度非法值回退 medium、上下文长度归一为非负整数 */
+function normalizeAiModels(raw: unknown): AiModelConfig[] {
+  const models: AiModelConfig[] = [];
+  const seen = new Set<string>();
+  for (const m of Array.isArray(raw) ? (raw as Array<Partial<AiModelConfig>>) : []) {
+    const id = String(m?.id ?? "").trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    const supportsThinking = Boolean(m?.supportsThinking);
+    const intensity = THINKING_INTENSITIES.includes(m?.thinkingIntensity as ThinkingIntensity)
+      ? (m?.thinkingIntensity as ThinkingIntensity)
+      : "medium";
+    models.push({
+      id,
+      name: String(m?.name ?? "").trim() || id,
+      supportsThinking,
+      thinkingIntensity: supportsThinking ? intensity : undefined,
+      inputContextLength: Math.max(0, Math.floor(Number(m?.inputContextLength) || 0)) || undefined,
+      outputContextLength:
+        Math.max(0, Math.floor(Number(m?.outputContextLength) || 0)) || undefined,
+    });
+  }
+  return models;
+}
+
+/** 供应商列表归一：id 去重、协议非法回退 openai-chat、模型列表逐项兜底 */
+function normalizeAiProviders(raw: unknown): AIProviderConfig[] {
+  const providers: AIProviderConfig[] = [];
+  const seen = new Set<string>();
+  for (const p of Array.isArray(raw) ? (raw as Array<Partial<AIProviderConfig>>) : []) {
+    const id = String(p?.id ?? "").trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    const protocol =
+      p?.protocol === "openai-responses" || p?.protocol === "anthropic"
+        ? p.protocol
+        : "openai-chat";
+    providers.push({
+      id,
+      name: String(p?.name ?? "").trim() || `供应商${providers.length + 1}`,
+      protocol,
+      baseUrl: String(p?.baseUrl ?? "").trim(),
+      apiKey: String(p?.apiKey ?? ""),
+      models: normalizeAiModels(p?.models),
+    });
+  }
+  return providers;
+}
+
+/** 工具调用轮数上限归一（缺省 / 非法回退 50，范围 1-500） */
+function normalizeRounds(v: unknown): number | undefined {
+  const n = Math.floor(Number(v));
+  if (!Number.isFinite(n) || n < 1) return undefined;
+  return Math.min(500, n);
+}
+
 /**
- * AI 设置读取时归一：保留用户已配置内容，逐字段兜底形态；
- * 模型列表去重（按 id）、思考强度非法值回退 medium、上下文长度归一为非负整数
+ * AI 设置读取时归一：新形态（providers 数组）逐项兜底；旧形态（单供应商
+ * 顶层 baseUrl/apiKey/models）迁移为一个默认供应商（id 固定 prv-default，
+ * 协议 openai-chat），保留已配置的模型与全局规则。
  */
 function normalizeAiSettings(raw: unknown): AiSettings {
   const s = (raw || {}) as {
+    providers?: unknown;
+    currentModel?: { providerId?: unknown; modelId?: unknown };
     baseUrl?: unknown;
     apiKey?: unknown;
     models?: unknown;
     globalRules?: unknown;
+    maxToolRounds?: unknown;
   };
-  const models: AiModelConfig[] = [];
-  const seen = new Set<string>();
-  if (Array.isArray(s.models)) {
-    for (const m of s.models as Array<Partial<AiModelConfig>>) {
-      const id = String(m?.id ?? "").trim();
-      if (!id || seen.has(id)) continue;
-      seen.add(id);
-      const supportsThinking = Boolean(m?.supportsThinking);
-      const intensity = THINKING_INTENSITIES.includes(m?.thinkingIntensity as ThinkingIntensity)
-        ? (m?.thinkingIntensity as ThinkingIntensity)
-        : "medium";
-      models.push({
-        id,
-        name: String(m?.name ?? "").trim() || id,
-        supportsThinking,
-        thinkingIntensity: supportsThinking ? intensity : undefined,
-        inputContextLength:
-          Math.max(0, Math.floor(Number(m?.inputContextLength) || 0)) || undefined,
-        outputContextLength:
-          Math.max(0, Math.floor(Number(m?.outputContextLength) || 0)) || undefined,
-      });
-    }
+  const globalRules = String(s.globalRules ?? "");
+  const maxToolRounds = normalizeRounds(s.maxToolRounds);
+  if (Array.isArray(s.providers)) {
+    const providers = normalizeAiProviders(s.providers);
+    const cur = s.currentModel;
+    const currentModel =
+      cur &&
+      providers.some(
+        (p) =>
+          p.id === String(cur.providerId) && p.models.some((m) => m.id === String(cur.modelId)),
+      )
+        ? { providerId: String(cur.providerId), modelId: String(cur.modelId) }
+        : providers[0]?.models.length
+          ? { providerId: providers[0].id, modelId: providers[0].models[0].id }
+          : undefined;
+    return {
+      providers,
+      ...(currentModel ? { currentModel } : {}),
+      globalRules,
+      ...(maxToolRounds ? { maxToolRounds } : {}),
+    };
+  }
+  // 旧形态：单供应商顶层字段 → 迁移为一个默认供应商
+  const models = normalizeAiModels(s.models);
+  const baseUrl = String(s.baseUrl ?? "").trim();
+  const apiKey = String(s.apiKey ?? "");
+  if (!models.length && !baseUrl && !apiKey) {
+    return { providers: [], globalRules, ...(maxToolRounds ? { maxToolRounds } : {}) };
   }
   return {
-    baseUrl: String(s.baseUrl ?? "").trim(),
-    apiKey: String(s.apiKey ?? ""),
-    models,
-    globalRules: String(s.globalRules ?? ""),
+    providers: [
+      {
+        id: "prv-default",
+        name: "默认供应商",
+        protocol: "openai-chat",
+        baseUrl,
+        apiKey,
+        models,
+      },
+    ],
+    ...(models.length
+      ? { currentModel: { providerId: "prv-default", modelId: models[0].id } }
+      : {}),
+    globalRules,
+    ...(maxToolRounds ? { maxToolRounds } : {}),
   };
 }
 
@@ -369,10 +444,14 @@ function loadDB(): MockDB {
           parsed.dictTemplateSeedVersion = DICT_TEMPLATE_SEED_VERSION;
           migrated = true;
         }
-        // v8：AI 设置（openai compatible 供应商 / 模型列表 / 全局规则）。
-        // 旧库无 aiSettings 字段：补空缺省（未配置态），此后用户保存即持久化
+        // v8→v9：AI 设置（多供应商 / 多模型）。旧库无 aiSettings 字段：补空
+        // 缺省（未配置态）；旧单供应商形态（顶层 baseUrl/models，无 providers）：
+        // 迁移为一个默认供应商，此后用户保存即持久化为新形态
         if (!parsed.aiSettings) {
           parsed.aiSettings = normalizeAiSettings(undefined);
+          migrated = true;
+        } else if (!Array.isArray((parsed.aiSettings as { providers?: unknown }).providers)) {
+          parsed.aiSettings = normalizeAiSettings(parsed.aiSettings);
           migrated = true;
         }
         if (migrated) {

@@ -1,12 +1,13 @@
 /**
  * pi-agent-core 接入适配层（AI 工具内核的运行时引擎）
  *
- * 现有 openai compatible SSE 客户端（ManagerApi.chatComplete）保持不变，
- * 本层把「请求/流式协议/工具执行/会话循环」接入 @earendil-works/pi-agent-core：
+ * AIApi.chat 的统一对话契约（三协议归一）保持不变，本层把「请求/流式协议/
+ * 工具执行/会话循环」接入 @earendil-works/pi-agent-core：
  *
- * - createChatStreamFn：StreamFn 适配器——pi-ai Context 转 openai 请求，
- *   SSE 四类增量（正文/思考/工具调用/用量）翻译为 pi AssistantMessageEvent
- *   事件协议（start / text_* / thinking_* / toolcall_* / done / error）
+ * - createChatStreamFn：StreamFn 适配器——pi-ai Context 转 AIApi.chat 请求
+ *   （供应商连接信息在 send 时确定后闭包捕获），归一增量（正文/思考/工具
+ *   调用/用量）翻译为 pi AssistantMessageEvent 事件协议
+ *   （start / text_* / thinking_* / toolcall_* / done / error）
  * - toPiTools：现有工具注册表（JSON Schema + invoke）转 pi AgentTool
  *   （typebox Type.Unsafe 包原始 JSON Schema，零改造成本；参数经 pi 校验与类型矫正）
  * - seedMessagesOf：界面会话历史（含 compact 压缩边界）重建为 pi-ai Message[]，
@@ -15,7 +16,7 @@
  *
  * 选型说明：pi-ai 自带的 provider 适配（openai/anthropic/google SDK）为 Node 端
  * 懒加载实现，浏览器打包不可用；注入自定义 StreamFn 是官方推荐的接入方式，
- * 网络层继续复用项目既有 fetch/SSE 客户端（鉴权、CORS、错误文案全部保持）。
+ * 网络层继续复用项目自有 AIApi 三协议客户端（鉴权、CORS、错误文案全部保持）。
  */
 import { Agent } from "@earendil-works/pi-agent-core";
 import type {
@@ -36,6 +37,8 @@ import type {
   Usage,
 } from "@earendil-works/pi-ai";
 import type {
+  AIProviderConfig,
+  AIApi,
   AiModelConfig,
   ChatCompletionDelta,
   ChatCompletionRequest,
@@ -44,7 +47,6 @@ import type {
   ChatUsage,
   ThinkingIntensity,
 } from "@/types/ai";
-import type { ManagerApi } from "@/types/manager";
 import { errorMessageOf } from "@/api/manager-api";
 
 /* ==================== 基础常量与辅助 ==================== */
@@ -75,12 +77,12 @@ function piUsageOf(u?: ChatUsage): Usage {
 }
 
 /** 界面模型配置 → pi-ai Model（api 定为 openai-completions，实际请求由 streamFn 承接） */
-export function piModelOf(config: AiModelConfig): Model<"openai-completions"> {
+export function piModelOf(config: AiModelConfig, providerId = "dbm"): Model<"openai-completions"> {
   return {
     id: config.id,
     name: config.name || config.id,
     api: "openai-completions",
-    provider: "dbm-openai-compatible",
+    provider: providerId,
     baseUrl: "",
     reasoning: Boolean(config.supportsThinking),
     input: ["text"],
@@ -195,11 +197,12 @@ interface ToolSlot {
 }
 
 /**
- * 构建浏览器版 StreamFn：复用 ManagerApi.chatComplete（openai compatible SSE），
- * 把流式增量翻译为 pi AssistantMessageEvent 协议事件。
+ * 构建浏览器版 StreamFn：复用 AIApi.chat（三协议归一增量），把流式增量
+ * 翻译为 pi AssistantMessageEvent 协议事件。供应商连接信息（协议 / 地址 /
+ * 密钥）在 send 时确定后闭包捕获（会话期间模型固定，供应商随之固定）。
  * 契约（pi StreamFn）：不得抛出/拒绝——失败经 error 事件 + stopReason 编码返回。
  */
-export function createChatStreamFn(getApi: () => ManagerApi): StreamFn {
+export function createChatStreamFn(getAI: () => AIApi, provider: AIProviderConfig): StreamFn {
   return (model, context, options) => {
     const stream = new AssistantMessageEventStream();
     void (async () => {
@@ -226,6 +229,7 @@ export function createChatStreamFn(getApi: () => ManagerApi): StreamFn {
             }))
           : undefined;
         const request: ChatCompletionRequest = {
+          provider,
           model: model.id,
           messages: chatMessagesOf(context),
           ...(specTools ? { tools: specTools } : {}),
@@ -241,7 +245,7 @@ export function createChatStreamFn(getApi: () => ManagerApi): StreamFn {
 
         push({ type: "start", partial });
 
-        const result = await getApi().chatComplete(request, (delta: ChatCompletionDelta) => {
+        const result = await getAI().chat(request, (delta: ChatCompletionDelta) => {
           // usage 分片仅作实时参考，真实收口在结果（末尾一次）
           if (delta.usage) partial.usage = piUsageOf(delta.usage);
           if (delta.reasoning) {
@@ -372,8 +376,6 @@ function safeParseArgs(json: string): Record<string, unknown> {
 /** 现有工具注册表条目（stores/ai 中 AgentTool 的结构契约） */
 export interface PiToolSource {
   spec: ChatToolSpec;
-  /** 工具改动后会话结束需同步刷新的仓库域（执行成功时上报） */
-  domains: string[];
   invoke: (args: Record<string, unknown>, ctx: { callId: string }) => Promise<unknown>;
 }
 
@@ -400,14 +402,11 @@ function prettyJson(value: unknown): string {
 /**
  * 现有工具注册表 → pi AgentTool 列表：
  * - parameters 用 typebox Type.Unsafe 包原始 JSON Schema（描述/必填/嵌套全保留）
- * - 执行成功上报 domains（失败不记脏，与既有行为一致）
  * - 返回值 details 携带原始结果（界面记录展示），content 为截断后的 pretty JSON（回填模型）
  * - 抛错经 pi 捕获转错误工具结果：文本加「工具执行失败：」前缀保持模型可辨识
+ *   （写类工具经各仓库「本地先行 + 契约落盘」同步运行时状态，无需会话末域刷新）
  */
-export function toPiTools(
-  tools: PiToolSource[],
-  onToolSuccess: (domains: string[]) => void,
-): PiAgentTool[] {
+export function toPiTools(tools: PiToolSource[]): PiAgentTool[] {
   return tools.map((tool) => ({
     name: tool.spec.function.name,
     label: tool.spec.function.name,
@@ -417,7 +416,6 @@ export function toPiTools(
     async execute(toolCallId: string, args: unknown) {
       try {
         const value = await tool.invoke(args as Record<string, unknown>, { callId: toolCallId });
-        onToolSuccess(tool.domains);
         return {
           content: [{ type: "text" as const, text: capForModel(prettyJson(value).trim()) }],
           details: value,

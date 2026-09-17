@@ -4,11 +4,14 @@
  *   与工厂依赖声明，不含任何运行逻辑）
  */
 import type { ChatToolSpec } from "@/types/ai";
+import type { AIApi } from "@/types/ai";
 import type { ManagerApi } from "@/types/manager";
 import type { DictStore } from "../dict";
+import type { HistoryStore } from "../history";
 import type { ModelStore } from "../model";
 import type { SettingsStore } from "../settings";
 import type { TemplateStore } from "../template";
+import type { AiStore } from "./store";
 
 /* ==================== 会话展示模型 ==================== */
 
@@ -17,7 +20,7 @@ export interface AiChatToolCall {
   id: string; // 与 ChatToolCall.id 对应（点击可定位右侧记录）
   name: string;
   args: string; // 原始 JSON 参数文本
-  /** 技能加载调用的展示信息（loadSkill 专用样式：加载了哪个技能的哪些部分） */
+  /** 技能加载调用的展示信息（skill 工具专用样式：加载了哪个技能的哪些部分） */
   skill?: { name: string; title: string; parts: string[] };
 }
 
@@ -67,7 +70,7 @@ export interface AiToolRecord {
   status: "running" | "success" | "error";
   durationMs?: number;
   createdAt: number;
-  /** 技能加载记录（loadSkill 专用样式：加载了哪个技能的哪些部分） */
+  /** 技能加载记录（skill 工具专用样式：加载了哪个技能的哪些部分） */
   kind?: "skill";
   skill?: { name: string; title: string; parts: string[] };
 }
@@ -96,10 +99,15 @@ export interface AiPendingReplace {
   resolve: (ok: boolean) => void;
 }
 
-/* ==================== 工具注册表 ==================== */
+/** 待确认的危险操作（resetDemo / removeAll 弹窗确认 / 取消后 resolve） */
+export interface AiPendingDanger {
+  title: string; // 弹窗标题
+  description: string; // 危险性说明（弹窗正文）
+  confirmText: string; // 确认按钮文案
+  resolve: (ok: boolean) => void;
+}
 
-/** 工具改动后会话结束需同步刷新的仓库域 */
-export type ToolDomain = "model" | "dict" | "template" | "settings";
+/* ==================== 工具注册表 ==================== */
 
 /** 工具执行上下文（调用记录关联 zip 下载等界面态） */
 export interface ToolInvokeCtx {
@@ -109,7 +117,6 @@ export interface ToolInvokeCtx {
 /** AGENT 工具（openai function calling 形态 + 执行器） */
 export interface AgentTool {
   spec: ChatToolSpec;
-  domains: ToolDomain[];
   /** 界面专用样式标记：skill = 技能加载（独立样式展示加载内容） */
   kind?: "skill";
   invoke: (args: Record<string, unknown>, ctx: ToolInvokeCtx) => Promise<unknown>;
@@ -118,16 +125,27 @@ export interface AgentTool {
 /** 工厂依赖 */
 export interface AiDeps {
   getApi: () => ManagerApi;
+  getAIApi: () => AIApi;
+  /** 惰性取用 AI 仓库自身（getAISettings / setAISettings 等工具执行用；
+   *  type-only 循环引用：store.ts 导入本文件，无运行时环） */
+  getAI: () => AiStore;
   getModel: () => ModelStore;
+  getHistory: () => HistoryStore;
   getDict: () => DictStore;
   getTemplate: () => TemplateStore;
   getSettings: () => SettingsStore;
 }
 
-/** 界面态钩子（zip 缓存注册 / 代码替换确认），由仓库实例提供 */
+/** 界面态钩子（zip 缓存注册 / 代码替换确认 / 危险操作确认），由仓库实例提供 */
 export interface AgentHooks {
   /** 代码生成完成后注册 zip 下载缓存（按 callId 索引） */
   registerZip: (callId: string, blob: Blob, fileName: string, fileCount: number) => void;
   /** 代码替换前弹出确认（用户确认 resolve(true)、取消 resolve(false)） */
   requestReplaceConfirm: (files: AiReplaceFile[]) => Promise<boolean>;
+  /** 危险操作前弹出确认（resetDemo / removeAll；确认 resolve(true)） */
+  requestDangerConfirm: (
+    title: string,
+    description: string,
+    confirmText: string,
+  ) => Promise<boolean>;
 }

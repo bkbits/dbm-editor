@@ -1,5 +1,5 @@
 /**
- * DemoManagerApi · 纯辅助函数集（归一 / 校验 / 日志包装，无契约方法）
+ * DemoManagerApi / DemoAIApi · 纯辅助函数集（归一 / 校验 / 日志包装，无契约方法）
  *
  * 从原 demo-manager-api.ts 单文件拆出。三类职责：
  * - 通用工具：深拷贝、必填字符串校验、正则合法性校验
@@ -10,7 +10,6 @@
  *   返回结果（异步感知），供演示实现的调用可观测性
  */
 import { Logger } from "@/log/Logger";
-import type { ThinkingIntensity, ChatMessage } from "@/types/ai";
 import type {
   Dict,
   DictCategory,
@@ -76,9 +75,6 @@ export function normalizeOptionSettings(raw: unknown, listLabel?: string): Optio
 /** 导航类型合法枚举 */
 export const NAVIGATE_TYPES = ["11", "1N", "N1", "NN"];
 
-/** 思考强度合法档位（AI 设置保存校验用） */
-export const THINKING_INTENSITIES: ThinkingIntensity[] = ["low", "medium", "high", "xhigh", "max"];
-
 /** 工具调用轮数上限缺省值（AI 设置缺省 / 非法值回退） */
 export const DEFAULT_MAX_TOOL_ROUNDS = 50;
 
@@ -87,20 +83,6 @@ export function normalizeMaxToolRounds(v: unknown): number {
   const n = Math.floor(Number(v));
   if (!Number.isFinite(n) || n < 1) return DEFAULT_MAX_TOOL_ROUNDS;
   return Math.min(500, n);
-}
-
-/** openai wire 消息形态：camelCase 契约 → snake_case 标准 */
-export function toWireMessage(m: ChatMessage): Record<string, unknown> {
-  const out: Record<string, unknown> = { role: m.role, content: m.content ?? null };
-  if (m.toolCalls?.length) {
-    out.tool_calls = m.toolCalls.map((c) => ({
-      id: c.id,
-      type: "function",
-      function: { name: c.function.name, arguments: c.function.arguments || "{}" },
-    }));
-  }
-  if (m.toolCallId) out.tool_call_id = m.toolCallId;
-  return out;
 }
 
 /**

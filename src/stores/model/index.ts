@@ -5,7 +5,7 @@
  * 内部结构：
  * - types.ts       类型与 ModelStore 契约（含 ModelSnapshot / ModelDeps）
  * - helpers.ts     深拷贝与实体比较
- * - loader.ts      加载与全量动作（init / refresh / saveAll / syncToApi）
+ * - loader.ts      加载与全量动作（init / refresh / saveAll / modelElementsOf）
  * - vo.ts          字段索引装配与 VO 投影
  * - categories.ts  表分类增删改
  * - tables.ts      表增删改与位置持久化
