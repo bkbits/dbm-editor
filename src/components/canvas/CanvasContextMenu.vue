@@ -73,10 +73,12 @@ const posStyle = computed(() => {
   return { left: `${x}px`, top: `${y}px` };
 });
 
+/** 关闭右键菜单 */
 function close() {
   canvas.closeMenu();
 }
 
+/** 包装动作：执行后关闭菜单 */
 function withClose(fn: () => void) {
   return () => {
     close();
@@ -98,6 +100,7 @@ const ALIGN_DEFS: Array<{ mode: AlignMode; label: string; icon: FunctionalCompon
   { mode: "vdistribute", label: "垂直均匀分布", icon: AlignVerticalDistributeCenter },
 ];
 
+/** 对齐分布分组项（align-items / space-x 系列） */
 function alignItemsSection(): MenuItem[] {
   const count = canvas.selectedIds.length;
   if (count < 2) return [];
@@ -182,8 +185,12 @@ const cardItems = computed<MenuItem[]>(() => {
           okType: "danger",
           cancelText: "取消",
           onOk: async () => {
-            await model.removeTables([id]);
-            canvas.setSelection([]);
+            try {
+              await model.removeTables([id]);
+              canvas.setSelection([]);
+            } catch {
+              /* store 已提示失败原因；吞掉拒绝避免 unhandled rejection */
+            }
           },
         });
       }),
@@ -300,7 +307,7 @@ const items = computed(() => {
   return canvasItems.value;
 });
 
-/* 点击外部关闭 */
+/** 点击菜单外部时关闭（window 捕获阶段监听） */
 function onWindowPointerDown(e: PointerEvent) {
   if (!visible.value) return;
   const target = e.target as HTMLElement;

@@ -16,6 +16,7 @@ const loading = reactive({ replacing: false });
 
 const shownFiles = computed(() => files.value.slice(0, 30));
 
+/** 确认替换：构建 zip 上传 api.replace */
 async function confirmReplace() {
   loading.replacing = true;
   try {

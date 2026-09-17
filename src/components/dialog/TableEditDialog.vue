@@ -1,9 +1,24 @@
 <script setup lang="ts">
+/**
+ * 表编辑对话框（新增 / 编辑表）
+ *
+ * 由原 1520 行单文件拆分为本文件 + src/components/dialog/table-edit/ 子模块
+ * （行为等价拆分）：
+ * - columns.ts：字段草稿类型 + 选项工具 + 依「字段约定」构造 / 归一化字段
+ *   的纯函数工厂（对话框与字段分区共享）
+ * - FieldsSection：「字段」分区（SyncTable 多表同步滚动 + 主键首行锁定 +
+ *   审计 / 逻辑删除字段一键操作）
+ * - IndexesSection：「索引」分区（简单网格 + 窄屏横向滚动）
+ * - NavigatesSection：「导航」分区（实时导航列表 + 编辑 / 删除）
+ *
+ * 本文件持有表草稿（reactive，经 props 分发给各分区就地编辑），承担：
+ * 基本信息（分类 / 表名 / 类名 / 注释 / 树形开关）、启用模板与表选项、
+ * 打开时的草稿初始化（新建依约定建主键字段；编辑归一化主键首行）、
+ * 校验与保存（新建 / 更新走模型仓库，失败提示中文业务信息）。
+ */
 import { computed, reactive, ref, watch } from "vue";
 import { message } from "antdv-next";
-import { Plus, Trash2, GripVertical, Lock, ShieldCheck, Eraser } from "@lucide/vue";
-import type { AuditFieldRole, OptionSetting, TableColumn, TableIndex } from "@/types/model";
-import SyncTable, { type StColumn } from "@/components/common/SyncTable.vue";
+import type { AuditFieldRole } from "@/types/model";
 import { useUiStore } from "@/stores/ui";
 import { useModelStore } from "@/stores/model";
 import { useDictStore } from "@/stores/dict";
@@ -11,15 +26,19 @@ import { useCanvasStore } from "@/stores/canvas";
 import { useSettingsStore } from "@/stores/settings";
 import { useTemplateStore } from "@/stores/template";
 import { toCamelCase } from "@/utils/string";
-import { getJavaTypeByType, COMMON_DB_TYPES, COMMON_JAVA_TYPES } from "@/utils/javaType";
-import { uid } from "@/utils/id";
-import { NAVIGATE_TYPE_LABEL, CASCADE_LABEL, flipNavigateType } from "@/utils/navigate";
-import { useDragSort } from "@/composables/useDragSort";
+import { getJavaTypeByType } from "@/utils/javaType";
+import FieldsSection from "./table-edit/FieldsSection.vue";
+import IndexesSection from "./table-edit/IndexesSection.vue";
+import NavigatesSection from "./table-edit/NavigatesSection.vue";
 import {
-  AUDIT_FIELD_LABELS,
-  AUDIT_FIELD_NOT_NULL,
-  AUDIT_FIELD_ROLES,
-} from "@/utils/fieldConvention";
+  buildOptionRecord,
+  flattenRawOptions,
+  fillOptionDefaults,
+  makePkColumn,
+  normalizePkColumn,
+  type TableEditDraft,
+  type ColumnFactoryDeps,
+} from "./table-edit/columns";
 
 const ui = useUiStore();
 const model = useModelStore();
@@ -28,76 +47,31 @@ const canvas = useCanvasStore();
 const settingsStore = useSettingsStore();
 const templateStore = useTemplateStore();
 
-type DraftColumn = TableColumn & {
-  _propTouched?: boolean;
-  _javaTouched?: boolean;
-  /** 列选项扁平值（UI 编辑态；保存时转换为 TableColumn.options） */
-  _optVals: Record<string, boolean | string>;
-};
-type DraftIndex = TableIndex;
-
-/* ==================== 选项工具（表/列选项扁平值 ⇄ options 记录） ==================== */
-
-/** 已存 options 记录 → 扁平值（不含定义色限，按存值展开） */
-function flattenRawOptions(
-  options?: Record<string, { value?: boolean | string | number }>,
-): Record<string, any> {
-  const out: Record<string, any> = {};
-  for (const [name, entry] of Object.entries(options || {})) {
-    out[name] =
-      entry?.value === undefined || entry?.value === null ? true : (entry.value as boolean);
-  }
-  return out;
-}
-
-/** 补齐缺失定义的默认值（不动已有值；boolean 默认 true，其余空串） */
-function fillOptionDefaults(vals: Record<string, boolean | string>, defs: OptionSetting[]): void {
-  for (const def of defs) {
-    if (vals[def.name] === undefined) vals[def.name] = def.type === "boolean" ? true : "";
-  }
-}
-
-/** 扁平值 → options 记录：boolean 仅存 false（true=默认缺省即启用），非 boolean 存非空值 */
-function buildOptionRecord<T extends { name: string; value?: boolean | string | number }>(
-  vals: Record<string, boolean | string>,
-  defs: OptionSetting[],
-  makeEntry: (name: string, value: boolean | string | number) => T,
-): Record<string, T> | undefined {
-  const out: Record<string, T> = {};
-  for (const def of defs) {
-    const v = vals[def.name];
-    if (def.type === "boolean") {
-      if (v === false) out[def.name] = makeEntry(def.name, false);
-    } else {
-      const s = String(v ?? "").trim();
-      if (s) {
-        const numeric = def.type === "int" || def.type === "long" || def.type === "double";
-        out[def.name] = makeEntry(def.name, numeric ? Number(s) : s);
-      }
-    }
-  }
-  return Object.keys(out).length ? out : undefined;
-}
-
 const isEdit = computed(() => Boolean(ui.tableEdit.tableId));
 
-const draft = reactive({
+const draft = reactive<TableEditDraft>({
   id: "",
   categoryId: "",
   tableName: "",
   className: "",
   comment: "",
-  parentIdColumn: "", // 树形表父ID字段，空代表非树形表
+  parentIdColumn: "",
   x: 0,
   y: 0,
-  columns: [] as DraftColumn[],
-  indexes: [] as DraftIndex[],
+  columns: [],
+  indexes: [],
   activeTab: "columns",
-  /** 启用的模板（显式选择；空 = 启用全部，配合 templatesExplicit/templatesTouched 语义） */
-  templates: [] as string[],
-  /** 表选项扁平值（UI 编辑态；boolean 定义存 boolean，其余存 string） */
-  optionVals: {} as Record<string, any>,
+  templates: [],
+  optionVals: {},
 });
+
+/** 字段工厂依赖快照（约定 + 列选项定义 + 类型规则匹配器，调用时点取值；
+ *  matchJavaType 用箭头包装以保持 store 方法的 this 绑定） */
+const columnDeps = computed<ColumnFactoryDeps>(() => ({
+  conventions: settingsStore.fieldConventions,
+  columnOptionDefs: settingsStore.columnOptions,
+  matchJavaType: (dbType: string) => settingsStore.matchJavaType(dbType),
+}));
 
 /** 表模板选择：未显式配置且未手动改动时展示全部（响应式跟随模板加载） */
 const templatesExplicit = ref(false);
@@ -119,80 +93,6 @@ const templateCheckOptions = computed(() =>
 /** 表选项定义（来自应用设置） */
 const tableOptionDefs = computed(() => settingsStore.tableOptions);
 
-/**
- * 字段表格列定义（SyncTable 多表同步滚动结构）：
- * - 排序手柄 / 字段名固定左侧，删除按钮固定右侧，其余为中间滚动列
- * - 窄固定列（手柄 / 复选 / 删除）显式声明 minWidth，避免默认 80px 下限抬升
- * - 字段名 / Java属性名 / 注释为弹性列（不指定宽度，minWidth 为下限参与剩余分配）
- */
-const fieldColumns = computed<StColumn[]>(() => {
-  const cols: StColumn[] = [
-    { key: "sort", title: "排序", width: 32, minWidth: 32, fixed: "left", align: "center" },
-    { key: "name", title: "字段名", minWidth: 100, fixed: "left" },
-    { key: "propertyName", title: "Java属性名", minWidth: 88 },
-    { key: "type", title: "数据库类型", width: 136, minWidth: 136 },
-    { key: "javaType", title: "Java类型", width: 122, minWidth: 122 },
-    { key: "notNull", title: "非空", width: 48, minWidth: 48, align: "center" },
-    { key: "primaryKey", title: "主键", width: 48, minWidth: 48, align: "center" },
-    {
-      key: "logicDelete",
-      title: "逻辑删",
-      width: 48,
-      minWidth: 48,
-      align: "center",
-      thTitle: "逻辑删除字段（软删除标记，每表最多一个）",
-    },
-    { key: "dict", title: "字典", width: 112, minWidth: 112 },
-    { key: "comment", title: "注释", minWidth: 76 },
-  ];
-  // 列选项动态列（boolean=勾选列，其余=输入列），键以 opt: 前缀避免与基础列冲突
-  for (const def of settingsStore.columnOptions) {
-    cols.push(
-      def.type === "boolean"
-        ? {
-            key: `opt:${def.name}`,
-            title: def.label,
-            width: 48,
-            minWidth: 48,
-            align: "center",
-            thTitle: `${def.label}：${def.remark || def.name}`,
-            thClass: "opt-head",
-          }
-        : {
-            key: `opt:${def.name}`,
-            title: def.label,
-            width: 100,
-            minWidth: 100,
-            thTitle: `${def.label}：${def.remark || def.name}`,
-            thClass: "opt-head",
-          },
-    );
-  }
-  cols.push({ key: "del", title: "", width: 32, minWidth: 32, fixed: "right" });
-  return cols;
-});
-
-/** 列选项定义反查（单元格插槽按 opt: 前缀键取回定义） */
-function optDefOf(key: string) {
-  const name = key.startsWith("opt:") ? key.slice(4) : "";
-  return settingsStore.columnOptions.find((d) => d.name === name);
-}
-
-/** 字段行键（列 id） */
-function fieldRowKey(idx: number) {
-  return draft.columns[idx]?.id ?? idx;
-}
-
-/** 字段行附加类：拖拽指示 + 主键行标记（跨三表按 idx 统一驱动） */
-function fieldRowClass(idx: number) {
-  return [columnDrag.rowClass(idx), { "pk-row": isPkRow(idx) }];
-}
-
-/** 行可拖拽：拖拽手柄按下的瞬间（三张表体表同行一并置 draggable，任一处可发起） */
-function fieldDraggable(idx: number) {
-  return columnDrag.state.from === idx;
-}
-
 /** 树形表开关：开启时父ID字段默认 parent_id，关闭时清空 */
 const treeEnabled = computed({
   get: () => Boolean(draft.parentIdColumn.trim()),
@@ -203,6 +103,7 @@ const treeEnabled = computed({
 
 const dialogOpen = computed(() => ui.tableEdit.open);
 
+/** 对话框打开：依「编辑既有表 / 新建表」初始化草稿 */
 watch(dialogOpen, (open) => {
   if (!open) return;
   dictStore.init();
@@ -233,6 +134,7 @@ watch(dialogOpen, (open) => {
       : [];
     draft.optionVals = flattenRawOptions(t.options);
     draft.columns = normalizePkColumn(
+      columnDeps.value,
       model.columnsOf(t.id).map((c) => ({
         ...c,
         _optVals: flattenRawOptions(c.options),
@@ -257,7 +159,7 @@ watch(dialogOpen, (open) => {
     draft.templates = [];
     draft.optionVals = {};
     // 新建表：首字段固定为设置约定的主键字段
-    draft.columns = [makePkColumn()];
+    draft.columns = [makePkColumn(columnDeps.value)];
     draft.indexes = [];
   }
   draft.activeTab = "columns";
@@ -275,327 +177,11 @@ watch(
   },
 );
 
-/* ==================== 字段编辑 ==================== */
+/* ==================== 基本信息选项 ==================== */
 
 const categoryOptions = computed(() =>
   model.categories.map((c) => ({ value: c.id, label: `${c.name}（${c.basePackage}）` })),
 );
-const dictOptions = computed(() => [
-  { value: "", label: "（无字典）" },
-  ...dictStore.dicts.map((d) => ({ value: d.dictKey, label: `${d.dictKey} · ${d.label}` })),
-]);
-
-const dbTypeOptions = COMMON_DB_TYPES.map((t) => ({ value: t, label: t }));
-const javaTypeOptions = COMMON_JAVA_TYPES.map((t) => ({ value: t, label: t }));
-
-/* ==================== 主键与审计字段约定（来自应用设置） ==================== */
-
-const conventions = computed(() => settingsStore.fieldConventions);
-
-/** 主键行 = 首行（固定不可修改、不可排序） */
-function isPkRow(idx: number): boolean {
-  return idx === 0;
-}
-
-/** 依约定构造主键字段草稿 */
-function makePkColumn(): DraftColumn {
-  const pk = conventions.value.primaryKey;
-  const col: DraftColumn = {
-    id: uid("c-"),
-    tableId: "",
-    columnName: pk.name,
-    propertyName: toCamelCase(pk.name, true),
-    sort: 0,
-    type: pk.type,
-    javaType: getJavaTypeByType(pk.type),
-    comment: "主键",
-    notNull: true,
-    primaryKey: true,
-    dict: "",
-    _optVals: {},
-  };
-  // 列选项默认值在创建时即补齐（设置未加载时为空列表，加载后 watch 兜底）
-  fillOptionDefaults(col._optVals, settingsStore.columnOptions);
-  return col;
-}
-
-/** 依约定构造审计字段草稿（非空约束随角色固定语义；Java 类型显式设定优先，空则按类型映射规则推导） */
-function makeAuditColumn(role: AuditFieldRole): DraftColumn {
-  const conv = conventions.value.auditFields[role];
-  const col: DraftColumn = {
-    id: uid("c-"),
-    tableId: "",
-    columnName: conv.name,
-    propertyName: toCamelCase(conv.name, true),
-    sort: draft.columns.length,
-    type: conv.type,
-    javaType:
-      conv.javaType || (settingsStore.matchJavaType(conv.type) ?? getJavaTypeByType(conv.type)),
-    comment: AUDIT_FIELD_LABELS[role],
-    notNull: AUDIT_FIELD_NOT_NULL[role],
-    primaryKey: false,
-    dict: "",
-    _optVals: {},
-  };
-  fillOptionDefaults(col._optVals, settingsStore.columnOptions);
-  return col;
-}
-
-/**
- * 打开既有表时归一：主键字段强制存在且固定为首行——
- * 已有同名列则上移到首位并对齐约定属性（名称/类型/主键/非空），
- * 没有则依约定补建；其余列一律清除主键标记（单一主键语义，与模板渲染假定一致）
- */
-function normalizePkColumn(cols: DraftColumn[]): DraftColumn[] {
-  const pk = conventions.value.primaryKey;
-  const pkName = pk.name.trim();
-  const out = [...cols];
-  const idx = out.findIndex((c) => c.columnName.trim() === pkName);
-  let pkCol: DraftColumn;
-  if (idx >= 0) {
-    [pkCol] = out.splice(idx, 1);
-    pkCol.columnName = pkName;
-    pkCol.type = pk.type;
-    pkCol.javaType = getJavaTypeByType(pk.type);
-    pkCol.notNull = true;
-    pkCol.primaryKey = true;
-    pkCol.propertyName = toCamelCase(pkName, true);
-  } else {
-    pkCol = makePkColumn();
-  }
-  for (const c of out) c.primaryKey = false;
-  const result = [pkCol, ...out];
-  result.forEach((c, i) => (c.sort = i));
-  return result;
-}
-
-/** 当前表中是否已存在指定名称的字段 */
-function hasColumnName(name: string): boolean {
-  const n = name.trim();
-  return Boolean(n) && draft.columns.some((c) => c.columnName.trim() === n);
-}
-
-/** 审计字段约定名列表（按当前设置） */
-const auditNames = computed(() =>
-  AUDIT_FIELD_ROLES.map((role) => conventions.value.auditFields[role].name.trim()).filter(Boolean),
-);
-const allAuditPresent = computed(() => auditNames.value.every((n) => hasColumnName(n)));
-const anyAuditPresent = computed(() => auditNames.value.some((n) => hasColumnName(n)));
-const auditNamesLabel = computed(() => auditNames.value.join(" · "));
-
-/** 一键补齐审计字段（已存在的同名字段跳过，不动用户数据） */
-function addAuditFields() {
-  let added = 0;
-  for (const role of AUDIT_FIELD_ROLES) {
-    const name = conventions.value.auditFields[role].name.trim();
-    if (!name || hasColumnName(name)) continue;
-    draft.columns.push(makeAuditColumn(role));
-    added++;
-  }
-  renumber();
-  if (added) message.success(`已按设置约定添加 ${added} 个审计字段`);
-  else message.info("审计字段均已存在，无需添加");
-}
-
-/** 一键移除审计字段（仅删约定名称匹配的列，主键首行不受影响） */
-function removeAuditFields() {
-  const names = new Set(auditNames.value);
-  const before = draft.columns.length;
-  draft.columns = draft.columns.filter((c, i) => i === 0 || !names.has(c.columnName.trim()));
-  renumber();
-  const removed = before - draft.columns.length;
-  if (removed) message.success(`已移除 ${removed} 个审计字段`);
-  else message.info("当前表没有约定名称的审计字段");
-}
-
-/* ---------- 逻辑删除字段（依设置约定，每表至多一个） ---------- */
-
-/** 依约定构造逻辑删除字段草稿（软删除标记 0/1，强制非空） */
-function makeLogicDeleteColumn(): DraftColumn {
-  const conv = conventions.value.logicDelete;
-  const col: DraftColumn = {
-    id: uid("c-"),
-    tableId: "",
-    columnName: conv.name,
-    propertyName: toCamelCase(conv.name, true),
-    sort: draft.columns.length,
-    type: conv.type,
-    javaType:
-      conv.javaType || (settingsStore.matchJavaType(conv.type) ?? getJavaTypeByType(conv.type)),
-    comment: "逻辑删除标记（0=正常，1=已删除）",
-    notNull: true,
-    primaryKey: false,
-    logicDelete: true,
-    dict: "",
-    _optVals: {},
-  };
-  fillOptionDefaults(col._optVals, settingsStore.columnOptions);
-  return col;
-}
-
-/** 当前逻辑删除字段（至多一个；导入/AI 脏数据可能多标，validate 兕底拦截） */
-const logicDeleteColumn = computed(() => draft.columns.find((c) => c.logicDelete === true));
-
-/** 约定的逻辑删除字段名 */
-const logicDeleteName = computed(() => conventions.value.logicDelete.name.trim());
-
-/** 逻辑删除字段约定描述（按钮行提示） */
-const logicDeleteLabel = computed(() => {
-  const conv = conventions.value.logicDelete;
-  return `${conv.name} · ${conv.type}`;
-});
-
-/** 勾选互斥：勾选新的同时清除其他列标记（单表唯一），主键行禁止勾选 */
-function onLogicDeleteToggle(col: DraftColumn, e: Event) {
-  const checked = (e.target as HTMLInputElement).checked;
-  if (!checked) {
-    col.logicDelete = false;
-    return;
-  }
-  let transferred = "";
-  for (const c of draft.columns) {
-    if (c !== col && c.logicDelete) {
-      c.logicDelete = false;
-      transferred = c.columnName;
-    }
-  }
-  col.logicDelete = true;
-  if (transferred) message.info(`逻辑删除标记已从「${transferred}」转移至当前字段（每表最多一个）`);
-}
-
-/** 一键添加逻辑删除字段：已存在同名列则直接复用打标记，否则依约定新建 */
-function addLogicDeleteField() {
-  const name = logicDeleteName.value;
-  if (!name) {
-    message.warning("逻辑删除字段约定名为空，请先在系统设置中配置");
-    return;
-  }
-  const existing = draft.columns.find((c) => c.columnName.trim() === name);
-  if (existing) {
-    if (existing.logicDelete) {
-      message.info(`字段「${name}」已是逻辑删除字段`);
-      return;
-    }
-    for (const c of draft.columns) if (c !== existing) c.logicDelete = false;
-    existing.logicDelete = true;
-    message.success(`已将字段「${name}」标记为逻辑删除字段`);
-    return;
-  }
-  draft.columns.push(makeLogicDeleteColumn());
-  renumber();
-  message.success(`已按设置约定添加逻辑删除字段「${name}」`);
-}
-
-/** 删除逻辑删除字段（整列移除并重排序号；主键首行防御性仅清标记） */
-function removeLogicDeleteField() {
-  const col = logicDeleteColumn.value;
-  if (!col) {
-    message.info("当前表没有逻辑删除字段");
-    return;
-  }
-  const name = col.columnName.trim() || col.propertyName || "未命名字段";
-  const idx = draft.columns.indexOf(col);
-  if (idx > 0) {
-    draft.columns.splice(idx, 1);
-    renumber();
-    message.success(`已删除逻辑删除字段「${name}」`);
-  } else {
-    // 防御：主键首行不可删（正常情况下主键行不会带逻辑删除标记）
-    col.logicDelete = false;
-    message.warning("主键行不可删除，已仅清除其逻辑删除标记");
-  }
-}
-
-function addColumn() {
-  const col: DraftColumn = {
-    id: uid("c-"),
-    tableId: "",
-    columnName: "",
-    propertyName: "",
-    sort: draft.columns.length,
-    type: "VARCHAR(50)",
-    javaType: "String",
-    comment: "",
-    notNull: false,
-    primaryKey: false,
-    dict: "",
-    _optVals: {},
-  };
-  // 新建字段即补齐列选项默认值（修复：选项复选框缺省应显示为启用）
-  fillOptionDefaults(col._optVals, settingsStore.columnOptions);
-  draft.columns.push(col);
-}
-function removeColumn(idx: number) {
-  if (isPkRow(idx)) return; // 主键首行不可删除
-  draft.columns.splice(idx, 1);
-  renumber();
-}
-
-/* 字段拖拽排序（手柄触发，替代上移/下移按钮；主键首行锁定不可拖、不可插入其上方） */
-const columnDrag = useDragSort(() => draft.columns, renumber, { lockCount: 1 });
-function renumber() {
-  draft.columns.forEach((c, i) => (c.sort = i));
-}
-function onColumnName(col: DraftColumn) {
-  if (!col._propTouched) col.propertyName = toCamelCase(col.columnName, true);
-}
-function onTypeChange(col: DraftColumn) {
-  if (!col._javaTouched) col.javaType = getJavaTypeByType(col.type);
-}
-function onTableNameBlur() {
-  if (!isEdit.value && !draft.className.trim() && draft.tableName.trim()) {
-    draft.className = toCamelCase(draft.tableName);
-  }
-}
-
-/* ==================== 索引编辑 ==================== */
-
-function addIndex() {
-  draft.indexes.push({
-    id: uid("i-"),
-    tableId: "",
-    indexName: "",
-    type: "NORMAL",
-    columns: [],
-    comment: "",
-  });
-}
-function removeIndex(idx: number) {
-  draft.indexes.splice(idx, 1);
-}
-const indexTypeOptions = computed(() =>
-  settingsStore.indexTypeOptions.map((v) => ({ value: v, label: v })),
-);
-const columnSelectOptions = computed(() =>
-  draft.columns
-    .filter((c) => c.columnName.trim())
-    .map((c) => ({ value: c.columnName, label: c.columnName })),
-);
-
-/* ==================== 导航列表（实时来自 store） ==================== */
-
-const tableNavs = computed(() => (draft.id ? model.navigatesOf(draft.id) : []));
-
-function navView(nav: (typeof tableNavs.value)[number]) {
-  const isSelf = nav.self === draft.id;
-  const type = isSelf ? nav.type : flipNavigateType(nav.type);
-  return {
-    id: nav.id,
-    type,
-    typeLabel: NAVIGATE_TYPE_LABEL[type],
-    selfName: model.tableById(nav.self)?.tableName ?? "?",
-    targetName: model.tableById(nav.target)?.tableName ?? "?",
-    selfProp: nav.selfPropertyName,
-    targetProp: nav.targetPropertyName,
-    cascadeAB: CASCADE_LABEL[nav.selfToTargetCascade],
-    cascadeBA: CASCADE_LABEL[nav.targetToSelfCascade],
-  };
-}
-
-async function deleteNavigate(id: string) {
-  await model.removeNavigate(id);
-  message.success("导航已删除");
-}
 
 /* 父ID字段候选：当前字段列表 */
 const parentColumnOptions = computed(() =>
@@ -604,10 +190,21 @@ const parentColumnOptions = computed(() =>
     .map((c) => ({ value: c.columnName, label: c.columnName })),
 );
 
+/** 表名失焦：新建态自动推导实体类名（大驼峰） */
+function onTableNameBlur() {
+  if (!isEdit.value && !draft.className.trim() && draft.tableName.trim()) {
+    draft.className = toCamelCase(draft.tableName);
+  }
+}
+
 /* ==================== 校验与保存 ==================== */
 
 const saving = reactive({ loading: false });
 
+/** 主键与审计字段约定（校验用） */
+const conventions = computed(() => settingsStore.fieldConventions);
+
+/** 保存前校验：分类 / 表名唯一 / 主键首行 / 字段唯一 / 逻辑删除唯一 / 索引引用 / 树形父ID / 模板非空 */
 function validate(): string | null {
   if (!draft.categoryId) return "请选择所属分类";
   if (!draft.tableName.trim()) return "表名不能为空";
@@ -615,7 +212,7 @@ function validate(): string | null {
     (t) => t.tableName === draft.tableName.trim() && t.id !== draft.id,
   );
   if (dupName) return `表名已存在：${draft.tableName}`;
-  // 主键不变量：首字段固定为设置约定的主键字段（正常交互下构造保证，此为兑底校验）
+  // 主键不变量：首字段固定为设置约定的主键字段（正常交互下构造保证，此为兜底校验）
   const pkName = conventions.value.primaryKey.name.trim();
   if (!draft.columns.length || draft.columns[0].columnName.trim() !== pkName) {
     return `首字段必须为主键字段「${pkName}」（可在系统设置中调整约定）`;
@@ -626,7 +223,7 @@ function validate(): string | null {
     if (names.has(c.columnName)) return `字段名重复：${c.columnName}`;
     names.add(c.columnName);
   }
-  // 逻辑删除字段唯一性兕底（交互勾选已互斥；拦截导入/AI 构造的多标数据）
+  // 逻辑删除字段唯一性兜底（交互勾选已互斥；拦截导入/AI 构造的多标数据）
   if (draft.columns.filter((c) => c.logicDelete === true).length > 1)
     return "逻辑删除字段最多只能有一个，请取消多余的标记";
   const idxNames = new Set<string>();
@@ -651,6 +248,7 @@ function validate(): string | null {
   return null;
 }
 
+/** 保存表：草稿转载荷（选项记录化 / 模板序列化），新建 / 更新分流走模型仓库 */
 async function save() {
   const err = validate();
   if (err) {
@@ -838,302 +436,22 @@ async function save() {
     </div>
 
     <a-tabs v-model:active-key="draft.activeTab" size="small" class="edit-tabs">
-      <!-- ========== 字段（多表同步滚动：表头 / 左右固定列 / 中间列分表 + 专用滚动条） ========== -->
+      <!-- 字段（多表同步滚动 + 约定字段一键操作） -->
       <a-tab-pane key="columns" :tab="`字段（${draft.columns.length}）`">
-        <SyncTable
-          class="fields-table"
-          :columns="fieldColumns"
-          :row-count="draft.columns.length"
-          :row-key="fieldRowKey"
-          :row-class="fieldRowClass"
-          :draggable="fieldDraggable"
-          @row-dragstart="columnDrag.onDragStart"
-          @row-dragend="columnDrag.onDragEnd"
-          @row-dragover="columnDrag.onDragOver"
-          @row-drop="columnDrag.onDrop"
-        >
-          <template #cell="{ col, idx }">
-            <!-- 左固定列：排序手柄（主键首行锁定图标） -->
-            <span
-              v-if="col.key === 'sort' && isPkRow(idx)"
-              class="drag-handle pk-lock"
-              title="主键字段（依设置约定固定为第一个字段，不可修改、不可排序）"
-            >
-              <Lock :size="12" />
-            </span>
-            <span
-              v-else-if="col.key === 'sort'"
-              class="drag-handle"
-              title="拖拽排序"
-              @pointerdown="columnDrag.handleDown(idx)"
-            >
-              <GripVertical :size="13" />
-            </span>
-            <!-- 左固定列：字段名 -->
-            <a-input
-              v-else-if="col.key === 'name'"
-              v-model:value="draft.columns[idx].columnName"
-              size="small"
-              class="mono"
-              placeholder="字段名"
-              :disabled="isPkRow(idx)"
-              @change="onColumnName(draft.columns[idx])"
-            />
-            <!-- 中间列 -->
-            <a-input
-              v-else-if="col.key === 'propertyName'"
-              v-model:value="draft.columns[idx].propertyName"
-              size="small"
-              class="mono"
-              placeholder="小驼峰"
-              :disabled="isPkRow(idx)"
-              @change="draft.columns[idx]._propTouched = true"
-            />
-            <a-auto-complete
-              v-else-if="col.key === 'type'"
-              v-model:value="draft.columns[idx].type"
-              :options="dbTypeOptions"
-              size="small"
-              class="mono"
-              placeholder="如 VARCHAR(50)"
-              :disabled="isPkRow(idx)"
-              :filter-option="
-                (input: string, option: any) =>
-                  String(option.value).toUpperCase().includes(input.toUpperCase())
-              "
-              @change="onTypeChange(draft.columns[idx])"
-            />
-            <a-auto-complete
-              v-else-if="col.key === 'javaType'"
-              v-model:value="draft.columns[idx].javaType"
-              :options="javaTypeOptions"
-              size="small"
-              class="mono"
-              placeholder="如 String"
-              :disabled="isPkRow(idx)"
-              :filter-option="
-                (input: string, option: any) =>
-                  String(option.value).toLowerCase().includes(input.toLowerCase())
-              "
-              @change="draft.columns[idx]._javaTouched = true"
-            />
-            <a-checkbox
-              v-else-if="col.key === 'notNull'"
-              v-model:checked="draft.columns[idx].notNull"
-              :disabled="isPkRow(idx)"
-            />
-            <span
-              v-else-if="col.key === 'primaryKey'"
-              title="主键标记锁定：首字段固定为主键（依设置约定）"
-            >
-              <a-checkbox v-model:checked="draft.columns[idx].primaryKey" disabled />
-            </span>
-            <a-checkbox
-              v-else-if="col.key === 'logicDelete'"
-              :checked="draft.columns[idx].logicDelete === true"
-              :disabled="isPkRow(idx)"
-              @change="onLogicDeleteToggle(draft.columns[idx], $event)"
-            />
-            <a-select
-              v-else-if="col.key === 'dict'"
-              v-model:value="draft.columns[idx].dict"
-              :options="dictOptions"
-              size="small"
-              placeholder="无"
-              allow-clear
-              show-search
-              option-filter-prop="label"
-              :disabled="isPkRow(idx)"
-            />
-            <a-input
-              v-else-if="col.key === 'comment'"
-              v-model:value="draft.columns[idx].comment"
-              size="small"
-              placeholder="选填"
-              :disabled="isPkRow(idx)"
-            />
-            <!-- 列选项动态列（boolean=勾选，其余=输入） -->
-            <template v-else-if="col.key.startsWith('opt:')">
-              <a-checkbox
-                v-if="optDefOf(col.key)?.type === 'boolean'"
-                v-model:checked="draft.columns[idx]._optVals[optDefOf(col.key)!.name]"
-                :disabled="isPkRow(idx)"
-              />
-              <a-input
-                v-else
-                v-model:value="draft.columns[idx]._optVals[optDefOf(col.key)!.name]"
-                size="small"
-                class="mono opt-col-input"
-                :placeholder="optDefOf(col.key)!.name"
-                :title="optDefOf(col.key)!.remark || optDefOf(col.key)!.label"
-                :disabled="isPkRow(idx)"
-              />
-            </template>
-            <!-- 右固定列：删除按钮（主键行占位） -->
-            <button
-              v-else-if="col.key === 'del' && !isPkRow(idx)"
-              class="row-del"
-              type="button"
-              title="删除字段"
-              @click="removeColumn(idx)"
-            >
-              <Trash2 :size="12" />
-            </button>
-            <span
-              v-else-if="col.key === 'del'"
-              class="row-del-placeholder"
-              title="主键字段不可删除"
-            ></span>
-          </template>
-        </SyncTable>
-        <a-button size="small" type="dashed" block class="add-btn" @click="addColumn">
-          <template #icon><Plus :size="12" /></template>
-          添加字段
-        </a-button>
-        <!-- 审计字段与逻辑删除字段一键操作（依设置约定） -->
-        <div class="audit-actions">
-          <a-button
-            v-if="!allAuditPresent"
-            size="small"
-            class="audit-add-btn"
-            @click="addAuditFields"
-          >
-            <template #icon><ShieldCheck :size="12" /></template>
-            添加审计字段
-          </a-button>
-          <a-button
-            v-if="anyAuditPresent"
-            size="small"
-            danger
-            class="audit-del-btn"
-            @click="removeAuditFields"
-          >
-            <template #icon><Trash2 :size="12" /></template>
-            删除审计字段
-          </a-button>
-          <span class="audit-tip" :title="auditNamesLabel">审计字段：{{ auditNamesLabel }}</span>
-          <a-button
-            v-if="!logicDeleteColumn"
-            size="small"
-            class="logic-add-btn"
-            @click="addLogicDeleteField"
-          >
-            <template #icon><Eraser :size="12" /></template>
-            添加逻辑删除字段
-          </a-button>
-          <a-button
-            v-else
-            size="small"
-            danger
-            class="logic-del-btn"
-            title="删除当前逻辑删除字段（整列移除）"
-            @click="removeLogicDeleteField"
-          >
-            <template #icon><Trash2 :size="12" /></template>
-            删除逻辑字段
-          </a-button>
-          <span class="audit-tip" :title="`逻辑删除字段：${logicDeleteLabel}`">
-            逻辑删除：{{ logicDeleteLabel }}
-          </span>
-        </div>
+        <FieldsSection :draft="draft" />
       </a-tab-pane>
 
-      <!-- ========== 索引（窄屏整体横向滚动） ========== -->
+      <!-- 索引（窄屏整体横向滚动） -->
       <a-tab-pane key="indexes" :tab="`索引（${draft.indexes.length}）`">
-        <div class="grid-scroll">
-          <div class="columns-head idx-grid">
-            <span>索引名</span>
-            <span>索引类型</span>
-            <span>索引字段</span>
-            <span>注释</span>
-            <span></span>
-          </div>
-          <div class="columns-body">
-            <div v-for="(idx, i) in draft.indexes" :key="idx.id" class="column-row idx-grid">
-              <a-input
-                v-model:value="idx.indexName"
-                size="small"
-                class="mono"
-                placeholder="如 uk_username"
-              />
-              <a-select v-model:value="idx.type" :options="indexTypeOptions" size="small" />
-              <a-select
-                v-model:value="idx.columns"
-                :options="columnSelectOptions"
-                mode="multiple"
-                size="small"
-                placeholder="选择字段（可多选）"
-                :max-tag-count="3"
-                class="mono"
-              />
-              <a-input v-model:value="idx.comment" size="small" placeholder="选填" />
-              <button class="row-del" type="button" title="删除索引" @click="removeIndex(i)">
-                <Trash2 :size="12" />
-              </button>
-            </div>
-            <a-empty
-              v-if="!draft.indexes.length"
-              description="暂无索引"
-              :image-style="{ height: '40px' }"
-            />
-          </div>
-        </div>
-        <a-button size="small" type="dashed" block class="add-btn" @click="addIndex">
-          <template #icon><Plus :size="12" /></template>
-          添加索引
-        </a-button>
+        <IndexesSection :draft="draft" />
       </a-tab-pane>
 
-      <!-- ========== 导航 ========== -->
-      <a-tab-pane key="navigates" :tab="`导航（${tableNavs.length}）`">
-        <div v-if="!isEdit" class="nav-tip">
-          <a-alert message="保存表后即可为其创建导航关系" type="info" show-icon />
-        </div>
-        <template v-else>
-          <div class="columns-body nav-body">
-            <div v-for="nv in tableNavs.map(navView)" :key="nv.id" class="nav-row">
-              <span class="nav-type" :class="`t-${nv.type.toLowerCase()}`">{{ nv.typeLabel }}</span>
-              <span class="nav-tables mono">
-                {{ nv.selfName }}
-                <span class="nav-arrow"
-                  >-&nbsp;{{ nv.type[0] }}&nbsp;-&nbsp;{{ nv.type[1] }}&nbsp;-</span
-                >
-                {{ nv.targetName }}
-              </span>
-              <span class="nav-props mono" :title="`${nv.selfProp} / ${nv.targetProp}`">
-                {{ nv.selfProp }} ⇄ {{ nv.targetProp }}
-              </span>
-              <span class="nav-cascade">级联：{{ nv.cascadeAB }} / {{ nv.cascadeBA }}</span>
-              <span class="nav-actions">
-                <a-button size="small" @click="ui.openNavigateEdit(nv.id)">编辑</a-button>
-                <a-popconfirm
-                  title="删除该导航关系？"
-                  ok-text="删除"
-                  cancel-text="取消"
-                  @confirm="deleteNavigate(nv.id)"
-                >
-                  <a-button size="small" danger>删除</a-button>
-                </a-popconfirm>
-              </span>
-            </div>
-            <a-empty
-              v-if="!tableNavs.length"
-              description="该表暂未参与任何导航关系"
-              :image-style="{ height: '40px' }"
-            />
-          </div>
-          <a-button
-            v-if="isEdit"
-            size="small"
-            type="dashed"
-            block
-            class="add-btn"
-            @click="ui.openNavigateEdit(null, { self: draft.id })"
-          >
-            <template #icon><Plus :size="12" /></template>
-            新增导航
-          </a-button>
-        </template>
+      <!-- 导航 -->
+      <a-tab-pane
+        key="navigates"
+        :tab="`导航（${draft.id ? model.navigatesOf(draft.id).length : 0}）`"
+      >
+        <NavigatesSection :draft="draft" />
       </a-tab-pane>
     </a-tabs>
   </a-modal>
@@ -1222,19 +540,6 @@ async function save() {
   }
 }
 
-/* 字段表格选项列（表头与单元格） */
-.opt-head {
-  font-size: 10.5px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.opt-col-input {
-  width: 100%;
-  min-width: 0;
-}
-
 .tree-row {
   display: flex;
   align-items: center;
@@ -1254,267 +559,11 @@ async function save() {
   }
 }
 
-/*
- * 字段表格（SyncTable 多表同步滚动结构）的领域样式：
- * 行悬停 / 拖拽指示 / 行圆角 / 行高由组件内通用规则承担（按行级状态跨三表统一驱动），
- * 这里仅补充主键首行的领域底色（跨三表同行同步着色）。
- */
-.fields-table {
-  :deep(tr.pk-row > td) {
-    background: var(--dbm-bg-hover);
-  }
-
-  /* 列选项表头（动态列）窄字号省略号 */
-  :deep(th.opt-head) {
-    font-size: 10.5px;
-  }
-}
-
-.idx-grid {
-  display: grid;
-  grid-template-columns: minmax(120px, 1fr) 128px minmax(200px, 1.6fr) minmax(80px, 1fr) 26px;
-  /* 盒宽跟随轨道最小宽，表头下边框覆盖全部列 */
-  min-width: min-content;
-  gap: 4px 6px;
-  align-items: center;
-}
-
-/*
- * 索引表唯一滚动容器（横向 + 纵向都在此滚动，表头 sticky 吸顶）。
- * 字段表已改为 SyncTable 多表同步滚动结构，不再使用本容器。
- */
-.grid-scroll {
-  overflow: auto;
-  max-height: 348px;
-  -webkit-overflow-scrolling: touch;
-}
-
-/* ===== 移动端适配 ===== */
+/* 移动端适配：基本信息四列 → 双列 */
 @media (max-width: 768px) {
-  /* 基本信息四列 → 双列 */
   .form-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px 10px;
-  }
-
-  /* 索引表纵向限高（44vh 表体 + 28px 表头）；字段表高度上限经 --st-max-h 传入 SyncTable */
-  .grid-scroll {
-    max-height: calc(44vh + 28px);
-  }
-
-  .fields-table {
-    --st-max-h: calc(44vh + 36px);
-  }
-}
-
-.columns-head {
-  /* sticky 吸顶：纵向滚动时悬浮于滚动区顶端，行从其不透明背景下方穿过被遮挡 */
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  /* 不透明背景与弹窗表面同色（--dbm-bg-raise = antd colorBgElevated，亮暗两态均匹配） */
-  background: var(--dbm-bg-raise);
-  padding: 2px 4px 6px;
-  font-size: 11px;
-  color: var(--dbm-text-3);
-  border-bottom: 1px solid var(--dbm-border);
-
-  .h-sort,
-  .h-center {
-    text-align: center;
-  }
-}
-
-.columns-body {
-  /*
-   * 不再自建滚动容器：overflow-y:auto 会把 overflow-x 按规范连带计算为 auto，
-   * 形成表体自己的第二个横向滚动容器（与外层 .grid-scroll 各滚各的）——
-   * 表头表体双滚动条、滚动整体滚动条后表体右侧被表体盒子裁剪遮挡。
-   * 溢出（横向与纵向）统一交给外层 .grid-scroll 唯一滚动容器。
-   */
-  padding: 6px 2px;
-
-  .column-row {
-    padding: 2px 2px;
-    border-radius: var(--dbm-radius-s);
-
-    &:hover {
-      background: var(--dbm-bg-hover);
-    }
-
-    &.dragging {
-      opacity: 0.45;
-    }
-
-    &.drop-above {
-      box-shadow: 0 -2px 0 0 var(--dbm-primary);
-    }
-
-    &.drop-below {
-      box-shadow: 0 2px 0 0 var(--dbm-primary);
-    }
-
-    /* 主键首行：轻微底色区分锁定态（与悬停同色系，亮暗两态均可见） */
-    &.pk-row {
-      background: var(--dbm-bg-hover);
-    }
-  }
-}
-
-/* 主键行锁定手柄：无拖拽语义，主色提示 */
-.pk-lock {
-  color: var(--dbm-primary);
-  cursor: default;
-
-  &:hover {
-    color: var(--dbm-primary);
-    background: transparent;
-  }
-}
-
-/* 主键行末列占位（删除按钮位置，保持网格列数一致） */
-.row-del-placeholder {
-  display: inline-block;
-  width: 22px;
-  height: 22px;
-}
-
-/* 审计字段一键增删按钮行 */
-.audit-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 6px;
-  flex-wrap: wrap;
-
-  .audit-tip {
-    font-size: 11px;
-    color: var(--dbm-text-3);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    min-width: 0;
-  }
-}
-
-.drag-handle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 22px;
-  border-radius: 4px;
-  color: var(--dbm-text-3);
-  cursor: grab;
-  touch-action: none;
-  transition:
-    color 0.15s ease,
-    background 0.15s ease;
-
-  &:hover {
-    color: var(--dbm-text-1);
-    background: var(--dbm-bg-hover);
-  }
-
-  &:active {
-    cursor: grabbing;
-  }
-}
-
-.row-del {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border: none;
-  border-radius: 3px;
-  background: transparent;
-  color: var(--dbm-text-3);
-  cursor: pointer;
-
-  &:hover {
-    background: var(--dbm-danger-weak);
-    color: var(--dbm-danger);
-  }
-}
-
-.add-btn {
-  margin-top: 6px;
-}
-
-/* 导航 tab */
-.nav-tip {
-  margin-bottom: 8px;
-}
-
-.nav-body {
-  max-height: 300px;
-}
-
-.nav-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 6px 8px;
-  border: 1px solid var(--dbm-border);
-  border-radius: var(--dbm-radius-m);
-  margin-bottom: 6px;
-  font-size: 12px;
-
-  .nav-type {
-    flex-shrink: 0;
-    font-size: 10.5px;
-    border-radius: 3px;
-    padding: 0 6px;
-    line-height: 18px;
-
-    &.t-11 {
-      color: var(--dbm-info);
-      background: var(--dbm-info-weak);
-    }
-    &.t-1n {
-      color: var(--dbm-success);
-      background: var(--dbm-success-weak);
-    }
-    &.t-n1 {
-      color: var(--dbm-warning);
-      background: var(--dbm-warning-weak);
-    }
-    &.t-nn {
-      color: var(--dbm-primary-text);
-      background: var(--dbm-primary-weak);
-    }
-  }
-
-  .nav-tables {
-    font-weight: 600;
-    color: var(--dbm-text-1);
-
-    .nav-arrow {
-      color: var(--dbm-text-3);
-      font-weight: 400;
-    }
-  }
-
-  .nav-props {
-    color: var(--dbm-text-2);
-    flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .nav-cascade {
-    color: var(--dbm-text-3);
-    font-size: 11px;
-    flex-shrink: 0;
-  }
-
-  .nav-actions {
-    display: flex;
-    gap: 6px;
-    flex-shrink: 0;
   }
 }
 </style>

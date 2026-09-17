@@ -14,6 +14,7 @@ const elRef = ref<HTMLCanvasElement>();
 
 let frame = 0;
 
+/** 防抖重绘（视口 / 模型变化后合并刷新） */
 function schedule() {
   if (frame) return;
   frame = requestAnimationFrame(() => {
@@ -22,6 +23,7 @@ function schedule() {
   });
 }
 
+/** 分类色（读取 CSS 令牌，画布 ctx 绘制用） */
 function catColorOf(categoryId: string): string {
   return (
     getComputedStyle(document.documentElement)
@@ -32,6 +34,7 @@ function catColorOf(categoryId: string): string {
   );
 }
 
+/** 绘制小地图：全量卡片缩略 + 当前视口框 */
 function draw() {
   const cv = elRef.value;
   if (!cv) return;
@@ -116,6 +119,7 @@ function draw() {
 
 const scaleInfo = { scale: 1, offX: 0, offY: 0 };
 
+/** 小地图坐标 → 世界坐标换算 */
 function mapToWorld(e: PointerEvent | MouseEvent) {
   const rect = elRef.value?.getBoundingClientRect();
   if (!rect) return null;
@@ -128,17 +132,20 @@ function mapToWorld(e: PointerEvent | MouseEvent) {
 }
 
 let dragging = false;
+/** 小地图按下：定位视口并进入拖拽 */
 function onPointerDown(e: PointerEvent) {
   dragging = true;
   const w = mapToWorld(e);
   if (w) canvas.jumpTo(w.x, w.y);
   (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
 }
+/** 小地图拖拽中：视口跟随 */
 function onPointerMove(e: PointerEvent) {
   if (!dragging) return;
   const w = mapToWorld(e);
   if (w) canvas.jumpTo(w.x, w.y);
 }
+/** 小地图抬起：结束拖拽 */
 function onPointerUp() {
   dragging = false;
 }

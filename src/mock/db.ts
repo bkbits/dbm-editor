@@ -79,10 +79,16 @@ export interface MockDB {
   aiSettings: AiSettings;
 }
 
+/** 深拷贝（JSON 序列化；MockDB 均为纯数据形态） */
 function clone<T>(v: T): T {
   return JSON.parse(JSON.stringify(v)) as T;
 }
 
+/**
+ * 从种子常量组装全新 MockDB：表与字段/索引拆到各自集合（持久层形态），
+ * 深拷贝防种子被运行时修改污染；AI 全局规则注入默认任务流程约定
+ * （旧库已保存值不受影响，含主动清空的空串——尊重留空语义）。
+ */
 function createSeedDB(): MockDB {
   const columns: TableColumn[] = [];
   const indexes: TableIndex[] = [];
@@ -212,6 +218,11 @@ function normalizeAiSettings(raw: unknown): AiSettings {
   };
 }
 
+/**
+ * 读取 localStorage 库（gdbme:db:v2）：解析失败 / 版本不符时回退种子库；
+ * 旧库形态兼容迁移（设置字段补齐 / 审计字段驼峰转蛇形 / hidden 合并 /
+ * 模板种子版本升级 / 字典分类 v6-v7 升级），发生迁移即立即归一落盘。
+ */
 function loadDB(): MockDB {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);

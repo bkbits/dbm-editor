@@ -74,6 +74,7 @@ const meta = computed(() => {
   };
 });
 
+/** 复制生成代码到剪贴板 */
 async function copyCode() {
   const code = renderOutput.value?.result || "";
   if (!code) return;

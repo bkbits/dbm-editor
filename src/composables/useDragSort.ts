@@ -27,6 +27,14 @@ export interface DragSortOptions {
   lockCount?: number;
 }
 
+/**
+ * 行拖拽排序组合式函数：管理拖拽状态机并在落下时以 splice 完成排序。
+ *
+ * @param getList 行数据源访问器（落下时读取并原地 splice 重排；须返回响应式数组）
+ * @param onSorted 重排完成回调（常用于按位置重编号 sort 字段）
+ * @param opts 锁定行数等选项
+ * @returns 拖拽状态（响应式）与六个事件处理器（模板内直接绑定）
+ */
 export function useDragSort<T>(
   getList: () => T[],
   onSorted?: () => void,
@@ -49,6 +57,7 @@ export function useDragSort<T>(
     );
   }
 
+  /** 拖拽开始：仅手柄按下形成的行可拖（其余行 preventDefault）；Firefox 需写入数据才会发起 */
   function onDragStart(idx: number, e: DragEvent) {
     if (state.from !== idx) {
       e.preventDefault();
@@ -61,12 +70,14 @@ export function useDragSort<T>(
     }
   }
 
+  /** 拖拽结束（含取消）：复位全部状态（原生拖拽期间浏览器不派发 pointerup，复位依赖此） */
   function onDragEnd() {
     state.from = -1;
     state.over = -1;
     state.pos = "above";
   }
 
+  /** 悬停行拖拽经过：记录目标行与上/下半区落点位置 */
   function onDragOver(idx: number, e: DragEvent) {
     if (state.from < 0) return;
     const row = e.currentTarget as HTMLElement;
@@ -76,6 +87,7 @@ export function useDragSort<T>(
     if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
   }
 
+  /** 落下：换算插入位（先移除再插入需回退一位）、锁定区外钳制，splice 重排后回调 */
   function onDrop() {
     const from = state.from;
     const over = state.over;

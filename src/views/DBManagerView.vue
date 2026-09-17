@@ -72,6 +72,7 @@ watch(
   { immediate: true },
 );
 
+/** api 切换 / 首挂时的初始化（init 全套仓库） */
 function initPage(page: string) {
   // 设置（索引类型列表 + 列类型映射）是编辑器/导入能力共用的全局配置：
   // 视图启动即预载（init 幂等）。此前仅惰性触发（打开表编辑/导入对话框、

@@ -46,6 +46,7 @@ const filteredCategories = computed(() => {
   });
 });
 
+/** 分类下的表列表 */
 function tablesOf(categoryId: string) {
   const kw = keyword.value.trim().toLowerCase();
   const list = model.tablesByCategory(categoryId);
@@ -67,16 +68,19 @@ function revealTable(tableId: string) {
   canvas.ensureTableVisible(tableId);
 }
 
+/** 分类是否展开 */
 function isExpanded(categoryId: string) {
   // 搜索时自动展开
   if (keyword.value.trim()) return true;
   return expanded.has(categoryId);
 }
+/** 切换分类展开态 */
 function toggleExpand(categoryId: string) {
   if (expanded.has(categoryId)) expanded.delete(categoryId);
   else expanded.add(categoryId);
 }
 
+/** 分类色点样式 */
 function catColor(categoryId: string, index: number) {
   return `var(--dbm-cat-${index % 8})`;
 }
@@ -87,9 +91,11 @@ function clickTable(tableId: string, e: MouseEvent) {
   canvas.centerOnTable(tableId);
   ui.closeMobileOutline();
 }
+/** 双击表行：打开表编辑对话框 */
 function dblClickTable(tableId: string) {
   ui.openTableEdit(tableId);
 }
+/** 右键表行：定位画布卡片 */
 function contextTable(tableId: string, e: MouseEvent) {
   e.preventDefault();
   const local = canvas.localPoint(e);
@@ -102,16 +108,19 @@ function contextTable(tableId: string, e: MouseEvent) {
   });
 }
 
+/** 点击分类：画布聚焦该分类 */
 function clickCategory(categoryId: string, e: MouseEvent) {
   canvas.selectCategory(categoryId, e.ctrlKey || e.shiftKey);
 }
 
+/** 在分类下新增表 */
 function addTableIn(categoryId: string) {
   // 在该分类下新增表，落点取画布可视区域中心
   const world = canvas.screenToWorld({ x: canvas.viewportW / 2, y: canvas.viewportH / 2 });
   ui.openTableEdit(null, world, categoryId);
 }
 
+/** 删除分类（分类下有表时拒绝） */
 function removeCategory(categoryId: string) {
   const cat = model.categoryById(categoryId);
   const count = model.tablesByCategory(categoryId).length;
@@ -125,10 +134,11 @@ function removeCategory(categoryId: string) {
     okText: "删除",
     okType: "danger",
     cancelText: "取消",
-    onOk: () => model.removeCategory(categoryId),
+    onOk: () => model.removeCategory(categoryId).catch(() => undefined), // store 已提示；吞掉拒绝避免 unhandled rejection
   });
 }
 
+/** 重置演示数据（确认后还原种子） */
 async function resetDemo() {
   Modal.confirm({
     title: "重置为演示数据？",
@@ -137,11 +147,15 @@ async function resetDemo() {
     okType: "danger",
     cancelText: "取消",
     onOk: async () => {
-      await model.resetDemoData();
-      history.clear();
-      canvas.setSelection([]);
-      canvas.fitAll(true);
-      message.success("已重置为演示数据");
+      try {
+        await model.resetDemoData();
+        history.clear();
+        canvas.setSelection([]);
+        canvas.fitAll(true);
+        message.success("已重置为演示数据");
+      } catch {
+        /* store 已提示失败原因；吞掉拒绝避免 unhandled rejection */
+      }
     },
   });
 }

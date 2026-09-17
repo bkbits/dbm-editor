@@ -46,6 +46,7 @@ release. Add a tool name to select part of the graph. For example, run
 | `./node_modules/.bin/vp check` | oxfmt 格式化 + oxlint 检查（每次改动后必跑；可加 `--fix` 自动修复） |
 | `bun run build` | 库构建（vp build + CSS 内联 → `dist/DBManager.js` + `.d.ts`） |
 | `python3 scripts/check-readme.py` | README 链接/锚点/表格自检（改 README 后必跑） |
+| `bash scripts/e2e/run-all.sh` | E2E 全套件（四域 217 项断言；dev server 未运行则自起，AI mock 自带 CORS 直连） |
 | `bash scripts/package.sh` | 打包源码交付 ZIP 到 `download/` |
 
 ## 架构关键约定
@@ -84,7 +85,7 @@ release. Add a tool name to select part of the graph. For example, run
 
 ## 代码风格
 
-- 单引号、无分号、2 空格缩进（oxfmt 自动保证，`vp check --fix` 会修）。
+- 双引号、带分号、2 空格缩进（oxfmt 默认基线，`vp check --fix` 会修；格式化基线已于 Task 43 从「单引号、无分号」统一切换为 oxfmt 默认）。
 - 注释、commit message、worklog 全部使用**中文**；文件头用块注释说明模块职责与关键决策（含「为什么」）。
 - Vue 组件：`<script setup lang="ts">` + `<template>` + `<style lang="scss">`（非 scoped 全局类名需带组件前缀避免冲突）。
 - 样式只使用 `var(--dbm-*)` 令牌，不写死颜色值（画布 ctx 绘制可用 getComputedStyle 读取令牌）。
@@ -110,17 +111,22 @@ src/
 ├─ types/manager.ts      # ManagerApi 契约（异步签名）
 ├─ types/model.ts        # 非 AI 实体与 DTO 类型（表/字段/索引/导航/字典/模板/设置）
 ├─ types/ai.ts           # AI 设置与 openai compatible chat completions 契约
-├─ api/                  # DemoManagerApi 演示实现 + 注入工具
+├─ api/                  # DemoManagerApi 演示实现 + 注入工具；demo/ 子目录（helpers 归一校验与日志代理 + chat-complete SSE 客户端）
 ├─ stores/               # 全套仓库（context.ts 汇总 provide/inject；ai/ canvas/ model/ 为按逻辑拆分的子模块，见下）
 ├─ stores/ai/            # AI 仓库：index.ts（统一出口）+ types / task-list / tool-schema / codegen / prompt / tools / store
 ├─ stores/canvas/        # 画布仓库：index.ts（统一出口）+ types / constants / viewport / pointer / touch / selection / cards / layout / clipboard / store
 ├─ stores/model/         # 模型仓库：index.ts（统一出口）+ types / helpers / loader / vo / categories / tables / navigates / clipboard / import / snapshot / store
-├─ views/                # DBManagerView + 编辑器/字典/模板/AI 工具/设置五页
-├─ components/           # 画布/对话框/大纲/顶栏组件
+├─ views/                # DBManagerView + 编辑器页 + 四域页（域内按面板拆分子模块，见下）
+├─ views/ai/             # AiView 拆分：TaskPanel / ChatPane / MessageItem / ToolRecordsPane / ReplaceConfirmModal + format.ts
+├─ views/settings/       # SettingsView 拆分：TypeMapping / IndexTypes / FieldConventions / Codegen 分区组件 + card.scss
+├─ views/dict/           # DictView 拆分：ListPane / DetailPane
+├─ views/template/       # TemplateView 拆分：ListPane / EtaEditor / PreviewPane / HelpPanel
+├─ components/           # 画布/对话框/大纲/顶栏组件；dialog/table-edit/（表编辑拆分：columns 纯逻辑 + Fields/Indexes/Navigates 分区 + shared.scss）
 ├─ styles/               # variables.scss(基线) / antd-theme.scss(同步) / global / hljs
 ├─ log/                  # Logger 统一日志器
-├─ utils/ mock/          # 工具与演示种子数据
-scripts/                 # check-readme / eta-smoke / inline-lib-css / package
+├─ utils/                # 字符串 / 类型映射 / 导航 / 几何 / 布局 / 渲染 / 高亮 / id(nanoid)
+├─ mock/                 # db.ts（演示内存库 + localStorage 持久化）+ seed/（种子五模块 tables / dicts / templates / import-db / settings + index barrel）
+scripts/                 # check-readme / eta-smoke / inline-lib-css / package + e2e/（lib.sh + mock/ai-mock.mjs + 四域脚本 + run-all）
 skills/DBManager/        # 本仓库使用方法技能文档（随仓库发布）
 docs/screenshots/        # 验证截图
 ```

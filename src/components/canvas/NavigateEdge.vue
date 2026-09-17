@@ -29,6 +29,7 @@ const ui = useUiStore();
 
 const nav = computed(() => props.navigate);
 
+/** 取表卡片矩形（连线路径计算） */
 function rectOfTable(tableId: string): Rect | null {
   const t = model.tableById(tableId);
   if (!t) return null;
@@ -88,6 +89,7 @@ const geo = computed(() => {
   };
 });
 
+/** 两表矩形相对方向（连线出边选择） */
 function dirBetween(a: Point, b: Point): { x: number; y: number } {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
@@ -163,18 +165,23 @@ function isEndpoint(tableId: string): boolean {
 
 const tipWidth = computed(() => tipText.value.length * 7.6 + 20);
 
+/** 悬停进入：高亮边 */
 function onEnter() {
   canvas.setHoveredNavigate(nav.value.id);
 }
+/** 悬移出：取消高亮 */
 function onLeave() {
   canvas.setHoveredNavigate("");
 }
+/** 单击：选中该导航 */
 function onClick() {
   canvas.setSelectedNavigate(nav.value.id);
 }
+/** 双击：打开导航编辑对话框 */
 function onDblClick() {
   ui.openNavigateEdit(nav.value.id);
 }
+/** 右键：导航上下文菜单 */
 function onContext(e: MouseEvent) {
   const local = canvas.localPoint(e);
   canvas.openMenu({
@@ -185,6 +192,7 @@ function onContext(e: MouseEvent) {
     navigateId: nav.value.id,
   });
 }
+/** 显示多对多中间映射表（点击 NN 胶囊） */
 function showMappingTable() {
   if (nav.value.mappingTable) {
     canvas.showTable(nav.value.mappingTable);

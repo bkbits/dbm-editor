@@ -42,6 +42,7 @@ const draft = reactive({
   models: [] as ModelDraft[],
 });
 
+/** store 设置 → 编辑草稿（补 uid 稳定 key） */
 function toDraft(m: AiModelConfig): ModelDraft {
   return {
     key: uid("aim-"),
@@ -59,6 +60,7 @@ function resetGlobalRules() {
   draft.globalRules = DEFAULT_AI_GLOBAL_RULES;
 }
 
+/** 放弃修改：从 store 重建草稿 */
 function resetDraft() {
   draft.baseUrl = ai.aiSettings.baseUrl;
   draft.apiKey = ai.aiSettings.apiKey;
@@ -75,6 +77,7 @@ watch(
   { immediate: true },
 );
 
+/** 添加模型条目（默认关闭思考） */
 function addModel() {
   draft.models.push({
     key: uid("aim-"),
@@ -87,6 +90,7 @@ function addModel() {
   });
 }
 
+/** 删除模型条目 */
 function removeModel(idx: number) {
   draft.models.splice(idx, 1);
 }

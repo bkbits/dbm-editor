@@ -56,6 +56,7 @@ const scopeLabel = computed(() => {
   return `全部 ${model.tableCount} 张表`;
 });
 
+/** 预览代码（打开生成预览弹窗） */
 function previewCode() {
   if (canvas.selectedIds.length === 1) {
     ui.openCodePreview(canvas.selectedIds[0]);
@@ -64,6 +65,7 @@ function previewCode() {
   }
 }
 
+/** 生成代码（走模板选择弹窗流程） */
 function generate() {
   if (!model.tables.length) {
     message.warning("当前没有可生成的表");

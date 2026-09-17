@@ -1,0 +1,84 @@
+/**
+ * 表编辑分区共享样式（供索引 / 导航分区组件的 scoped 样式 @use 引入）
+ *
+ * 从原 TableEditDialog.vue 单文件拆出：简单网格表（表头 + 表体行）的通用
+ * 结构样式与行删除按钮、添加按钮。经 @use 引入时随所在组件的 scoped
+ * 编译获得各自作用域属性。
+ */
+
+/* 表头：sticky 吸顶（纵向滚动时悬浮于滚动区顶端，行从其不透明背景下方穿过被遮挡） */
+.columns-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  /* 不透明背景与弹窗表面同色（--dbm-bg-raise = antd colorBgElevated，亮暗两态均匹配） */
+  background: var(--dbm-bg-raise);
+  padding: 2px 4px 6px;
+  font-size: 11px;
+  color: var(--dbm-text-3);
+  border-bottom: 1px solid var(--dbm-border);
+
+  .h-sort,
+  .h-center {
+    text-align: center;
+  }
+}
+
+/*
+ * 表体：不自建滚动容器——overflow-y:auto 会把 overflow-x 按规范连带计算为
+ * auto，形成与外层 .grid-scroll 各滚各的第二滚动容器。溢出统一交给外层
+ * 唯一滚动容器。
+ */
+.columns-body {
+  padding: 6px 2px;
+
+  .column-row {
+    padding: 2px 2px;
+    border-radius: var(--dbm-radius-s);
+
+    &:hover {
+      background: var(--dbm-bg-hover);
+    }
+
+    &.dragging {
+      opacity: 0.45;
+    }
+
+    &.drop-above {
+      box-shadow: 0 -2px 0 0 var(--dbm-primary);
+    }
+
+    &.drop-below {
+      box-shadow: 0 2px 0 0 var(--dbm-primary);
+    }
+
+    /* 主键首行：轻微底色区分锁定态（与悬停同色系，亮暗两态均可见） */
+    &.pk-row {
+      background: var(--dbm-bg-hover);
+    }
+  }
+}
+
+/* 行删除按钮 */
+.row-del {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--dbm-text-3);
+  cursor: pointer;
+
+  &:hover {
+    background: var(--dbm-danger-weak);
+    color: var(--dbm-danger);
+  }
+}
+
+/* 虚线整宽添加按钮 */
+.add-btn {
+  margin-top: 6px;
+}

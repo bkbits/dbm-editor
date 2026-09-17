@@ -52,6 +52,11 @@ function stamp(): string {
   return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}`;
 }
 
+/**
+ * 统一日志器单例：级别过滤（DEBUG < INFO < WARN < ERROR < FATAL）+ 时间戳前缀，
+ * 参数原样透传保持 DevTools 可展开。方法不依赖 this，可安全解构使用；
+ * 默认开发构建 DEBUG / 生产构建 INFO，setLevel 或 level 赋值运行时调整。
+ */
 export const Logger = {
   /** 读取 / 设置当前级别（Logger.level = 'WARN' 与 setLevel 等价） */
   get level(): LogLevel {

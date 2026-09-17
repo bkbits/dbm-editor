@@ -82,6 +82,7 @@ export function highlightCode(code: string, language: string): string {
   }
 }
 
+/** HTML 转义（高亮注入前防注入） */
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")

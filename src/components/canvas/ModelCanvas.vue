@@ -52,6 +52,7 @@ const visibleCards = computed(() => {
 
 /* ==================== 网格绘制 ==================== */
 let gridFrame = 0;
+/** 网格重绘调度（尺寸 / 视口变化时 requestAnimationFrame 合并） */
 function scheduleGrid() {
   if (gridFrame) return;
   gridFrame = requestAnimationFrame(() => {
@@ -60,10 +61,12 @@ function scheduleGrid() {
   });
 }
 
+/** 读取设计令牌（getComputedStyle，亮暗主题切换即时生效） */
 function cssVar(name: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
+/** 绘制网格背景（点阵网格，随视口平移缩放） */
 function drawGrid() {
   const cv = gridRef.value;
   const root = rootRef.value;
@@ -95,6 +98,7 @@ function drawGrid() {
   drawGridLines(ctx, w, h, major, canvas.panX, canvas.panY);
 }
 
+/** 按世界坐标步长绘制一层网格线 */
 function drawGridLines(
   ctx: CanvasRenderingContext2D,
   w: number,
@@ -151,12 +155,14 @@ const boundTouchUp = (e: PointerEvent) => canvas.onTouchPointerEnd(e);
 /* iOS Safari 非标准手势事件：画布内禁用原生双指缩放（与 touch-action:none 双保险） */
 const preventSafariGesture = (e: Event) => e.preventDefault();
 
+/** 画布根节点按下：转交画布仓库指针状态机 */
 function onRootPointerDown(e: PointerEvent) {
   // 事件仅在未被卡片/连线拦截（冒泡到根）时触发 —— 即空白区域
   canvas.closeMenu();
   canvas.onCanvasPointerDown(e);
 }
 
+/** 画布右键：打开上下文菜单 */
 function onRootContextMenu(e: MouseEvent) {
   e.preventDefault();
   // 触屏长按刚开过菜单：压制 Android 长按后紧接派发的原生 contextmenu（避免重复开菜单）
@@ -175,6 +181,7 @@ function onRootContextMenu(e: MouseEvent) {
   });
 }
 
+/** 事件目标是否输入类控件（快捷键不拦截输入） */
 function isTypingTarget(e: Event): boolean {
   const t = e.target as HTMLElement | null;
   if (!t) return false;
@@ -182,6 +189,7 @@ function isTypingTarget(e: Event): boolean {
   return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || t.isContentEditable;
 }
 
+/** 全局快捷键分发（全选 / 复制粘贴 / 撤销重做 / 删除等） */
 function onKeyDown(e: KeyboardEvent) {
   if (isTypingTarget(e)) return;
   if (e.code === "Space") {
@@ -240,10 +248,12 @@ function onKeyDown(e: KeyboardEvent) {
   }
 }
 
+/** 按键抬起（组合键状态复位） */
 function onKeyUp(e: KeyboardEvent) {
   if (e.code === "Space") canvas.spacePressed = false;
 }
 
+/** 确认删除选中表（Modal 确认后调模型仓库） */
 function confirmDeleteTables() {
   const ids = [...canvas.selectedIds];
   const names = ids.map((id) => model.tableById(id)?.tableName).filter(Boolean);

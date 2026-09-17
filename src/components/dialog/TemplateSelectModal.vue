@@ -50,10 +50,12 @@ const allChecked = computed(
   () => templates.value.length > 0 && checked.value.length === templates.value.length,
 );
 
+/** 全选 / 全不选模板 */
 function toggleAll() {
   checked.value = allChecked.value ? [] : [...templateStore.templateNames];
 }
 
+/** 切换单个模板选中态 */
 function toggleOne(name: string, v: boolean) {
   if (v) {
     if (!checked.value.includes(name)) checked.value = [...checked.value, name];
@@ -62,10 +64,12 @@ function toggleOne(name: string, v: boolean) {
   }
 }
 
+/** 取消选择 */
 function onCancel() {
   emit("update:open", false);
 }
 
+/** 确认所选模板集 */
 function onConfirm() {
   if (!checked.value.length && !dictEnabled.value) return;
   emit("confirm", [...checked.value], dictEnabled.value);

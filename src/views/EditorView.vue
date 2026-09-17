@@ -22,6 +22,7 @@ onMounted(() => {
 
 /* 窗口从窄屏切回宽屏时收起抽屉，避免残留遮罩状态 */
 const desktopMq = window.matchMedia("(min-width: 769px)");
+/** 桌面模式切换（画布布局联动） */
 function onDesktopChange() {
   ui.closeMobileOutline();
 }

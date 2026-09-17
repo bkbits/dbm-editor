@@ -71,29 +71,23 @@ bun run dev
 
 ### 常用命令速查
 
-| 命令                                  | 说明                                                                                                                                               |
-| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `bun run dev`（= `vp dev`）           | 启动开发服务器（localhost:3000，热更新）                                                                                                           |
-| `bun run build`（= `vp build`）       | 库构建：产出 `dist/DBManager.js` + `dist/DBManager.d.ts` 两个文件（CSS 已内联进 JS，详见[库构建与宿主接入](#库构建与宿主接入)）                    |
-| `bun run build:pages`                 | Pages 演示站构建：应用模式产出 `dist/`（index.html + assets，相对路径 base，见[GitHub Pages 自动发布](#github-pages-自动发布)）                    |
-| `bun run preview`                     | 本地预览生产构建                                                                                                                                   |
-| `bun run typecheck`                   | 全量类型检查（`vue-tsc --noEmit`）                                                                                                                 |
-| `vp check`                            | Vite+ 内置：格式 + lint + 类型检查（staged 提交时自动执行）                                                                                        |
-| `vp install`                          | 安装依赖                                                                                                                                           |
-| `bun scripts/eta-smoke.mjs`           | Eta 模板引擎 API 冒烟测试（模板功能改动前的快速回归）                                                                                              |
-| `node scripts/ai-sse-mock.mjs`        | AI E2E 模拟服务（openai compatible SSE，脚本化三轮 AGENT 对话：代码生成 → 代码替换 → Markdown 总结；配合 `AI_MOCK_PROXY=1 vp dev` 同源代理使用）   |
-| `bash scripts/e2e-task35.sh`          | AI 工具与设置页全流程 E2E（32 项断言：设置导航/统一保存、AGENT 三轮对话、zip 下载、替换确认、markstream 渲染、双主题）                             |
-| `bash scripts/e2e-task36.sh`          | 字段约定与表编辑 E2E（26 项断言：逻辑删除约定设置/持久化、一键添加、勾选互斥转移、左右固定列同步滚动）                                             |
-| `bash scripts/e2e-task37.sh`          | 字段表多表同步滚动架构 E2E（31 项断言：六表结构/列宽分配/行高与列宽对齐约束/横纵滚动同步/滚轮转发/elementFromPoint 采样/删除逻辑字段）             |
-| `bash scripts/e2e-task39.sh`          | 思考块滚动跟随 E2E（12 项断言：贴底自动跟随/上翻停跟/回底恢复/完成收起/重开贴底）                                                                  |
-| `bash scripts/e2e-task40.sh`          | token 用量统计与能力记录 E2E（20 项断言：上下文占用/问答花费/实时速度/refresh 能力/记录清空）                                                      |
-| `bash scripts/e2e-task41.sh`          | AI 工具八项增强 E2E（32 项断言：选中样式/85% 自动压缩/轮数上限/思考块铺满与高频贴底/技能加载/任务清单四态与暂停注入/建议列表）                     |
-| `bash scripts/e2e-task42.sh`          | 全局规则默认文本 E2E（13 项断言：新库默认/清空恢复默认/保存持久化/旧库空值不被覆盖/默认规则流入系统提示）                                          |
-| `bash scripts/e2e-task43.sh`          | pi-agent-core 内核专项 E2E（21 项断言：系统提示与 37 工具流入/历史回放种子/typebox 参数校验失败重试/api 中文错误前缀回填/同轮双工具串行/会话统计） |
-| `bash scripts/e2e-regress-43-47-a.sh` | Task 43-47 回归 A（45 项断言：画布/模型 CRUD 与撤销、nanoid id 格式、剪贴板、隐藏/显示、自动美化、五页渲染、双主题、AI 全局规则默认文本）          |
-| `bash scripts/e2e-regress-43-47-b.sh` | Task 43-47 回归 B（22 项断言：AI 工具链路——系统提示与工具流入/历史回放/typebox 校验失败重试/api 错误前缀回填/同轮双工具串行/usage 收口）           |
-| `python3 scripts/check-readme.py`     | README 链接 / 锚点 / 表格自检                                                                                                                      |
-| `bash scripts/package.sh`             | 打包源码为交付 zip（`download/graph-db-model-editor.zip`，含 skills/DBManager 技能文档）                                                           |
+| 命令                                 | 说明                                                                                                                                                                                                |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bun run dev`（= `vp dev`）          | 启动开发服务器（localhost:3000，热更新）                                                                                                                                                            |
+| `bun run build`（= `vp build`）      | 库构建：产出 `dist/DBManager.js` + `dist/DBManager.d.ts` 两个文件（CSS 已内联进 JS，详见[库构建与宿主接入](#库构建与宿主接入)）                                                                     |
+| `bun run build:pages`                | Pages 演示站构建：应用模式产出 `dist/`（index.html + assets，相对路径 base，见[GitHub Pages 自动发布](#github-pages-自动发布)）                                                                     |
+| `bun run preview`                    | 本地预览生产构建                                                                                                                                                                                    |
+| `bun run typecheck`                  | 全量类型检查（`vue-tsc --noEmit`）                                                                                                                                                                  |
+| `vp check`                           | Vite+ 内置：格式 + lint + 类型检查（staged 提交时自动执行）                                                                                                                                         |
+| `vp install`                         | 安装依赖                                                                                                                                                                                            |
+| `bun scripts/eta-smoke.mjs`          | Eta 模板引擎 API 冒烟测试（模板功能改动前的快速回归）                                                                                                                                               |
+| `bash scripts/e2e/run-all.sh`        | E2E 全套件总入口（顺序执行四域并汇总；dev server 未运行则自起）                                                                                                                                     |
+| `bash scripts/e2e/model-elements.sh` | E2E · 模型元素域（56 项断言：画布初态/选择拖拽/新增删除撤销/复制粘贴/自动美化/NN 胶囊/隐藏显示/逻辑删除字段约定链路/SyncTable 固定列与同步滚动）                                                    |
+| `bash scripts/e2e/dict-template.sh`  | E2E · 字典与模板域（35 项断言：字典增删与保存/字典分类增删与占用拦截/表模板编辑预览保存删除/字典分类模板）                                                                                          |
+| `bash scripts/e2e/settings.sh`       | E2E · 设置域（36 项断言：分区导航/字段约定持久化/索引类型禁用/AI 统一保存/全局规则默认与恢复/旧库空值兼容/轮数上限）                                                                                |
+| `bash scripts/e2e/ai-agent.sh`       | E2E · AI 工具链域（90 项断言：pi 内核链路/系统提示与工具注册/历史回放/参数校验重试/错误前缀回填/双工具串行/代码生成替换链路/思考块贴底三态/技能/任务清单与暂停注入/85% 自动压缩/用量统计/轮数上限） |
+| `python3 scripts/check-readme.py`    | README 链接 / 锚点 / 表格自检                                                                                                                                                                       |
+| `bash scripts/package.sh`            | 打包源码为交付 zip（`download/graph-db-model-editor.zip`，含 skills/DBManager 技能文档）                                                                                                            |
 
 ## 库构建与宿主接入
 
@@ -391,7 +385,7 @@ Logger.setLevel("INFO"); // 或 Logger.level = 'INFO' / Logger.getLevel()
 
 ### DemoManagerApi（内置演示实现）
 
-`src/api/demo-manager-api.ts`：数据存于内存（`src/mock/db.ts`）并持久化到 `localStorage`（`gdbme:db:v2`）。按契约全部方法返回 `Promise`：除 `replace` 的 zip 解析为真实异步外，其余方法内部同步完成后在微任务内 resolve；校验失败 reject 含中文业务提示的 `Error`。数据重置：左下大纲面板「重置演示数据」按钮。AI 契约演示语义：`getAiSettings` / `saveAiSettings` 读写 localStorage 中的 AI 设置（校验同 UI：地址以 `/v1` 结尾等）；`chatComplete` 经浏览器 `fetch` 直连 openai compatible 服务（SSE 逐行解析 `data:` 分片与 `[DONE]` 哨兵，`reasoning_content` 思考流、`tool_calls` 分片聚合），跨域受限于服务端 CORS 配置。E2E 冒烟：`node scripts/ai-sse-mock.mjs` 起本地模拟服务（脚本化两轮 AGENT 对话：工具调用 + Markdown 总结），配合 `AI_MOCK_PROXY=1 vp dev` 的同源代理（`/__ai-mock` → `localhost:4833`）可在浏览器内完整验证流式 / 思考 / 工具调用链路。
+`src/api/demo-manager-api.ts`：数据存于内存（`src/mock/db.ts`）并持久化到 `localStorage`（`gdbme:db:v2`）。按契约全部方法返回 `Promise`：除 `replace` 的 zip 解析为真实异步外，其余方法内部同步完成后在微任务内 resolve；校验失败 reject 含中文业务提示的 `Error`。数据重置：左下大纲面板「重置演示数据」按钮。AI 契约演示语义：`getAiSettings` / `saveAiSettings` 读写 localStorage 中的 AI 设置（校验同 UI：地址以 `/v1` 结尾等）；`chatComplete` 经浏览器 `fetch` 直连 openai compatible 服务（SSE 逐行解析 `data:` 分片与 `[DONE]` 哨兵，`reasoning_content` 思考流、`tool_calls` 分片聚合），跨域受限于服务端 CORS 配置。E2E 冒烟：`scripts/e2e/mock/ai-mock.mjs` 为统一模拟服务（openai compatible SSE，自带 CORS，浏览器直连跨域端口即可；按最后一条 user 关键词路由全部场景分支：代码生成替换链路 / 参数校验 / 执行失败 / 双工具 / 任务清单 / 技能 / 压缩 / 循环 / 快速思考 / 刷新 / 超长思考流）。
 
 所有方法经 Proxy 包装打印调用日志：每次契约调用输出 `[DemoManagerApi] <方法>() 入参` 与 `返回`（debug 级，异步方法**等待落定后**打印 resolved 值，reject 时以 error 级输出后原样透传拒绝）；内部辅助方法互调不打日志。联调时可在控制台按 `DemoManagerApi` 过滤，直接观测各契约方法的实际调用时机与参数（如应用启动即触发 `getSettings` / `load`）；`Logger.setLevel('INFO')` 可静默追踪噪音，`DISABLED` 可完全关闭。
 
@@ -425,16 +419,16 @@ Logger.setLevel("INFO"); // 或 Logger.level = 'INFO' / Logger.getLevel()
 ├─ vite.config.ts          # Vite+ 配置（@ 别名 / 端口 3000 / allowedHosts / lint / fmt / staged / 库构建）
 ├─ tsconfig.json
 ├─ docs/screenshots/       # 界面截图
-├─ scripts/                # 开发辅助脚本（Eta 冒烟 / README 自检 / 库产物 CSS 内联 / 打包 / AI E2E 模拟服务 / Task 43-47 回归脚本）
+├─ scripts/                # 开发辅助脚本（Eta 冒烟 / README 自检 / 库产物 CSS 内联 / 打包）+ e2e/（E2E 套件：lib.sh 公共设施 + mock/ 统一 AI 模拟服务 + 四域脚本 + run-all）
 ├─ skills/DBManager/       # 本仓库使用方法技能文档（SKILL.md，随仓库发布）
 └─ src/
    ├─ index.ts             # 库入口（导出 DBManagerView 组件 + ManagerApi 契约类型）
    ├─ main.ts              # 演示应用入口（注册 antdv-next，无 Pinia）
    ├─ App.vue              # 根组件（渲染 DBManagerView，可传入自定义 api）
-   ├─ api/                 # ManagerApi 注入体系（manager-api）+ DemoManagerApi 演示实现
+   ├─ api/                 # ManagerApi 注入体系（manager-api）+ DemoManagerApi 演示实现（demo/：helpers 归一校验与日志代理 + chat-complete SSE 客户端）
    ├─ composables/         # useDragSort 行拖拽排序（字段/设置规则共用）
    ├─ log/                 # 统一日志器 Logger（级别过滤：DEBUG/INFO/WARN/ERROR/FATAL/DISABLED）
-   ├─ mock/                # 种子数据 + demo 内存数据库（localStorage 持久化）
+   ├─ mock/                # demo 内存数据库（db.ts，localStorage 持久化）+ seed/（种子数据五模块：tables / dicts / templates / import-db / settings + barrel）
    ├─ ai/                  # AI 内核：pi-agent.ts（pi-agent-core 适配层：StreamFn/工具转换/种子重建）+ defaults.ts（默认全局规则）+ skills.ts（内置技能库）
    ├─ stores/              # 状态注入体系：context（工厂+provide/inject）+ model / canvas / dict / template / theme / ui / history / settings / ai 九个 reactive 仓库
    │  ├─ ai/               # AI 仓库子模块：index.ts（统一出口）+ types（展示模型与契约）/ task-list（任务清单解析）/ tool-schema（工具参数 schema）/ codegen / prompt / tools（工具注册表）/ store（会话状态与编排）
@@ -443,14 +437,18 @@ Logger.setLevel("INFO"); // 或 Logger.level = 'INFO' / Logger.getLevel()
    ├─ types/               # 契约类型三文件：manager.ts（ManagerApi 接口）/ model.ts（实体与 DTO）/ ai.ts（AI 设置与 chat completions 契约）
    ├─ utils/               # 字符串 / Java 类型映射 / 导航推导 / 几何 / 力导向布局 / Eta 渲染 / 高亮
    ├─ styles/              # --dbm- 设计令牌（静态基线）/ antd 主题同步层 / 全局样式 / hljs 配色（库构建时内联进 JS）
-   ├─ views/               # DBManagerView（页面封装+状态注入入口）/ EditorView / DictView / TemplateView / SettingsView / AiView
+   ├─ views/               # DBManagerView（页面封装+状态注入入口）/ EditorView + 四域页（各自按面板拆分子模块）：
+   │  ├─ ai/               # AiView 拆分：TaskPanel（任务清单）/ ChatPane（聊天与输入）/ MessageItem（单条消息与思考块）/ ToolRecordsPane（调用记录）/ ReplaceConfirmModal（替换确认）/ format（共享展示格式化）
+   │  ├─ settings/         # SettingsView 拆分：TypeMapping / IndexTypes / FieldConventions / Codegen 四分区组件（defineExpose 统一契约）+ card.scss 共享卡片样式
+   │  ├─ dict/             # DictView 拆分：ListPane（搜索分组与分类管理）/ DetailPane（字典编辑）
+   │  └─ template/         # TemplateView 拆分：ListPane / EtaEditor（语法高亮覆盖层编辑器）/ PreviewPane / HelpPanel
    └─ components/
       ├─ layout/           # AppHeader
       ├─ common/           # SyncTable 同步滚动表格（表头/左右固定列/中间列分表 + 专用滚动条同步）
       ├─ outline/          # 左侧表格大纲
       ├─ canvas/           # ModelCanvas / TableCard / NavigateEdge / Minimap / 菜单 / 工具栏
       ├─ settings/         # AI 设置区块（系统设置页内嵌卡片，随整页统一保存）
-      └─ dialog/           # 表/导航/分类/导入/代码预览/替换确认 对话框
+      └─ dialog/           # 表/导航/分类/导入/代码预览/替换确认 对话框 + table-edit/（表编辑子模块：columns 纯逻辑工厂 + Fields/Indexes/Navigates 三分区）
 ```
 
 ## 非功能说明
@@ -556,7 +554,7 @@ AI 工具（AGENT 对话 + 调用记录，markstream 流式 Markdown；右下角
 | ------------------------------------------------------ |
 | ![AI 工具暗](docs/screenshots/task35-ai-chat-dark.png) |
 
-pi-agent-core 内核专项验证（参数校验失败重试 / api 错误前缀回填 / 同轮双工具串行执行，见 `scripts/e2e-task43.sh`）：
+pi-agent-core 内核专项验证（参数校验失败重试 / api 错误前缀回填 / 同轮双工具串行执行，见 `scripts/e2e/ai-agent.sh`）：
 
 | AI 工具 · pi 内核专项（校验失败重试与错误回填）       |
 | ----------------------------------------------------- |

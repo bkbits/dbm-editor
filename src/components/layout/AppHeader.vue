@@ -31,6 +31,7 @@ const pages: Array<{ key: PageName; label: string; icon: unknown }> = [
   { key: "settings", label: "系统设置", icon: Settings },
 ];
 
+/** 切换页面（编辑器 / 字典 / 模板 / AI / 设置） */
 function switchPage(key: PageName) {
   ui.setPage(key);
 }

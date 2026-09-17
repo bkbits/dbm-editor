@@ -87,18 +87,22 @@ function revealHiddenNav(otherId: string) {
   canvas.centerOnTable(otherId);
 }
 
+/** 按字典键取字典（字段行徽标展示） */
 function dictOf(dictKey: string) {
   return dictStore.dicts.find((d) => d.dictKey === dictKey);
 }
 
+/** 卡片按下：转交画布仓库（选中 / 拖卡起点） */
 function onPointerDown(e: PointerEvent) {
   if (e.button !== 0) return;
   canvas.closeMenu();
   canvas.beginCardDrag(props.tableId, e);
 }
+/** 双击：打开表编辑对话框 */
 function onDblClick() {
   ui.openTableEdit(props.tableId);
 }
+/** 右键：表上下文菜单 */
 function onContext(e: MouseEvent) {
   const local = canvas.localPoint(e);
   canvas.openMenu({
@@ -109,6 +113,7 @@ function onContext(e: MouseEvent) {
     tableId: props.tableId,
   });
 }
+/** 字段连接点按下：发起导航连线草稿 */
 function onConnectorDown(e: PointerEvent, side: Side) {
   if (e.button !== 0) return;
   canvas.closeMenu();

@@ -24,6 +24,7 @@ export interface SkillDef {
   parts: SkillPart[];
 }
 
+/** 内置技能清单（loadSkill 工具按 name 检索；新增技能同步更新工具 description） */
 export const SKILLS: SkillDef[] = [
   {
     name: "table-design",

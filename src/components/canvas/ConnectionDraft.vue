@@ -9,6 +9,7 @@ const model = useModelStore();
 
 const draft = computed(() => canvas.connectDraft);
 
+/** 取表卡片在画布坐标系的矩形（连线端点计算） */
 function rectOfTable(tableId: string) {
   const t = model.tableById(tableId);
   if (!t) return null;

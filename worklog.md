@@ -1208,3 +1208,34 @@ Stage Summary:
 - 交付物：`src/types/{manager,ai,model}.ts` 三文件（170 / 111 / 388 行），职责单一；全仓引用按归属分流，无 barrel 中转；库入口导出 ai/manager/model 三模块，公开类型面无变化
 - 关键决策：① manager.ts 仅承载 ManagerApi 接口本身，其余 DTO 与实体留在 model.ts（依用户「model.ts 包含非 AI 部分所有类型定义」的表述）；② 不设 `export *` 中转 barrel，避免掩盖类型真实归属；③ 依赖单向（manager → ai / model）无环
 - 证据链：以「归一化作用域哈希后产物字节一致」作为零行为变更的决定性证据（延续 Task 47 的产物级方法论）；dev server 未运行故未做浏览器冒烟（类型级改动无运行时面）
+
+---
+Task ID: 50
+Agent: main (Super Z)
+Task: 拉取 devel 分析变化 + 文件架构优化（复杂模块拆分 + 全量 JSDoc）+ 删除全部旧 E2E 重建全新套件并完成全量测试
+
+Work Log:
+- 拉取分析：github/devel 3612138..705bd97 六提交（ba4c92c pi-agent-core 内核接入 / 0eef4ba 格式化基线双引号分号 / 8801485 nanoid / bc77b60+2a26488 三仓库拆分与 JSDoc 与回归脚本 / 705bd97 types 三拆），bun install 后 typecheck / build 恢复正常（产物 2352676 字节与 Task 49 记录一致）
+- 架构拆分（行为等价，六处大文件）：
+  * AiView.vue 1913 → 75 行编排器 + views/ai/ 六文件（TaskPanel / ChatPane / MessageItem / ToolRecordsPane / ReplaceConfirmModal / format.ts；思考块贴底跟随内聚到消息实例）
+  * SettingsView.vue 1697 → 413 行编排器 + views/settings/ 四分区组件（TypeMapping / IndexTypes / FieldConventions / Codegen；defineExpose 统一契约 dirty/tip/warning/collect/resetDraft + card.scss 共享样式）
+  * TableEditDialog.vue 1520 → 565 行 + table-edit/ 四文件（columns.ts 纯逻辑工厂 + Fields / Indexes / Navigates 分区 + shared.scss）
+  * DictView.vue 1094 → 60 行 + dict/ 两面板（ListPane / DetailPane）；TemplateView.vue 1010 → 534 行 + template/ 四组件（ListPane / EtaEditor 语法高亮覆盖层编辑器 / PreviewPane / HelpPanel）
+  * demo-manager-api.ts 999 → 583 行 + api/demo/ 两模块（helpers 归一校验与日志代理 + chat-complete SSE 客户端）
+  * mock/seed.ts 1829 → seed/ 五模块 + index barrel（消费方 "@/mock/seed" 导入面零改动）
+- JSDoc 补注：编译器 API 审计 197 处缺口 → 0（重要接口详细：useDragSort / Logger / mock/db / pi-agent 工厂 / SKILLS / DemoManagerApi 33 契约方法；组件内部函数简易 144 处批量插注；关键代码行内注释）
+- E2E 重建：删除全部旧脚本（task35-43 / regress-43-47-a/b / task38-shots / 三个 ai-sse-mock）；新建 scripts/e2e/（lib.sh 公共设施 + mock/ai-mock.mjs 统一模拟服务 + 四域脚本 + run-all）——按用户术语组织（模型元素 / 字典模板 / 设置与 AI 设置 / AI 工具链），合并原 254 条断言的保留锚点并新增字典分类 UI、模板编辑、两段确认等空白域覆盖
+- 排障与修复（过程发现的产品缺陷）：
+  * matchJavaType 方法引用传参丢失 this（拆分引入）→ 箭头包装修复 3 处
+  * 新建字典 toast 恒显示「已更新」（既有 bug：isEdit 在草稿替换后读取）→ 保存前捕获 wasEdit
+  * Modal.confirm onOk 异步拒绝产生 unhandled rejection（6 处既有问题）→ 按应用 catch 约定统一吞掉（store 已提示）
+  * antdv-next 安装损坏（dist/upload 缺失致 dev server 崩溃）→ 重装该包
+  * 环境坑：沙箱回收跨调用派生进程（单调用一体化）与僵尸进程耗尽线程（及时 pkill）；agent-browser errors --clear 不清历史（从产品侧根治而非测试侧过滤）
+  * E2E 方法论：pi 内核压缩在轮边界（prepareNextTurn）自动触发并整体回落（区别旧版下轮触发）——断言按实际行为修正；ECHO 注入跨行须上下文 grep；批量点击防数组索引错位；Modal.confirm onOk 拒绝保持打开须手动取消防残留层污染
+- 全量测试：typecheck ✓；vp check 134 文件格式 + 121 文件 lint ✓；build ✓（dist 2366275 字节）；README 自检 32 标题 ✓；E2E 全套件 217 断言全绿（模型元素 56 + 字典模板 35 + 设置 36 + AI 工具链 90），全程页面错误与控制台意外 ERROR 均为 0；VLM 四截图复核正常
+- 文档同步：README（常用命令表换新套件 + 项目结构补六处子目录 + DemoManagerApi 章节 mock 说明）+ AGENTS.md（命令表 + 代码风格修正为双引号分号基线 + 目录导读）
+
+Stage Summary:
+- 交付物：六处复杂模块拆分（最大单文件 1913 → 891 纯模板数据）、197 处 JSDoc、全新 E2E 套件（scripts/e2e/ 五脚本 + 统一 mock，217 断言四域全绿）、四个产品缺陷修复、四张验证截图
+- 关键决策：① Vue SFC 拆分用「编排器 + 子组件/分区组件」模式，scoped 样式随模板迁移、媒体查询规则随组件归位（防级联顺序不确定）；② 设置页分区用 defineExpose 统一契约（与既有 AiSettingsSection 一致）；③ seed 目录化后 barrel 保持导入面零改动；④ E2E 按用户术语域组织并合并历史保留锚点，mock 关键词路由 + 结构性判定（压缩请求/重建请求）分层
+- 环境：沙箱会话间回收派生进程——服务与断言必须单次 bash 调用一体化；浏览器/服务僵尸进程需及时清理防线程耗尽

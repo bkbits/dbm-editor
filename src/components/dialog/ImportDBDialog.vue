@@ -22,6 +22,7 @@ const dbTables = ref<DBTable[]>([]);
 const selected = reactive(new Set<string>());
 const categoryId = ref("");
 
+/** 拉取数据库表结构（importFromDB） */
 async function fetchDefs() {
   loading.fetching = true;
   try {
@@ -47,6 +48,7 @@ const categoryOptions = computed(() =>
   model.categories.map((c) => ({ value: c.id, label: `${c.name}（${c.basePackage}）` })),
 );
 
+/** 展开 / 收起一张库表 */
 function toggle(tableName: string) {
   if (selected.has(tableName)) selected.delete(tableName);
   else selected.add(tableName);
@@ -77,6 +79,7 @@ function columnPreview(t: DBTable): string {
   return lines.join("\n");
 }
 
+/** 导入所选表（逐表调模型仓库创建） */
 async function doImport() {
   if (!canImport.value) return;
   loading.importing = true;

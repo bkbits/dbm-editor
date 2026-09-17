@@ -41,11 +41,13 @@ const draft = reactive({
   targetToSelfCascade: "AUTO" as NavigateCascade,
 });
 
+/** 表短名（下拉选项紧凑展示） */
 function shortName(tableName: string): string {
   const parts = tableName.split("_");
   return parts.length > 1 ? parts[parts.length - 1] : tableName;
 }
 
+/** 建议中间映射表名（NN 类型默认值） */
 function suggestMappingName(): string {
   const s = model.tableById(draft.self);
   const t = model.tableById(draft.target);
@@ -104,6 +106,7 @@ function autoSuggest() {
   if (t) draft.selfPropertyName = suggestPropertyName(t.tableName) || "target";
 }
 
+/** self 端切换：重置目标候选 */
 function onSelfChange() {
   if (!isEdit.value) {
     autoSuggest();
@@ -111,6 +114,7 @@ function onSelfChange() {
   }
   draft.mappingNewName = suggestMappingName();
 }
+/** target 端切换：属性名建议重算 */
 function onTargetChange() {
   if (!isEdit.value) {
     autoSuggest();
@@ -134,6 +138,7 @@ const cascadeOptions = (Object.keys(CASCADE_LABEL) as Array<NavigateCascade>).ma
   label: CASCADE_LABEL[c],
 }));
 
+/** 取指定表的字段候选 */
 function columnsOf(tableId: string) {
   return model.columnsOf(tableId).map((c) => ({ value: c.columnName, label: c.columnName }));
 }
@@ -182,6 +187,7 @@ function reverse() {
 
 const saving = reactive({ loading: false });
 
+/** 表单校验：返回首个错误文案（null 为通过） */
 function validate(): string | null {
   if (!draft.self) return "请选择本表";
   if (!draft.target) return "请选择目标表";
@@ -203,6 +209,7 @@ function validate(): string | null {
   return null;
 }
 
+/** 保存导航（新增 / 更新分流，失败提示） */
 async function save() {
   const err = validate();
   if (err) {

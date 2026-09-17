@@ -6,6 +6,10 @@
  * 除 replace 的 zip 解析为真实异步外，其余方法内部同步完成后异步
  * resolve（微任务内落定）；校验失败 reject（Error message 为中文业务提示）。
  *
+ * 结构（按逻辑拆分，见 src/api/demo/）：
+ * - demo/helpers.ts：归一 / 校验纯函数 + 调用日志 Proxy 包装
+ * - demo/chat-complete.ts：openai compatible SSE 流式对话客户端
+ *
  * 契约语义：
  * - 细粒度方法（addXxx/updateXxx/removeXxx/updateTablePos）即时写库并落盘
  * - save() 无参全量保存：demo 的内存即真相，等价于确认落盘
@@ -16,15 +20,12 @@
  */
 import JSZip from "jszip";
 import { message } from "antdv-next";
-import { Logger } from "@/log/Logger";
 import type {
   AiModelConfig,
   AiSettings,
   ChatCompletionDelta,
   ChatCompletionRequest,
   ChatCompletionResult,
-  ChatUsage,
-  ChatMessage,
   ThinkingIntensity,
 } from "@/types/ai";
 import type { ManagerApi } from "@/types/manager";
@@ -32,15 +33,11 @@ import type {
   DBTable,
   Dict,
   DictCategory,
-  DictValue,
   LoadResultVO,
   ManagerTable,
-  OptionSetting,
   Settings,
   Table,
   TableCategory,
-  TableColumn,
-  TableIndex,
   TableNavigate,
   Template,
   TypeMapping,
@@ -48,145 +45,25 @@ import type {
 } from "@/types/model";
 import { getDB, persistDB, resetDB } from "@/mock/db";
 import { SEED_DB_TABLES } from "@/mock/seed";
-import { uid } from "@/utils/id";
 import { AUDIT_FIELD_ROLES, normalizeFieldConventions } from "@/utils/fieldConvention";
+import {
+  assertRegex,
+  clone,
+  DEFAULT_MAX_TOOL_ROUNDS,
+  normalizeColumns,
+  normalizeDict,
+  normalizeDictCategory,
+  normalizeIndexes,
+  normalizeMaxToolRounds,
+  normalizeNavigate,
+  normalizeOptionSettings,
+  requireStr,
+  THINKING_INTENSITIES,
+  withCallLogging,
+} from "./demo/helpers";
+import { chatCompleteViaSse } from "./demo/chat-complete";
 
-function clone<T>(v: T): T {
-  return JSON.parse(JSON.stringify(v)) as T;
-}
-
-function requireStr(value: unknown, field: string, label: string): string {
-  const s = String(value ?? "").trim();
-  if (!s) throw new Error(`${label}不能为空（${field}）`);
-  return s;
-}
-
-/** 校验正则合法性，非法时抛错 */
-function assertRegex(pattern: string): void {
-  try {
-    new RegExp(pattern, "i");
-  } catch {
-    throw new Error(`无效的正则表达式：${pattern}`);
-  }
-}
-
-/** 选项定义归一：名称非空、列表内唯一、类型/标签兜底（label 缺省回退 name） */
-function normalizeOptionSettings(raw: unknown, listLabel?: string): OptionSetting[] {
-  if (!Array.isArray(raw)) return [];
-  const seen = new Set<string>();
-  const out: OptionSetting[] = [];
-  for (const item of raw) {
-    const o = item as Partial<OptionSetting>;
-    const name = String(o?.name ?? "").trim();
-    if (!name) {
-      if (listLabel) throw new Error(`${listLabel}存在空名称`);
-      continue;
-    }
-    if (seen.has(name)) {
-      if (listLabel) throw new Error(`${listLabel}名称重复：${name}`);
-      continue;
-    }
-    seen.add(name);
-    out.push({
-      name,
-      type: String(o?.type ?? "boolean").trim() || "boolean",
-      label: String(o?.label ?? "").trim() || name,
-      remark: String(o?.remark ?? "").trim() || undefined,
-      dict: String(o?.dict ?? "").trim() || undefined,
-    });
-  }
-  return out;
-}
-
-const NAVIGATE_TYPES = ["11", "1N", "N1", "NN"];
-
-/** 思考强度合法档位（AI 设置保存校验用） */
-const THINKING_INTENSITIES: ThinkingIntensity[] = ["low", "medium", "high", "xhigh", "max"];
-
-/** 工具调用轮数上限缺省值（AI 设置缺省 / 非法值回退） */
-export const DEFAULT_MAX_TOOL_ROUNDS = 50;
-
-/** 归一工具调用轮数上限：整数 1-500，缺省 / 非法回退 50 */
-function normalizeMaxToolRounds(v: unknown): number {
-  const n = Math.floor(Number(v));
-  if (!Number.isFinite(n) || n < 1) return DEFAULT_MAX_TOOL_ROUNDS;
-  return Math.min(500, n);
-}
-
-/** openai wire 消息形态：camelCase 契约 → snake_case 标准 */
-function toWireMessage(m: ChatMessage): Record<string, unknown> {
-  const out: Record<string, unknown> = { role: m.role, content: m.content ?? null };
-  if (m.toolCalls?.length) {
-    out.tool_calls = m.toolCalls.map((c) => ({
-      id: c.id,
-      type: "function",
-      function: { name: c.function.name, arguments: c.function.arguments || "{}" },
-    }));
-  }
-  if (m.toolCallId) out.tool_call_id = m.toolCallId;
-  return out;
-}
-
-/**
- * 调用日志包装：为实例的全部方法用 Logger（src/log/Logger.ts）打印入参与返回结果，
- * 抛错时以 error 级输出后原样抛出。
- *
- * - 以 Proxy 拦截方法访问实现，契约方法（含 resetDemo 扩展）全部覆盖，
- *   后续新增方法无需逐个插桩
- * - 入参/返回走 Logger.debug（开发构建默认 DEBUG 级全量可见；
- *   setLevel('INFO') 可静默追踪噪音），抛错走 Logger.error
- * - 异步感知：方法返回 thenable（契约全部为 Promise）时等待落定后
- *   再打印 resolved 值，reject 时以 error 级输出后原样透传拒绝，
- *   保证日志始终呈现真实结果而非 pending 的 Promise 对象
- * - 包装函数以原始实例为 this 执行：内部 this.xxx 辅助互调不经过代理，
- *   每次外部调用仅产生「入参 + 返回」两条日志，内部装配过程不打扰
- * - 同名方法的包装结果缓存，保持方法引用稳定（proxy.load === proxy.load）
- */
-function withCallLogging<T extends object>(instance: T, label: string): T {
-  const wrappedCache = new Map<string, (...args: unknown[]) => unknown>();
-  return new Proxy(instance, {
-    get(target: T, prop: string | symbol): unknown {
-      if (typeof prop !== "string" || prop === "constructor") {
-        return Reflect.get(target, prop);
-      }
-      const value = Reflect.get(target, prop);
-      if (typeof value !== "function") return value;
-      let wrapped = wrappedCache.get(prop);
-      if (!wrapped) {
-        const original = value as (this: T, ...args: unknown[]) => unknown;
-        wrapped = function (this: unknown, ...args: unknown[]): unknown {
-          Logger.debug(`[${label}] ${prop}() 入参`, args);
-          try {
-            const result = original.apply(target, args);
-            if (
-              typeof result === "object" &&
-              result !== null &&
-              typeof (result as { then?: unknown }).then === "function"
-            ) {
-              return (result as Promise<unknown>).then(
-                (resolved: unknown) => {
-                  Logger.debug(`[${label}] ${prop}() 返回`, resolved);
-                  return resolved;
-                },
-                (e: unknown) => {
-                  Logger.error(`[${label}] ${prop}() 抛错`, e);
-                  throw e;
-                },
-              );
-            }
-            Logger.debug(`[${label}] ${prop}() 返回`, result);
-            return result;
-          } catch (e) {
-            Logger.error(`[${label}] ${prop}() 抛错`, e);
-            throw e;
-          }
-        };
-        wrappedCache.set(prop, wrapped);
-      }
-      return wrapped;
-    },
-  });
-}
+export { DEFAULT_MAX_TOOL_ROUNDS };
 
 export class DemoManagerApi implements ManagerApi {
   constructor() {
@@ -197,6 +74,7 @@ export class DemoManagerApi implements ManagerApi {
 
   /* ==================== 设置 ==================== */
 
+  /** 读取设置（旧库字段缺失时兜底归一；映射规则按 sort 排序） */
   async getSettings(): Promise<Settings> {
     const db = getDB();
     const s =
@@ -223,6 +101,7 @@ export class DemoManagerApi implements ManagerApi {
     };
   }
 
+  /** 保存设置：正则 / 索引类型 / 选项名 / 字段约定全部校验后写库落盘 */
   async saveSettings(settings: Settings): Promise<void> {
     // 规则校验：非空 pattern + 合法正则；索引类型去重归一；选项名称非空唯一
     const typeMappings: TypeMapping[] = (settings.typeMappings || []).map((m, i) => {
@@ -271,6 +150,7 @@ export class DemoManagerApi implements ManagerApi {
 
   /* ==================== AI 设置 ==================== */
 
+  /** 读取 AI 设置（旧库字段缺失时兜底归一，不落盘） */
   async getAiSettings(): Promise<AiSettings> {
     const raw = getDB().aiSettings;
     // 读取时兜底归一（旧库缺字段 / 形态漂移防御），不落盘
@@ -305,6 +185,7 @@ export class DemoManagerApi implements ManagerApi {
     };
   }
 
+  /** 保存 AI 设置：地址 /v1 形态、模型 id 唯一、思考强度档位校验后写库落盘 */
   async saveAiSettings(settings: AiSettings): Promise<void> {
     const baseUrl = String(settings?.baseUrl ?? "").trim();
     const apiKey = String(settings?.apiKey ?? "");
@@ -350,192 +231,19 @@ export class DemoManagerApi implements ManagerApi {
     persistDB();
   }
 
-  /* ==================== AI 对话（openai compatible 流式） ==================== */
+  /* ==================== AI 对话（openai compatible 流式，实现体见 demo/chat-complete.ts） ==================== */
 
+  /** openai compatible 流式对话（实现体见 demo/chat-complete.ts） */
   async chatComplete(
     request: ChatCompletionRequest,
     onDelta?: (delta: ChatCompletionDelta) => void,
   ): Promise<ChatCompletionResult> {
-    const settings = getDB().aiSettings;
-    const baseUrl = String(settings?.baseUrl ?? "")
-      .trim()
-      .replace(/\/+$/, "");
-    if (!baseUrl) throw new Error("未配置 AI 服务地址，请先在「系统设置 → AI」中配置");
-    const model = String(request?.model ?? "").trim();
-    if (!model) throw new Error("缺少模型 id");
-
-    const body: Record<string, unknown> = {
-      model,
-      messages: (request?.messages || []).map(toWireMessage),
-      stream: true,
-      // 请求末尾 usage 分片（openai compatible 标准方式；不支持的服务静默忽略）
-      stream_options: { include_usage: true },
-    };
-    if (request?.tools?.length) body.tools = request.tools;
-    if (request?.reasoningEffort) body.reasoning_effort = request.reasoningEffort;
-    if (request?.maxTokens) body.max_tokens = request.maxTokens;
-
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (settings.apiKey) headers.Authorization = `Bearer ${settings.apiKey}`;
-
-    let res: Response;
-    try {
-      res = await fetch(`${baseUrl}/chat/completions`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(body),
-        signal: request?.signal,
-      });
-    } catch (e: unknown) {
-      if ((e as Error)?.name === "AbortError") throw e;
-      throw new Error(
-        `无法连接 AI 服务（${baseUrl}）：${(e as Error)?.message || "网络错误"}；跨域或证书问题请检查服务端 CORS 配置`,
-      );
-    }
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      let detail = text;
-      try {
-        const parsed = JSON.parse(text) as { error?: { message?: string }; message?: string };
-        detail = parsed?.error?.message || parsed?.message || text;
-      } catch {
-        /* 非 JSON 错误体原样展示 */
-      }
-      throw new Error(`AI 服务请求失败（HTTP ${res.status}）：${String(detail).slice(0, 400)}`);
-    }
-    const reader = res.body?.getReader();
-    if (!reader) throw new Error("AI 服务未返回流式响应（响应体为空）");
-
-    // SSE 逐行解析：data: {chunk} 与 [DONE] 哨兵；四类增量聚合（正文/思考/工具调用/用量）
-    const decoder = new TextDecoder();
-    const contentParts: string[] = [];
-    const reasoningParts: string[] = [];
-    const toolSlots = new Map<number, { id: string; name: string; args: string }>();
-    let finishReason: string | undefined;
-    let usage: ChatUsage | undefined;
-    let doneSentinel = false;
-    const emit = (delta: ChatCompletionDelta) => {
-      if (!onDelta) return;
-      try {
-        onDelta(delta);
-      } catch {
-        /* 回调异常不中断流式消费 */
-      }
-    };
-    let buffer = "";
-    while (!doneSentinel) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() ?? "";
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith(":")) continue; // 空行 / SSE 注释与心跳
-        if (!trimmed.startsWith("data:")) continue;
-        const payload = trimmed.slice(5).trim();
-        if (payload === "[DONE]") {
-          doneSentinel = true;
-          break;
-        }
-        let chunk: {
-          usage?: {
-            prompt_tokens?: number;
-            completion_tokens?: number;
-            total_tokens?: number;
-          } | null;
-          choices?: Array<{
-            finish_reason?: string | null;
-            delta?: {
-              content?: string | null;
-              reasoning_content?: string | null;
-              reasoning?: string | null;
-              tool_calls?: Array<{
-                index?: number;
-                id?: string;
-                function?: { name?: string; arguments?: string };
-              }>;
-            };
-          }>;
-        };
-        try {
-          chunk = JSON.parse(payload);
-        } catch {
-          continue; // 非完整 JSON 分片（粘包残留）跳过
-        }
-        // usage 分片（include_usage 时末尾携带，choices 可为空数组）：归一后 emit + 落结果
-        const rawUsage = chunk.usage;
-        if (rawUsage && typeof rawUsage === "object") {
-          usage = {
-            promptTokens: Math.max(0, Math.floor(Number(rawUsage.prompt_tokens) || 0)),
-            completionTokens: Math.max(0, Math.floor(Number(rawUsage.completion_tokens) || 0)),
-            totalTokens: Math.max(0, Math.floor(Number(rawUsage.total_tokens) || 0)),
-          };
-          if (usage.totalTokens || usage.promptTokens || usage.completionTokens) {
-            emit({ usage });
-          }
-        }
-        const choice = chunk.choices?.[0];
-        if (choice?.finish_reason) finishReason = String(choice.finish_reason);
-        const delta = choice?.delta;
-        if (!delta) continue;
-        if (typeof delta.content === "string" && delta.content) {
-          contentParts.push(delta.content);
-          emit({ content: delta.content });
-        }
-        const reasoning =
-          typeof delta.reasoning_content === "string"
-            ? delta.reasoning_content
-            : typeof delta.reasoning === "string"
-              ? delta.reasoning
-              : "";
-        if (reasoning) {
-          reasoningParts.push(reasoning);
-          emit({ reasoning });
-        }
-        if (Array.isArray(delta.tool_calls)) {
-          for (const tc of delta.tool_calls) {
-            const index = Number(tc?.index ?? 0) || 0;
-            let slot = toolSlots.get(index);
-            if (!slot) {
-              slot = { id: "", name: "", args: "" };
-              toolSlots.set(index, slot);
-            }
-            if (tc?.id) slot.id = String(tc.id);
-            const fn = tc?.function || {};
-            if (fn.name) slot.name = String(fn.name);
-            const argsPiece = typeof fn.arguments === "string" ? fn.arguments : "";
-            if (argsPiece) slot.args += argsPiece;
-            emit({
-              toolCall: {
-                index,
-                ...(tc?.id ? { id: String(tc.id) } : {}),
-                ...(fn.name ? { name: String(fn.name) } : {}),
-                ...(argsPiece ? { arguments: argsPiece } : {}),
-              },
-            });
-          }
-        }
-      }
-    }
-    return {
-      content: contentParts.join(""),
-      reasoning: reasoningParts.length ? reasoningParts.join("") : undefined,
-      toolCalls: [...toolSlots.entries()]
-        .sort((a, b) => a[0] - b[0])
-        .filter(([, t]) => t.name)
-        .map(([i, t]) => ({
-          id: t.id || `call_${i}`,
-          type: "function" as const,
-          function: { name: t.name, arguments: t.args || "{}" },
-        })),
-      finishReason,
-      ...(usage ? { usage } : {}),
-    };
+    return chatCompleteViaSse(request, onDelta);
   }
 
   /* ==================== 数据库导入 ==================== */
 
+  /** 返回内置模拟真实库表结构（正式实现对接真实数据库） */
   async importFromDB(): Promise<DBTable[]> {
     // 演示实现：返回内置模拟真实库表结构（正式实现对接真实数据库）
     return clone(SEED_DB_TABLES);
@@ -543,6 +251,7 @@ export class DemoManagerApi implements ManagerApi {
 
   /* ==================== 模型全量加载 / 保存 ==================== */
 
+  /** 全量加载：分类 + 完整表（含字段/索引，深拷贝）+ 导航 */
   async load(): Promise<LoadResultVO> {
     const db = getDB();
     return {
@@ -559,10 +268,12 @@ export class DemoManagerApi implements ManagerApi {
 
   /* ==================== 分类 ==================== */
 
+  /** 分类列表 */
   async getCategories(): Promise<TableCategory[]> {
     return clone(getDB().categories);
   }
 
+  /** 新增分类：名称唯一、必填项校验后写库落盘 */
   async addCategory(category: TableCategory): Promise<void> {
     const db = getDB();
     const name = requireStr(category?.name, "name", "分类名称");
@@ -575,6 +286,7 @@ export class DemoManagerApi implements ManagerApi {
     persistDB();
   }
 
+  /** 更新分类：存在性与名称唯一校验后整体覆盖 */
   async updateCategory(category: TableCategory): Promise<void> {
     const db = getDB();
     const id = requireStr(category?.id, "id", "分类ID");
@@ -588,6 +300,7 @@ export class DemoManagerApi implements ManagerApi {
     persistDB();
   }
 
+  /** 删除分类：分类下仍有表时拒绝 */
   async removeCategory(categoryId: string): Promise<void> {
     const db = getDB();
     if (!db.categories.some((c) => c.id === categoryId)) return;
@@ -603,10 +316,12 @@ export class DemoManagerApi implements ManagerApi {
 
   /* ==================== 表 ==================== */
 
+  /** 完整表列表（含字段/索引，深拷贝） */
   async getTables(): Promise<ManagerTable[]> {
     return this.assembleTables(getDB().tables.map((t) => t.id));
   }
 
+  /** 新增表：表名唯一、分类存在，字段/索引归一校验后拆集合写库 */
   async addTable(table: ManagerTable): Promise<void> {
     const db = getDB();
     const name = requireStr(table?.tableName, "tableName", "表名");
@@ -625,6 +340,7 @@ export class DemoManagerApi implements ManagerApi {
     persistDB();
   }
 
+  /** 更新表：存在性 / 唯一性 / 归一校验后整体替换（字段与索引先清后写） */
   async updateTable(table: ManagerTable): Promise<void> {
     const db = getDB();
     const id = requireStr(table?.id, "id", "表ID");
@@ -684,10 +400,12 @@ export class DemoManagerApi implements ManagerApi {
 
   /* ==================== 导航 ==================== */
 
+  /** 导航列表 */
   async getNavigates(): Promise<TableNavigate[]> {
     return clone(getDB().navigates);
   }
 
+  /** 新增导航：两端表存在 / 类型枚举 / 属性名非空校验后写库 */
   async addNavigate(navigate: TableNavigate): Promise<void> {
     const db = getDB();
     const nav = normalizeNavigate(navigate);
@@ -696,6 +414,7 @@ export class DemoManagerApi implements ManagerApi {
     persistDB();
   }
 
+  /** 更新导航：存在性 + 归一校验后整体替换 */
   async updateNavigate(navigate: TableNavigate): Promise<void> {
     const db = getDB();
     const nav = normalizeNavigate(navigate);
@@ -705,6 +424,7 @@ export class DemoManagerApi implements ManagerApi {
     persistDB();
   }
 
+  /** 删除导航（不存在时静默成功） */
   async removeNavigate(navigateId: string): Promise<void> {
     const db = getDB();
     if (!db.navigates.some((n) => n.id === navigateId)) return;
@@ -714,10 +434,12 @@ export class DemoManagerApi implements ManagerApi {
 
   /* ==================== 字典分类 ==================== */
 
+  /** 字典分类列表 */
   async getDictCategories(): Promise<DictCategory[]> {
     return clone(getDB().dictCategories);
   }
 
+  /** 新增字典分类：名称唯一，包路径 / 类名大驼峰归一后写库 */
   async addDictCategory(category: DictCategory): Promise<void> {
     const db = getDB();
     const name = requireStr(category?.name, "name", "分类名称");
@@ -734,6 +456,7 @@ export class DemoManagerApi implements ManagerApi {
     persistDB();
   }
 
+  /** 更新字典分类：存在性 / 唯一性校验后逐字段覆盖 */
   async updateDictCategory(category: DictCategory): Promise<void> {
     const db = getDB();
     const id = requireStr(category?.id, "id", "字典分类ID");
@@ -749,6 +472,7 @@ export class DemoManagerApi implements ManagerApi {
     persistDB();
   }
 
+  /** 删除字典分类：分类下仍有字典时拒绝 */
   async removeDictCategory(categoryId: string): Promise<void> {
     const db = getDB();
     if (db.dicts.some((d) => d.categoryId === categoryId))
@@ -759,10 +483,12 @@ export class DemoManagerApi implements ManagerApi {
 
   /* ==================== 字典 ==================== */
 
+  /** 字典列表 */
   async getDicts(): Promise<Dict[]> {
     return clone(getDB().dicts);
   }
 
+  /** 新增字典：字典键唯一，值列表归一后写库 */
   async addDict(dict: Dict): Promise<void> {
     const db = getDB();
     const dictKey = requireStr(dict?.dictKey, "dictKey", "字典键");
@@ -773,6 +499,7 @@ export class DemoManagerApi implements ManagerApi {
     persistDB();
   }
 
+  /** 更新字典：存在性 / 键唯一校验后整体替换 */
   async updateDict(dict: Dict): Promise<void> {
     const db = getDB();
     const id = requireStr(dict?.id, "id", "字典ID");
@@ -785,6 +512,7 @@ export class DemoManagerApi implements ManagerApi {
     persistDB();
   }
 
+  /** 删除字典 */
   async removeDict(dictId: string): Promise<void> {
     const db = getDB();
     db.dicts = db.dicts.filter((d) => d.id !== dictId);
@@ -793,11 +521,13 @@ export class DemoManagerApi implements ManagerApi {
 
   /* ==================== 字典分类模板 ==================== */
 
+  /** 字典分类模板（仅一个；Template DTO 形态转换） */
   async getDictCategoryTemplate(): Promise<Template> {
     const t = getDB().dictCategoryTemplate;
     return { id: t.id, templateName: t.name, content: t.content };
   }
 
+  /** 更新字典分类模板：id 匹配校验后覆盖名称与内容 */
   async updateDictCategoryTemplate(template: Template): Promise<void> {
     const db = getDB();
     const target = db.dictCategoryTemplate;
@@ -811,10 +541,12 @@ export class DemoManagerApi implements ManagerApi {
 
   /* ==================== 表模板 ==================== */
 
+  /** 表模板列表（Template DTO 形态转换） */
   async getTemplates(): Promise<Template[]> {
     return getDB().templates.map((t) => ({ id: t.id, templateName: t.name, content: t.content }));
   }
 
+  /** 新增表模板：名称唯一校验后写库 */
   async addTemplate(template: Template): Promise<void> {
     const db = getDB();
     const name = requireStr(template?.templateName, "templateName", "模板名称");
@@ -824,6 +556,7 @@ export class DemoManagerApi implements ManagerApi {
     persistDB();
   }
 
+  /** 更新表模板：存在性 / 名称唯一校验后覆盖 */
   async updateTemplate(template: Template): Promise<void> {
     const db = getDB();
     const id = requireStr(template?.id, "id", "模板ID");
@@ -837,6 +570,7 @@ export class DemoManagerApi implements ManagerApi {
     persistDB();
   }
 
+  /** 删除表模板 */
   async removeTemplate(templateId: string): Promise<void> {
     const db = getDB();
     db.templates = db.templates.filter((t) => t.id !== templateId);
@@ -845,6 +579,7 @@ export class DemoManagerApi implements ManagerApi {
 
   /* ==================== 代码替换 ==================== */
 
+  /** 代码替换：接收 zip 并解析计数（demo 行为，不发生真实写入） */
   async replace(zipFile: Blob): Promise<void> {
     // 异步契约：zip 解析完成后 resolve；解析失败 reject 由调用方捕获处理
     const archive = await JSZip.loadAsync(zipFile);
@@ -878,122 +613,4 @@ export class DemoManagerApi implements ManagerApi {
           .map((i) => ({ ...i, columns: [...i.columns] })),
       }));
   }
-}
-
-/**
- * 字段列表归一：字段名非空唯一、tableId 归一、sort 重排；
- * 逻辑删除字段每表至多一个（多标拒绝，UI 勾选互斥之外的数据层兑底）
- */
-function normalizeColumns(table: ManagerTable, tableName: string): TableColumn[] {
-  const colNames = new Set<string>();
-  let logicDeleteCount = 0;
-  const columns = (table.columns || []).map((c, i) => {
-    const colName = requireStr(c?.columnName, "columnName", "字段名");
-    if (colNames.has(colName)) throw new Error(`表 ${tableName} 存在重复字段名：${colName}`);
-    colNames.add(colName);
-    if (c?.logicDelete === true) logicDeleteCount++;
-    return {
-      ...clone(c),
-      id: c.id || uid("c-"),
-      tableId: table.id,
-      sort: Number(c.sort ?? i) || i,
-      // 仅显式 true 落库（false/缺省归一为 undefined，减少数据噪音）
-      logicDelete: c?.logicDelete === true ? true : undefined,
-    };
-  });
-  if (logicDeleteCount > 1)
-    throw new Error(
-      `表 ${tableName} 的逻辑删除字段最多只能有一个（当前标记了 ${logicDeleteCount} 个）`,
-    );
-  return columns;
-}
-
-/** 索引列表归一：索引名非空唯一、索引字段存在 */
-function normalizeIndexes(
-  table: ManagerTable,
-  tableName: string,
-  columns: Array<{ columnName: string }>,
-): TableIndex[] {
-  const colNames = new Set(columns.map((c) => c.columnName));
-  const idxNames = new Set<string>();
-  return (table.indexes || []).map((i) => {
-    const idxName = requireStr(i?.indexName, "indexName", "索引名");
-    if (idxNames.has(idxName)) throw new Error(`表 ${tableName} 存在重复索引名：${idxName}`);
-    idxNames.add(idxName);
-    const cols = (i.columns || []).map(String);
-    for (const col of cols) {
-      if (!colNames.has(col))
-        throw new Error(`表 ${tableName} 的索引 ${idxName} 引用了不存在的字段：${col}`);
-    }
-    return { ...clone(i), id: i.id || uid("i-"), tableId: table.id, columns: cols };
-  });
-}
-
-/** 导航关系归一：两端表存在、类型枚举合法、属性名非空 */
-function normalizeNavigate(input: TableNavigate): TableNavigate {
-  const db = getDB();
-  const nav = clone(input);
-  if (!nav.id) throw new Error("新增导航必须提供 id");
-  requireStr(nav.selfPropertyName, "selfPropertyName", "self 属性名");
-  requireStr(nav.targetPropertyName, "targetPropertyName", "target 属性名");
-  if (!db.tables.some((t) => t.id === nav.self)) throw new Error(`导航 ${nav.id} 的 self 表不存在`);
-  if (!db.tables.some((t) => t.id === nav.target))
-    throw new Error(`导航 ${nav.id} 的 target 表不存在`);
-  if (nav.mappingTable && !db.tables.some((t) => t.id === nav.mappingTable)) {
-    throw new Error(`导航 ${nav.id} 的中间映射表不存在`);
-  }
-  if (!NAVIGATE_TYPES.includes(nav.type)) throw new Error(`导航 ${nav.id} 的类型无效: ${nav.type}`);
-  return nav;
-}
-
-/** 字典值归一：空值键拦截、标签回退、类型/颜色兜底；常量属性名统一转大写 */
-function normalizeDictValue(v: Partial<DictValue>, dictKey: string): DictValue {
-  const valueKey = String(v?.valueKey ?? "").trim();
-  if (!valueKey) throw new Error(`字典 ${dictKey} 存在空值键`);
-  const labelType = ["I", "S", "W", "D"].includes(v?.labelType as string)
-    ? (v?.labelType as DictValue["labelType"])
-    : "I";
-  return {
-    id: v?.id || uid("dv-"),
-    dictId: String(v?.dictId || ""),
-    valueKey,
-    // 常量属性名仅允许全大写：小写输入自动转大写（数据层兜底，UI 层同步转换）
-    propertyName: String(v?.propertyName ?? "")
-      .trim()
-      .toUpperCase(),
-    label: String(v?.label ?? "").trim() || valueKey,
-    labelType,
-    comment: String(v?.comment || ""),
-    color: String(v?.color || "").trim() || undefined,
-  };
-}
-
-/**
- * 字典分类属性归一：basePackage 基础包路径（仅去空白与首尾点、压缩连续点）+
- * className 类名（非空时必须为大驼峰结构——首字母大写且仅字母数字，如 SysDictConstants）
- */
-function normalizeDictCategory(category: DictCategory): {
-  basePackage: string;
-  className: string;
-} {
-  const basePackage = String(category?.basePackage || "")
-    .trim()
-    .replace(/\.{2,}/g, ".")
-    .replace(/^\.+|\.+$/g, "");
-  const className = String(category?.className || "").trim();
-  if (className && !/^[A-Z][A-Za-z0-9]*$/.test(className))
-    throw new Error(`类名称必须为大驼峰结构（如 SysDictConstants）: ${className}`);
-  return { basePackage, className };
-}
-
-function normalizeDict(dict: Partial<Dict>, dictKey: string): Dict {
-  const label = requireStr(dict?.label, "label", "字典标签");
-  return {
-    id: String(dict?.id || ""),
-    categoryId: String(dict?.categoryId || "").trim(),
-    dictKey,
-    label,
-    comment: String(dict?.comment || ""),
-    values: (dict?.values || []).map((v) => normalizeDictValue(v, dictKey)),
-  };
 }

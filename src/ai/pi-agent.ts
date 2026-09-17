@@ -380,12 +380,14 @@ export interface PiToolSource {
 /** 工具结果回填模型的上限（与既有行为一致：超限截断） */
 const MODEL_RESULT_CAP = 48000;
 
+/** 工具结果回填模型前截断（超限附总长提示，防超长返回值撑爆上下文） */
 function capForModel(text: string): string {
   return text.length > MODEL_RESULT_CAP
     ? `${text.slice(0, MODEL_RESULT_CAP)}\n…（结果过长已截断，共 ${text.length} 字符）`
     : text;
 }
 
+/** 结果序列化为展示文本：undefined 标记 (void)，JSON 美化失败时回退 String */
 function prettyJson(value: unknown): string {
   if (value === undefined) return "(void)";
   try {
@@ -411,6 +413,7 @@ export function toPiTools(
     label: tool.spec.function.name,
     description: tool.spec.function.description,
     parameters: Type.Unsafe(tool.spec.function.parameters),
+    /** pi 工具执行体：调用既有工具注册表（入参已经 pi typebox 校验矫正） */
     async execute(toolCallId: string, args: unknown) {
       try {
         const value = await tool.invoke(args as Record<string, unknown>, { callId: toolCallId });
@@ -537,6 +540,7 @@ const COMPACT_TOOL_CAP = 1200;
 /** 压缩请求序列化总上限（字符，超出从中间截断保留头尾） */
 const COMPACT_TOTAL_CAP = 36000;
 
+/** 压缩输入分段截断（超限附总长提示；单段上限与总上限分别控制） */
 function capCompact(text: string, cap: number): string {
   const t = String(text ?? "");
   return t.length > cap ? `${t.slice(0, cap)}\n…（过长已截断，共 ${t.length} 字符）` : t;

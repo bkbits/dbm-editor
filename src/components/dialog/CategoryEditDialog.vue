@@ -36,6 +36,7 @@ watch(dialogOpen, (open) => {
 
 const saving = reactive({ loading: false });
 
+/** 表单校验：返回首个错误文案（null 为通过） */
 function validate(): string | null {
   if (!draft.name.trim()) return "分类名称不能为空";
   if (model.categories.some((c) => c.name === draft.name.trim() && c.id !== draft.id)) {
@@ -45,6 +46,7 @@ function validate(): string | null {
   return null;
 }
 
+/** 保存分类（新增 / 更新分流，失败提示） */
 async function save() {
   const err = validate();
   if (err) {

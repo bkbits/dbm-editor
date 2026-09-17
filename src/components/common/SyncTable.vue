@@ -107,27 +107,33 @@ function widthOf(c: StColumn): number {
   return colWidths[c.key] ?? Math.max(Math.round(c.width ?? 0), Math.round(c.minWidth ?? 80));
 }
 
+/** 分区滚动壳样式（列宽跟随） */
 function regionStyle(cols: StColumn[]) {
   return { width: cols.reduce((s, c) => s + widthOf(c), 0) + "px" };
 }
 
+/** 表头单元格类（含动态 thClass 透传） */
 function thClass(c: StColumn) {
   return [c.align === "center" ? "st-c" : "", c.thClass ?? ""];
 }
 
+/** 表体单元格类（行状态透传） */
 function tdClass(c: StColumn) {
   return [`st-c-${c.key}`, c.align === "center" ? "st-c" : ""];
 }
 
+/** 行拖入：高亮落点 */
 function onRowEnter(idx: number) {
   hoverIdx.value = idx;
 }
+/** 行拖出：取消高亮 */
 function onRowLeave(idx: number) {
   if (hoverIdx.value === idx) hoverIdx.value = -1;
 }
 
 /* ---------- 列宽分配（用户流程第 4/5 步） ---------- */
 
+/** 列宽分配：显式宽精确 + 弹性列按 minWidth 参与剩余分配 */
 function distribute(availW: number) {
   const flexKeys: string[] = [];
   let total = 0;
@@ -193,6 +199,7 @@ function onWheel(e: WheelEvent) {
 
 /* ---------- 布局重算（用户流程第 1~6 步 + 第 9 步重发滚动量） ---------- */
 
+/** 重算列宽与滚动联动（ResizeObserver 尺寸变化触发） */
 function recalc() {
   const root = rootRef.value;
   const body = root?.querySelector<HTMLElement>(".st-body");
