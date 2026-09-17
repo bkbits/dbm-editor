@@ -30,11 +30,13 @@
     "highlight.js": "^11.12.0",
     "highlightjs-eta": "^0.1.0",
     "jszip": "^3.10.2",
-    "markstream-vue": "^2.0.11"
+    "markstream-vue": "^2.0.11",
+    "nanoid": "^6.0.1"
   },
   "devDependencies": {
     "@lucide/vue": "^1.44.0",
     "@microsoft/api-extractor": "^7.59.1",
+    "@types/nanoid": "^3.0.0",
     "@types/node": "^26.5.0",
     "@vitejs/plugin-vue": "^6.0.8",
     "antdv-next": "^1.5.4",

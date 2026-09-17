@@ -1094,3 +1094,20 @@ Stage Summary:
 - 关键决策：格式化基线统一为 oxfmt 默认值，避免 staged 钩子 `vp check --fix` 与既有风格偏好来回改写
 - 交付物：全仓格式化 + AI 默认规则文本增强（种子库新库与设置页「恢复默认」引用同一常量，自动继承）
 - 待跟进：AGENTS.md「代码风格」段仍写「单引号、无分号」，与当前 fmt 基线相反，需单独同步
+
+---
+Task ID: 44
+Agent: main (Zed)
+Task: uid 生成器改用 nanoid（21 位 0-9a-zA-Z 字符集）+ 依赖引入与行尾归一化收尾
+
+Work Log:
+- src/utils/id.ts：uid 由「时间戳 + 递增计数器 + Math.random 36 进制随机串」改为 nanoid 的 customAlphabet 生成器（字符集 0-9a-zA-Z 共 62 字符、长度 21）；生成器单例复用避免重复构造；uid(prefix) 前缀语义保留。nanoid 默认字符集含 - 与 _，不符「0-9a-zA-Z」要求，故用 customAlphabet 显式指定
+- 调用面核查：全仓 40+ 处调用均为 uid("前缀-") 形式（t-/c-/i-/n-/dict-/dv-/tpl-/aim-/opt-/mapping-/tool-/ai-），无 id 解析与排序依赖，替换零改动
+- 依赖：nanoid ^6.0.1 入 dependencies（bun.lock 同步）
+- 验证：bun 冒烟 20000 次生成（格式正则 ^[0-9a-zA-Z]{21}$ 全匹配、零重复、前缀拼接正确，临时脚本已删）；bun run typecheck 全绿；vp check 全绿（74 文件格式 + 64 文件 lint）
+- 行尾归一化：stores/canvas.ts、stores/model.ts、stores/settings.ts、types/model.ts 此前被外部工具改写为 CRLF 行尾致 vp check 报格式问题，经 vp check --fix 归一为 LF；core.autocrlf=true 下 git 内容无差异（不入提交）
+- 观察：src/types 拆分（api.ts/template.ts）已回退为单一 model.ts，typecheck 恢复全绿
+
+Stage Summary:
+- 关键决策：nanoid 用 customAlphabet 定制字符集而非默认 nanoid()（默认含 -/_）；21 位碰撞概率与 UUID v4 相当
+- 语义变化：新 id 纯随机，无旧实现的时间有序性；devDependencies 中 @types/nanoid@^3.0.0 为官方废弃 stub（nanoid v6 自带类型），建议后续移除
