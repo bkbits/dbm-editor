@@ -1258,3 +1258,25 @@ Stage Summary:
 - 两项交互增强落地：模型按「选项模板」输出【选项】块时界面解析为可点击按钮（点击即把「选择方案 N：描述」作为下一条用户消息发送，免手打；转入历史后按钮转静态保留可读）；某次问答请求失败时最后一条错误消息提供「重试本次请求」（移除该次失败交换后按原问题重发，等价于失败从未发生）
 - 关键决策：① 选项块与任务清单模板同构（头部行 + 项行 + 流式半写头剔除），解析独立成 options.ts 与 task-list.ts 平行；② 重试语义取「移除失败交换 + 重发原问题」而非「末尾追加重问」——历史不重复污染、模型种子干净，且仅限最后一条错误消息（中途失败重试会丢后续对话，界面层不提供入口、仓库层防御性拒绝）；③ 配置型提示（未配置 AI 服务）noRetry 不提供重试；④ VLM 复核发现运行态渲染时序导致按钮被折叠线裁切（存在性断言的盲区）——贴底跟随补监听 running 修复，并以可见性断言固化
 - 交付物：src/stores/ai/options.ts（新）、store.retryFailed、AiMessageItem 选项区与重试按钮、AiChatPane interactive 下传与事件接线、mock 三分支、ai-agent.sh 第 19/20 节 17 断言、截图 docs/screenshots/e2e-ai-{options,retry}.png
+
+---
+Task ID: 52
+Agent: main (Zed)
+Task: 修复模板页渲染中断（Uncaught TypeError: e.targetMappingProperty is not iterable）——导航残缺字段三层兜底（写入归一 / 渲染防御 / 旧库迁移自愈）
+
+Work Log:
+- 复现与定位：用户报错栈为 getVO → buildNavigateView 展开 undefined 抛错；用 agent-browser 向演示库（gdbme:db:v2）注入残缺导航（删除 n-user-role.targetMappingProperty）后，经 Vue 组件实例 provides 取 dbmanager-state 调 template.renderFor(模板, 't-sys-user') 复现同文案错误（AI 工具写入导航时漏字段即可触发）
+- 根因：导航四列名数组（selfProperty / selfMappingProperty / targetProperty / targetMappingProperty）全程无兜底——AI 工具 navigateSchema 全字段选填且工具直传 clone(args)，store 的 addNavigate / updateNavigate 把原始入参推入本地状态，demo 层 normalizeNavigate 与 save() 导航循环只校验两端表与属性名，最后 vo.getVO 渲染层直接 [...nav.xxx] 展开，单条残缺导航即中断模板预览 / 代码生成
+- 修复（三层）：
+  * 渲染层（src/utils/navigate.ts）：新增 navigateColumnList（非数组归为空数组）/ normalizeNavigateProps（四数组 + comment / mappingTable + 两端级联非法回退 AUTO）/ isNavigateFieldsComplete；reverseNavigate 与 buildNavigateView 改用兜底函数，propertyName 缺失回落空串
+  * 写入层：store 的 addNavigate / updateNavigate 先 normalizeNavigateProps（本地状态与落盘形态一致），reverseNavigate 改调 utils.reverseNavigate（去重复实现）；api/demo/helpers.ts 的 normalizeNavigate 与 demo-manager-api.save() 导航循环同样归一；NavigateEditDialog 读旧导航经归一
+  * 迁移层（src/mock/db.ts loadDB）：导航字段不齐即整体归一并 persistDB，存量坏数据读取即自愈
+- 降级兜底：stores/template.ts 的 renderFor 捕获 VO 装配异常返回带 error 的错误产物（原直接抛出会中断整页预览）；generateFiles 单表装配异常记入 errors 并继续；AI 工具 navigateSchema 补 required（id/type/self/target/两端属性名 + 四列名数组）并说明空值传空数组
+- 验证：bun run typecheck ✓；vp check 本任务 8 文件格式 + lint ✓；bun run build ✓；E2E 全套件四域全绿（AI 工具链 135 + 设置 43 + 模型元素 56 + 字典模板 35 = 269 断言，含选项/重试新断言）；浏览器复核：坏数据重载即被迁移自愈（badCount 0），renderFor 返回正常产物，store 写入残缺导航后内存与 localStorage 均为数组且反转正常，模板页实时预览正常渲染 SysUser.java，亮暗双主题截图 docs/screenshots/task-navigate-partial-fix-{light,dark}.png
+- 同步与冲突处理：远程 devel 已有 Task 51（AI 选项/重试，本条目因此改号 52）；rebase 至 78083e3 时 worklog 与 E2E 截图冲突——worklog 取上游后追加本节，截图取上游（不引入本机跑套件产生的 churn）
+- 按用户要求执行全仓 `vp check --fix`：根因是 core.autocrlf=true 下工作区 CRLF 与 oxfmt 期望的 LF 不一致（91 文件被标记为格式问题），归一后 git 内容零变化（差异仅行尾），全仓 127 文件 lint 无警告；本机 E2E 重生成的 6 张截图已回退至 HEAD
+
+Stage Summary:
+- 交付物：导航字段兜底工具（src/utils/navigate.ts 三个新导出）、写入层与迁移层归一、renderFor / generateFiles 降级、AI 工具 schema 必填收紧、两张验证截图
+- 关键决策：① 以数据层归一为主同时保留渲染层防御——单条脏数据不应让整页不可用；② 不做独立版本号，沿用 loadDB「检测即迁移」策略（与其他字段迁移一致）；③ 不引入新依赖、不改 ManagerApi 契约（仅演示实现与 AI 工具参数契约收紧）
+- 遗留提示：格式问题的真正根因是仓库缺 .gitattributes（Windows 检出为 CRLF、oxfmt 期望 LF），未擅自新增；后续任一次 git checkout 都会重现该标记，建议单独任务加 `* text=auto eol=lf`

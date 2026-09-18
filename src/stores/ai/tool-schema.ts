@@ -66,22 +66,37 @@ const tableSchema = obj("完整表定义（元信息 + 字段 + 索引）", {
   indexes: { type: "array", description: "索引列表", items: indexSchema },
 });
 
-const navigateSchema = obj("导航关系（self 与 target 可反转调换，但类型需同步调换）", {
-  id: str("导航ID（新增自行生成，前缀 nav-）"),
-  type: str(`导航类型：${NAV_TYPE}`),
-  comment: str("导航注释"),
-  selfPropertyName: str("self 侧属性名（小驼峰）"),
-  targetPropertyName: str("target 侧属性名（小驼峰）"),
-  self: str("self 表ID"),
-  selfProperty: strArr("self 表关联属性（列名）"),
-  selfMappingProperty: strArr("self 表映射属性（列名）"),
-  mappingTable: str("中间映射表ID（仅多对多 NN，其余空串）"),
-  target: str("target 表ID"),
-  targetProperty: strArr("target 表关联属性（列名）"),
-  targetMappingProperty: strArr("target 表映射属性（列名）"),
-  selfToTargetCascade: str(`self 到 target 级联：${CASCADE}`),
-  targetToSelfCascade: str(`target 到 self 级联：${CASCADE}`),
-});
+const navigateSchema = obj(
+  "导航关系（self 与 target 可反转调换，但类型需同步调换；列名数组无值时传空数组，不要省略字段）",
+  {
+    id: str("导航ID（新增自行生成，前缀 nav-）"),
+    type: str(`导航类型：${NAV_TYPE}`),
+    comment: str("导航注释"),
+    selfPropertyName: str("self 侧属性名（小驼峰）"),
+    targetPropertyName: str("target 侧属性名（小驼峰）"),
+    self: str("self 表ID"),
+    selfProperty: strArr("self 表关联属性（列名）"),
+    selfMappingProperty: strArr("self 表映射属性（列名；非多对多传空数组）"),
+    mappingTable: str("中间映射表ID（仅多对多 NN，其余空串）"),
+    target: str("target 表ID"),
+    targetProperty: strArr("target 表关联属性（列名）"),
+    targetMappingProperty: strArr("target 表映射属性（列名；非多对多传空数组）"),
+    selfToTargetCascade: str(`self 到 target 级联：${CASCADE}`),
+    targetToSelfCascade: str(`target 到 self 级联：${CASCADE}`),
+  },
+  [
+    "id",
+    "type",
+    "self",
+    "target",
+    "selfPropertyName",
+    "targetPropertyName",
+    "selfProperty",
+    "targetProperty",
+    "selfMappingProperty",
+    "targetMappingProperty",
+  ],
+);
 
 const dictValueSchema = obj("字典值", {
   id: str("值ID（新增自行生成，前缀 dv-）"),

@@ -1,9 +1,10 @@
 /**
  * 模型仓库：导航关系增删改
- * （反向反转：type 与 self/target 成对调换，经 flipNavigateType 推导）
+ * （反向反转：type 与 self/target 成对调换，经 flipNavigateType 推导；
+ *   写入前经 normalizeNavigateProps 兜底残缺字段，保证本地状态与落盘形态齐备）
  */
 import type { TableNavigate } from "@/types/model";
-import { flipNavigateType } from "@/utils/navigate";
+import { normalizeNavigateProps, reverseNavigate } from "@/utils/navigate";
 import { clone } from "./helpers";
 import type { ModelDeps, ModelStore } from "./types";
 
@@ -13,15 +14,16 @@ import type { ModelDeps, ModelStore } from "./types";
  */
 export function navigateMethods(deps: ModelDeps) {
   return {
-    /** 新增导航（自动创建中间表的逻辑由调用方完成后传入） */
+    /** 新增导航（自动创建中间表的逻辑由调用方完成后传入；写入前字段兜底归一） */
     async addNavigate(nav: TableNavigate) {
       const api = deps.getApi();
       const history = deps.getHistory();
       const snap = this.takeSnapshot();
+      const normalized = normalizeNavigateProps(clone(nav));
       history.capture(snap);
-      this.navigates.push(clone(nav));
+      this.navigates.push(clone(normalized));
       try {
-        await api.addNavigate(clone(nav));
+        await api.addNavigate(clone(normalized));
       } catch (e) {
         this.rollback(snap);
         throw e;
@@ -30,15 +32,16 @@ export function navigateMethods(deps: ModelDeps) {
 
     /** 更新导航：目标 id 不存在时静默返回；本地先行并 capture 撤销点，失败回滚并抛错 */
     async updateNavigate(nav: TableNavigate) {
-      const idx = this.navigates.findIndex((n) => n.id === nav.id);
+      const normalized = normalizeNavigateProps(clone(nav));
+      const idx = this.navigates.findIndex((n) => n.id === normalized.id);
       if (idx < 0) return;
       const api = deps.getApi();
       const history = deps.getHistory();
       const snap = this.takeSnapshot();
       history.capture(snap);
-      this.navigates[idx] = clone(nav);
+      this.navigates[idx] = clone(normalized);
       try {
-        await api.updateNavigate(clone(nav));
+        await api.updateNavigate(clone(normalized));
       } catch (e) {
         this.rollback(snap);
         throw e;
@@ -62,25 +65,11 @@ export function navigateMethods(deps: ModelDeps) {
       }
     },
 
-    /** 反转导航（self/target 调换，类型同步调换） */
+    /** 反转导航（self/target 调换，类型同步调换；列名数组经兜底后不丢字段） */
     async reverseNavigate(id: string) {
       const nav = this.navigates.find((n) => n.id === id);
       if (!nav) return;
-      const reversed: TableNavigate = {
-        ...clone(nav),
-        type: flipNavigateType(nav.type),
-        self: nav.target,
-        selfProperty: [...nav.targetProperty],
-        selfMappingProperty: [...nav.targetMappingProperty],
-        selfPropertyName: nav.targetPropertyName,
-        target: nav.self,
-        targetProperty: [...nav.selfProperty],
-        targetMappingProperty: [...nav.selfMappingProperty],
-        targetPropertyName: nav.selfPropertyName,
-        selfToTargetCascade: nav.targetToSelfCascade,
-        targetToSelfCascade: nav.selfToTargetCascade,
-      };
-      await this.updateNavigate(reversed);
+      await this.updateNavigate(reverseNavigate(clone(nav)));
     },
   } satisfies ThisType<ModelStore> & Partial<ModelStore>;
 }

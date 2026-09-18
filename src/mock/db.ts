@@ -20,6 +20,7 @@ import type {
 } from "@/types/model";
 import { DEFAULT_AI_GLOBAL_RULES } from "@/ai/defaults";
 import { normalizeFieldConventions } from "@/utils/fieldConvention";
+import { isNavigateFieldsComplete, normalizeNavigateProps } from "@/utils/navigate";
 import { toCamelCase } from "@/utils/string";
 import {
   SEED_CATEGORIES,
@@ -452,6 +453,15 @@ function loadDB(): MockDB {
           migrated = true;
         } else if (!Array.isArray((parsed.aiSettings as { providers?: unknown }).providers)) {
           parsed.aiSettings = normalizeAiSettings(parsed.aiSettings);
+          migrated = true;
+        }
+        // v10：导航残缺字段兜底——AI 工具 / 外部写入的导航可能缺列名数组或级联枚举，
+        // 渲染层展开 undefined 会抛 "not iterable"（模板预览 / 代码生成整页中断），读取时补齐落盘
+        if (
+          !Array.isArray(parsed.navigates) ||
+          parsed.navigates.some((n) => !isNavigateFieldsComplete(n))
+        ) {
+          parsed.navigates = (parsed.navigates || []).map((n) => normalizeNavigateProps(n));
           migrated = true;
         }
         if (migrated) {

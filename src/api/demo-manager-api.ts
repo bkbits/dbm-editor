@@ -45,6 +45,7 @@ import { DICT_TEMPLATE_ID } from "@/types/model";
 import { getDB, persistDB } from "@/mock/db";
 import { SEED_DB_TABLES } from "@/mock/seed";
 import { AUDIT_FIELD_ROLES, normalizeFieldConventions } from "@/utils/fieldConvention";
+import { normalizeNavigateProps } from "@/utils/navigate";
 import {
   assertRegex,
   clone,
@@ -205,10 +206,10 @@ export class DemoManagerApi implements ManagerApi {
       indexes.push(...normIndexes);
     }
 
-    /* ---- 导航：两端表（含中间映射表）须在集合内、类型合法 ---- */
+    /* ---- 导航：四列名数组 / 级联枚举兜底，两端表（含中间映射表）须在集合内、类型合法 ---- */
     const navigates: TableNavigate[] = [];
     for (const rawNav of modelElements?.navigates || []) {
-      const nav = clone(rawNav);
+      const nav = normalizeNavigateProps(clone(rawNav));
       if (!nav.id) throw new Error("导航必须提供 id");
       requireStr(nav.selfPropertyName, "selfPropertyName", "self 属性名");
       requireStr(nav.targetPropertyName, "targetPropertyName", "target 属性名");

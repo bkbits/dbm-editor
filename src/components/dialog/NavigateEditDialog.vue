@@ -12,6 +12,7 @@ import {
   CASCADE_LABEL,
   NAVIGATE_TYPE_LABEL,
   flipNavigateType,
+  normalizeNavigateProps,
   suggestPropertyName,
 } from "@/utils/navigate";
 
@@ -61,22 +62,24 @@ watch(dialogOpen, (open) => {
   if (state.navigateId) {
     const nav = model.navigates.find((n) => n.id === state.navigateId);
     if (!nav) return;
-    draft.id = nav.id;
-    draft.type = nav.type;
-    draft.comment = nav.comment || "";
-    draft.self = nav.self;
-    draft.target = nav.target;
-    draft.selfProperty = [...nav.selfProperty];
-    draft.targetProperty = [...nav.targetProperty];
-    draft.selfPropertyName = nav.selfPropertyName;
-    draft.targetPropertyName = nav.targetPropertyName;
-    draft.selfMappingProperty = [...nav.selfMappingProperty];
-    draft.targetMappingProperty = [...nav.targetMappingProperty];
-    draft.mappingTable = nav.mappingTable || "";
-    draft.mappingMode = nav.mappingTable ? "existing" : "auto";
+    // 残缺导航（历史数据 / AI 工具写入）先兜底，避免展开 undefined 抛错
+    const safe = normalizeNavigateProps(nav);
+    draft.id = safe.id;
+    draft.type = safe.type;
+    draft.comment = safe.comment || "";
+    draft.self = safe.self;
+    draft.target = safe.target;
+    draft.selfProperty = [...safe.selfProperty];
+    draft.targetProperty = [...safe.targetProperty];
+    draft.selfPropertyName = safe.selfPropertyName;
+    draft.targetPropertyName = safe.targetPropertyName;
+    draft.selfMappingProperty = [...safe.selfMappingProperty];
+    draft.targetMappingProperty = [...safe.targetMappingProperty];
+    draft.mappingTable = safe.mappingTable || "";
+    draft.mappingMode = safe.mappingTable ? "existing" : "auto";
     draft.mappingNewName = "";
-    draft.selfToTargetCascade = nav.selfToTargetCascade;
-    draft.targetToSelfCascade = nav.targetToSelfCascade;
+    draft.selfToTargetCascade = safe.selfToTargetCascade;
+    draft.targetToSelfCascade = safe.targetToSelfCascade;
   } else {
     draft.id = "";
     draft.type = "1N";

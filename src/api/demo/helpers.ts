@@ -22,6 +22,7 @@ import type {
 } from "@/types/model";
 import { getDB } from "@/mock/db";
 import { uid } from "@/utils/id";
+import { normalizeNavigateProps } from "@/utils/navigate";
 
 /** 深拷贝（JSON 序列化；演示数据均为纯数据形态） */
 export function clone<T>(v: T): T {
@@ -198,10 +199,10 @@ export function normalizeIndexes(
   });
 }
 
-/** 导航关系归一：两端表存在、类型枚举合法、属性名非空 */
+/** 导航关系归一：四列名数组 / 级联枚举兜底，两端表存在、类型枚举合法、属性名非空 */
 export function normalizeNavigate(input: TableNavigate): TableNavigate {
   const db = getDB();
-  const nav = clone(input);
+  const nav = normalizeNavigateProps(clone(input));
   if (!nav.id) throw new Error("新增导航必须提供 id");
   requireStr(nav.selfPropertyName, "selfPropertyName", "self 属性名");
   requireStr(nav.targetPropertyName, "targetPropertyName", "target 属性名");

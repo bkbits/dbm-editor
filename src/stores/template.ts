@@ -165,10 +165,31 @@ export function createTemplateStore(deps: TemplateDeps) {
 
     /* ==================== 渲染 ==================== */
 
-    /** 渲染单个模板（预览用，失败返回带 error 的结果） */
+    /** 渲染单个模板（预览用：失败返回带 error 的结果，装配异常降级为错误条） */
     renderFor(template: Pick<CodeTemplate, "name" | "content">, tableId: string) {
       const model = deps.getModel();
-      const vo = model.getVO(tableId);
+      let vo: TableVO | null = null;
+      try {
+        vo = model.getVO(tableId);
+      } catch (e: unknown) {
+        // 导航 / 字段索引数据残缺等装配异常降级为错误产物：单条异常不应中断整页预览
+        const msg = errorMessageOf(e, "表数据装配失败");
+        return {
+          templateName: template.name,
+          templateContent: template.content,
+          result: `⚠ 表数据装配失败：${msg}`,
+          basePackage: "",
+          fileName: "",
+          filePath: "",
+          language: "",
+          table: undefined as unknown as TableVO,
+          settings: deps.getSettings().snapshot(),
+          aborted: false,
+          hasColumn: () => false,
+          getColumn: () => undefined,
+          error: msg,
+        };
+      }
       if (!vo) return null;
       const category = model.categoryById(vo.categoryId);
       return renderTemplate(
@@ -214,7 +235,14 @@ export function createTemplateStore(deps: TemplateDeps) {
       const errors: string[] = [];
       const aborted: string[] = [];
       for (const tableId of tableIds) {
-        const vo: TableVO | null = model.getVO(tableId);
+        let vo: TableVO | null = null;
+        try {
+          vo = model.getVO(tableId);
+        } catch (e: unknown) {
+          // 同 renderFor：单表装配异常不阻断其余表的生成
+          errors.push(`[${tableId}] 表数据装配失败：${errorMessageOf(e, "装配失败")}`);
+          continue;
+        }
         if (!vo) continue;
         const category = model.categoryById(vo.categoryId);
         const basePackage = category?.basePackage || "";
