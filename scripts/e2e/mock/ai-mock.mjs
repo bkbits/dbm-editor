@@ -41,6 +41,8 @@
  *   · 含「清空模型」：r0 removeAll（E2E 点危险确认弹窗）→ r1 总结
  *   · 含「重置演示」：r0 resetDemo（E2E 点危险确认弹窗）→ r1 总结
  *   · 含「网络请求」：r0 fetch(/hello) → r1 总结
+ *   · 含「画布布局」：r0 getTableRects → r1 总结
+ *   · 含「GitHub技能」：r0 skill-github(anthropics/skills) → r1 总结（真实网络读取）
  *   · 含「协议演示」：短思考 + 短正文（三协议对话回归）
  *   · 默认 /「历史回放」：40 段 × 500ms 超长思考流 + 短正文
  *     （历史回放场景回「已收到 N 条消息」）
@@ -574,6 +576,30 @@ function route(ctx) {
     };
   }
 
+  // GitHub 技能加载（skill-github → raw.githubusercontent.com 真实读取；须在「技能」分支前，防关键词被截获）
+  if (userBase.includes("GitHub技能")) {
+    if (round === 0) {
+      return {
+        desc: {
+          reasoning: ["从 GitHub 加载 claude-api 技能文档。"],
+          toolCalls: [
+            {
+              id: "call_ghskill",
+              name: "skill-github",
+              args: { repo: "anthropics/skills", dir: "skills/claude-api" },
+            },
+          ],
+          usage: [200, 30],
+        },
+        interval: 40,
+      };
+    }
+    return {
+      desc: { text: "GitHub 技能加载完成：已获得 Claude API 技能文档。", usage: [220, 40] },
+      interval: 40,
+    };
+  }
+
   // 技能加载（skill 单独一轮）
   if (userBase.includes("技能")) {
     if (round === 0) {
@@ -796,6 +822,24 @@ function route(ctx) {
       };
     }
     return { desc: { text: "网络请求完成：已获取外部数据。", usage: [220, 40] }, interval: 40 };
+  }
+
+  // 画布布局（getTableRects 读取卡片矩形，布局链基础数据源）
+  if (userBase.includes("画布布局")) {
+    if (round === 0) {
+      return {
+        desc: {
+          reasoning: ["先读取全部表卡片的坐标与大小。"],
+          toolCalls: [{ id: "call_rects", name: "getTableRects", args: {} }],
+          usage: [200, 30],
+        },
+        interval: 40,
+      };
+    }
+    return {
+      desc: { text: "画布布局完成：已基于卡片矩形规划排布。", usage: [220, 40] },
+      interval: 40,
+    };
   }
 
   // 协议演示（三协议短思考 + 短正文回归）

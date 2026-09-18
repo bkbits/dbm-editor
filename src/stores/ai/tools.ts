@@ -368,6 +368,43 @@ export function buildAgentTools(deps: AiDeps, hooks: AgentHooks): AgentTool[] {
   );
   tools.push(
     plainTool(
+      "getTableRects",
+      "获取全部表卡片的画布矩形（坐标 x/y 与大小 w/h，世界坐标；美化画布布局前先调用——以此了解各卡片实际占位，规划互不重叠的新布局。尺寸为画布实测值，未渲染时按宽 268 高 140 兜底估计）",
+      obj("查询参数（全部缺省 = 全部可见表）", {
+        includeHidden: bool("是否包含已隐藏的表（缺省 false：隐藏表不显示也不参与布局）"),
+      }),
+      async (a) => {
+        const model = deps.getModel();
+        const canvas = deps.getCanvas();
+        const includeHidden = Boolean(a.includeHidden);
+        const rects = model.tables
+          .filter((t) => includeHidden || !canvas.hiddenTableIds.includes(t.id))
+          .map((t) => {
+            const r = canvas.cardRectOf(t.id);
+            const cat = model.categories.find((c) => c.id === t.categoryId);
+            return {
+              tableId: t.id,
+              tableName: t.tableName,
+              categoryId: t.categoryId,
+              categoryName: cat?.name ?? "",
+              hidden: canvas.hiddenTableIds.includes(t.id),
+              x: Math.round(r?.x ?? t.x ?? 0),
+              y: Math.round(r?.y ?? t.y ?? 0),
+              w: Math.round(r?.w ?? 268),
+              h: Math.round(r?.h ?? 140),
+              columnCount: model.columnsOf(t.id).length,
+            };
+          });
+        return {
+          count: rects.length,
+          rects,
+          note: "卡片尺寸 w/h 为当前实际占位（画布实测；未渲染时为兜底估计，高度随字段数增加）；布局完成后用 updateTablePos 一次性批量提交",
+        };
+      },
+    ),
+  );
+  tools.push(
+    plainTool(
       "importTablesFromDB",
       "从真实数据库导入表结构：读取库表定义（表 / 字段 / 索引），逐张新增表落库（导入前先 getTableCategories 选择目标分类）",
       obj("导入参数", { categoryId: str("导入到哪个表分类ID") }, ["categoryId"]),
@@ -938,6 +975,65 @@ export function buildAgentTools(deps: AiDeps, hooks: AgentHooks): AgentTool[] {
         loadedParts: chosen.map((p) => ({ key: p.key, title: p.title })),
         content: chosen.map((p) => `## ${p.title}\n${p.content}`).join("\n\n"),
         note: `技能「${skill.title}」已加载，请严格按文档中的规范执行任务`,
+      };
+    },
+  });
+
+  /* ---------- GitHub 技能加载（读取仓库内技能描述文件；单独占用一轮工具调用） ---------- */
+  tools.push({
+    kind: "skill",
+    spec: {
+      type: "function",
+      function: {
+        name: "skill-github",
+        description:
+          "从 GitHub 仓库加载技能文档（读取仓库内技能描述文件内容回填，如 anthropics/skills 的技能库；单独占用一轮工具调用）。repo 为仓库 owner/name，dir 为技能根目录，path 为描述文件相对路径（缺省读 SKILL.md）。示例：{ repo: 'anthropics/skills', dir: 'skills/claude-api' } 读取 skills/claude-api/SKILL.md；{ repo: 'anthropics/skills', dir: 'skills/claude-api', path: 'java/claude-api/files-api.md' } 读取 skills/claude-api/java/claude-api/files-api.md",
+        parameters: obj(
+          "加载参数",
+          {
+            repo: str("GitHub 仓库名称（owner/name，如 anthropics/skills）"),
+            dir: str("仓库内技能目录（作为技能根路径，如 skills/claude-api）"),
+            path: str(
+              "技能描述文件路径（相对 dir；缺省读取该目录下的 SKILL.md，如 java/claude-api/files-api.md）",
+            ),
+          },
+          ["repo", "dir"],
+        ),
+      },
+    },
+    /** 执行器：拼 raw.githubusercontent.com 地址经 AIApi.fetch 读取文件（HEAD = 默认分支） */
+    invoke: async (a) => {
+      const repo = String(a.repo ?? "").trim();
+      if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) {
+        throw new Error(`仓库格式无效：${a.repo}（应为 owner/name，如 anthropics/skills）`);
+      }
+      const dir = String(a.dir ?? "")
+        .trim()
+        .replace(/^\/+|\/+$/g, "");
+      if (!dir) throw new Error("技能目录 dir 不能为空（如 skills/claude-api）");
+      const rel = (String(a.path ?? "").trim() || "SKILL.md").replace(/^\/+/, "");
+      const filePath = `${dir}/${rel}`;
+      const url = `https://raw.githubusercontent.com/${repo}/HEAD/${filePath}`;
+      const res = await deps.getAIApi().fetch({ url });
+      if (res.status === 404) {
+        throw new Error(
+          `文件不存在：${repo}/${filePath}（dir 作为技能根路径、path 相对它；缺省读 SKILL.md；请确认仓库与路径）`,
+        );
+      }
+      if (res.status !== 200) {
+        throw new Error(`读取失败（HTTP ${res.status}）：${repo}/${filePath}`);
+      }
+      const content = res.body.trim();
+      if (!content) throw new Error(`技能文档为空：${repo}/${filePath}`);
+      // 展示名取文档首个一级标题，缺省回退文件路径
+      const heading = content.match(/^#\s+(.+)$/m)?.[1]?.trim();
+      const title = heading || rel;
+      return {
+        skill: `github:${repo}/${filePath}`,
+        title,
+        loadedParts: [{ key: rel, title: rel }],
+        content,
+        note: `已从 GitHub 加载技能文档 ${repo}/${filePath}，请严格按文档中的规范执行任务`,
       };
     },
   });

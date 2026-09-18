@@ -146,7 +146,7 @@ ask "历史回放二轮"
 wait_ai_done 30
 check "二轮回答完成（已收到消息数）" "(function(){return document.body.innerText.includes('已收到')})()"
 mock_has "roles=\[system,user,assistant,user\]" && check_eq "第二轮请求角色序列（历史种子回放）" "ok" "ok" || check_eq "第二轮请求角色序列（历史种子回放）" "miss" "ok"
-mock_has "tools=51" && check_eq "工具定义全量注册（51 个）" "ok" "ok" || check_eq "工具定义全量注册" "miss" "ok"
+mock_has "tools=53" && check_eq "工具定义全量注册（53 个）" "ok" "ok" || check_eq "工具定义全量注册" "miss" "ok"
 mock_has "sysCap=true" && check_eq "系统提示含能力域清单" "ok" "ok" || check_eq "系统提示含能力域清单" "miss" "ok"
 check "思考块完成后自动收起" "(function(){var b=document.querySelector('.reasoning-block');return !b || !b.classList.contains('open')})()"
 
@@ -412,7 +412,36 @@ check "fetch 返回体含 mock 数据（hello from mock）" "(function(){var r=[
 wait_ai_done 40
 
 echo ""
-echo "== 19. 点击选项（【选项】块 → 可点击按钮 → 选择即发送） =="
+echo "== 19. getTableRects（表卡片矩形 → 画布布局基础数据源） =="
+ask "画布布局"
+poll "(function(){var r=[...document.querySelectorAll('.tool-record .rec-name')].find(function(x){return x.textContent==='getTableRects'});return !!r && r.closest('.tool-record').classList.contains('success')})()" 25
+check "getTableRects 记录 success" "(function(){var r=[...document.querySelectorAll('.tool-record .rec-name')].find(function(x){return x.textContent==='getTableRects'});return !!r && r.closest('.tool-record').classList.contains('success')})()"
+agent-browser eval "(function(){var r=[...document.querySelectorAll('.tool-record')].find(function(x){var n=x.querySelector('.rec-name');return n && n.textContent==='getTableRects'});if(r){r.querySelector('.record-head')?.click();return 'ok'}return 'nf'})()" >/dev/null 2>&1
+sleep 0.8
+check "返回体含矩形结构（rects + w/h + columnCount）" "(function(){var r=[...document.querySelectorAll('.tool-record')].find(function(x){var n=x.querySelector('.rec-name');return n && n.textContent==='getTableRects'});return !!r && r.textContent.includes('rects') && r.textContent.includes('columnCount')})()"
+check "返回体含卡片宽 268（实测与兜底同值）" "(function(){var r=[...document.querySelectorAll('.tool-record')].find(function(x){var n=x.querySelector('.rec-name');return n && n.textContent==='getTableRects'});return !!r && r.textContent.includes('268')})()"
+check "返回体含表名与分类名（sys_user）" "(function(){var r=[...document.querySelectorAll('.tool-record')].find(function(x){var n=x.querySelector('.rec-name');return n && n.textContent==='getTableRects'});return !!r && r.textContent.includes('sys_user') && r.textContent.includes('categoryName')})()"
+agent-browser screenshot "$SHOTS/e2e-ai-table-rects.png" >/dev/null 2>&1
+check "坐标与库内表数据一致（sys_user 的 x/y）" "(function(){var db=JSON.parse(localStorage.getItem('gdbme:db:v2'));var t=db.tables.find(function(x){return x.tableName==='sys_user'});if(!t)return false;var r=[...document.querySelectorAll('.tool-record')].find(function(x){var n=x.querySelector('.rec-name');return n && n.textContent==='getTableRects'});return !!r && r.textContent.includes('\"x\": '+t.x) && r.textContent.includes('\"y\": '+t.y)})()"
+wait_ai_done 40
+check "画布布局会话收尾" "(function(){return document.body.innerText.includes('画布布局完成')})()"
+
+echo ""
+echo "== 20. skill-github（GitHub 技能文档加载，真实网络） =="
+ask "GitHub技能"
+poll "(function(){var r=[...document.querySelectorAll('.tool-record.skill')].find(function(x){return x.textContent.includes('Building LLM-Powered')});return !!r && r.classList.contains('success')})()" 40
+check "skill-github 记录 success" "(function(){var r=[...document.querySelectorAll('.tool-record.skill')].find(function(x){return x.textContent.includes('Building LLM-Powered')});return !!r && r.classList.contains('success')})()"
+check "技能样式记录（书本图标 + 技能·标题）" "(function(){var r=[...document.querySelectorAll('.tool-record.skill')].find(function(x){return x.textContent.includes('Building LLM-Powered')});return !!r && r.querySelector('.rec-name').textContent.includes('技能·Building')})()"
+agent-browser eval "(function(){var r=[...document.querySelectorAll('.tool-record.skill')].find(function(x){return x.textContent.includes('Building LLM-Powered')});if(r){r.querySelector('.record-head')?.click();return 'ok'}return 'nf'})()" >/dev/null 2>&1
+sleep 0.8
+check "技能名称含 GitHub 仓库与路径" "(function(){var r=[...document.querySelectorAll('.tool-record.skill')].find(function(x){return x.textContent.includes('Building LLM-Powered')});return !!r && r.textContent.includes('github:anthropics/skills/skills/claude-api/SKILL.md')})()"
+check "返回体含技能文档内容（SDK 特征词）" "(function(){var r=[...document.querySelectorAll('.tool-record.skill')].find(function(x){return x.textContent.includes('Building LLM-Powered')});return !!r && r.textContent.includes('SDK')})()"
+agent-browser screenshot "$SHOTS/e2e-ai-skill-github.png" >/dev/null 2>&1
+wait_ai_done 40
+check "GitHub 技能会话收尾" "(function(){return document.body.innerText.includes('GitHub 技能加载完成')})()"
+
+echo ""
+echo "== 21. 点击选项（【选项】块 → 可点击按钮 → 选择即发送） =="
 ask "选项演示"
 wait_ai_done 30
 check "选项区渲染（3 个选项按钮）" "document.querySelectorAll('.option-group .opt-btn').length === 3"
@@ -432,7 +461,7 @@ check "旧选项区头部转静态文案" "(function(){var h=document.querySelec
 mock_has "OPTION-CHOICE >>> 选择方案 1" && check_eq "选择文本到达 mock（日志）" "ok" "ok" || check_eq "选择文本到达 mock（日志）" "miss" "ok"
 
 echo ""
-echo "== 20. 请求失败重试（HTTP 500 → 移除失败交换 → 重发成功） =="
+echo "== 22. 请求失败重试（HTTP 500 → 移除失败交换 → 重发成功） =="
 ask "请求失败演示"
 wait_ai_done 20
 check "失败消息错误块渲染（HTTP 500）" "(function(){var e=document.querySelector('.msg-error');return !!e && e.textContent.includes('HTTP 500')})()"
@@ -448,7 +477,7 @@ check "原问题仅出现一次（失败消息已移除）" "(function(){var us=
 mock_has "REQ-FAIL-500 sent" && check_eq "mock 首请求 500（日志）" "ok" "ok" || check_eq "mock 首请求 500（日志）" "miss" "ok"
 
 echo ""
-echo "== 21. 任务清单流程（汇报 → 同步 → 中止转暂停 → 继续完成） =="
+echo "== 23. 任务清单流程（汇报 → 同步 → 中止转暂停 → 继续完成） =="
 ask "演示任务清单流程"
 poll "document.querySelectorAll('.task-item').length === 3" 20
 check "汇报模板解析为任务面板（3 项）" "document.querySelectorAll('.task-item').length === 3"
@@ -475,7 +504,7 @@ fi
 check "任务块不从助手正文重复展示（已剥离）" "(function(){var ms=[...document.querySelectorAll('.msg.assistant .msg-content')];return !ms.some(function(m){return m.textContent.includes('【任务清单')})})()"
 
 echo ""
-echo "== 22. 上下文 85% 自动压缩（pi 内核：轮边界自动触发并整体回落） =="
+echo "== 24. 上下文 85% 自动压缩（pi 内核：轮边界自动触发并整体回落） =="
 nav "系统设置" >/dev/null 2>&1
 sleep 1
 # 上限改 2400，触发 2112/2400=88%
@@ -496,7 +525,7 @@ echo "  [diag] 压缩后 meter = $METER2"
 check "压缩后上下文回落（摘要基座小占用）" "(function(){var m=document.querySelector('.tok-stats .ctx-meter');return m.textContent.replace(/\s+/g,'').includes('460/2400')})()"
 
 echo ""
-echo "== 23. 工具调用轮数上限 =="
+echo "== 25. 工具调用轮数上限 =="
 nav "系统设置" >/dev/null 2>&1
 sleep 1
 agent-browser find first '.rounds-block .ant-input-number input' fill "2" >/dev/null 2>&1
@@ -510,6 +539,6 @@ sleep 3
 check "轮数上限 2 后循环请求被中止" "(function(){var ms=[...document.querySelectorAll('.msg')];var t=ms[ms.length-1];return t.classList.contains('aborted') || document.body.innerText.includes('轮')})()"
 
 echo ""
-echo "== 24. 截图与收尾 =="
+echo "== 26. 截图与收尾 =="
 agent-browser screenshot "$SHOTS/e2e-ai-agent.png" >/dev/null 2>&1
 finish_suite "AI 工具链域"

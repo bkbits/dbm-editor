@@ -6,6 +6,7 @@
 import type { ChatToolSpec } from "@/types/ai";
 import type { AIApi } from "@/types/ai";
 import type { ManagerApi } from "@/types/manager";
+import type { CanvasStore } from "../canvas";
 import type { DictStore } from "../dict";
 import type { HistoryStore } from "../history";
 import type { ModelStore } from "../model";
@@ -132,6 +133,8 @@ export interface AiDeps {
    *  type-only 循环引用：store.ts 导入本文件，无运行时环） */
   getAI: () => AiStore;
   getModel: () => ModelStore;
+  /** 惰性读取画布仓库：getTableRects 工具读卡片实测尺寸与隐藏状态 */
+  getCanvas: () => CanvasStore;
   getHistory: () => HistoryStore;
   getDict: () => DictStore;
   getTemplate: () => TemplateStore;

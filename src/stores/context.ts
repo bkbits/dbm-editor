@@ -104,6 +104,8 @@ export function createDBManagerState(
     getAI: () => ai,
     /** 惰性读取模型仓库：AGENT 工具读写表与关系 */
     getModel: () => model,
+    /** 惰性读取画布仓库：getTableRects 工具读卡片实测尺寸与隐藏状态 */
+    getCanvas: () => canvas,
     /** 惰性读取历史仓库：undo / redo / clearHistory 工具 */
     getHistory: () => history,
     /** 惰性读取字典仓库：字典类工具与域数据刷新 */

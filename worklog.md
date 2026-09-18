@@ -1296,3 +1296,22 @@ Stage Summary:
 - 交付物：.gitattributes（19 行，随本节同提交推送）
 - 关键决策：不改任何源文件内容、不改本机与用户的 autocrlf 配置，仅以仓库级属性固化行尾策略（跨平台一致，本地需 CRLF 者自行覆盖）
 - 备注：该操作只影响行尾与二进制判定，按用户指示未做功能测试
+
+---
+Task ID: 54
+Agent: main (Super Z)
+Task: 拉取最新修改 + 新增 getTableRects 工具（表卡片矩形，画布布局美化基础数据源）+ 画布布局技能改用该工具 + 新增 skill-github 工具（GitHub 仓库技能文档加载）
+
+Work Log:
+- 前置同步：fetch 双远程，devel 快进 78083e3 → 655f091（442bb35 导航残缺字段兜底修复 + 655f091 行尾策略统一 LF/.gitattributes）；github/devel 与本地一致后开始开发
+- getTableRects 工具（tools.ts 表域，紧跟 updateTablePos）：返回全部表卡片画布矩形（tableId/tableName/categoryId/categoryName/hidden/x/y/w/h/columnCount）——尺寸取 canvas.cardRectOf 实测上报值（cardSizes），未渲染兜底宽 268 高 140；includeHidden 缺省 false（隐藏表不显示也不参与布局）；AiDeps 新增 getCanvas 惰性取用（types.ts + context.ts 注入，与既有 getXxx 同构）
+- canvas-layout 技能（skills.ts）布局原则重写：布局前先 getTableRects 获取实际占位、隐藏表不动、间距改为「前卡 w/h + 约 60」按实测逐卡推算（废弃旧的固定 260/200 与「卡片宽约 220」错误估计——CARD_WIDTH 实为 268）、新增 columnCount 辅助估算说明
+- skill-github 工具（tools.ts，kind: "skill" 独立样式）：参数 repo（owner/name 正则校验）/ dir（技能根目录，去首尾斜杠）/ path（缺省 SKILL.md）；拼 https://raw.githubusercontent.com/{repo}/HEAD/{dir}/{path}（HEAD 即默认分支，免分支探测）经 AIApi.fetch 读取；404 / 非 200 / 空文档三类中文报错；返回与 skill 工具同构（skill 名 github:{repo}/{filePath}、title 取文档首个一级标题缺省回退文件名、loadedParts 单条、content 全文），界面复用技能芯片/记录样式；超长文档受 AIApi.fetch 64KB 截断契约保护（anthropics/skills 的 SKILL.md 实测 86KB，头部已含核心知识）
+- E2E：mock 新增「画布布局」（r0 getTableRects → r1 总结）与「GitHub技能」（r0 skill-github anthropics/skills → r1 总结，真实网络读取）两场景；**GitHub技能 分支须置于「技能」分支之前**（关键词包含关系，后置会被 includes("技能") 截获——首跑 5 断言全红时定位）；ai-agent.sh 新增第 19/20 节 11 断言（矩形结构/宽 268/表名分类/坐标与库内一致 + success/技能样式/仓库路径/SDK 特征词/收尾），后续节次重编号，tools=51 断言更新为 53，两节各补一张截图
+- 排障沉淀：kind:"skill" 记录的 .rec-name 渲染为「技能·{title}」而非工具名——按工具名查找记录的断言必空（诊断输出确认 209ms 成功执行但 no-sg-record），技能类工具断言须按 .tool-record.skill + 标题特征定位；沙箱后台进程（mock/dev）在 Bash 调用间隙被回收致手动复现误报 Failed to fetch，非产品缺陷
+- 验证：typecheck ✓；vp check 139 格式 + 127 lint（--fix 后全绿）✓；build ✓；E2E 四域 280 断言全绿（AI 工具链 146 含新增 11 + 模型元素 56 + 字典模板 35 + 设置 43），页面错误与意外 ERROR 均 0；VLM 两截图复核（getTableRects success 绿勾、skill-github 蓝色书本技能样式 + github: 路径 + 1 部分标记，均无布局缺陷）；check-readme 33 标题 ✓
+- README 同步：工具清单 51→53（表域补 getTableRects、扩展域补 skill-github）、E2E 断言数 135→146、内置技能库段落补 skill-github 用法说明、截图表新增两张（e2e-ai-table-rects / e2e-ai-skill-github）
+
+Stage Summary:
+- AGENT 工具集 51 → 53：getTableRects 为画布布局美化提供准确的基础数据（实测矩形 + 隐藏态 + 字段数），canvas-layout 技能随之改写（实测间距推算取代过时固定值）；skill-github 打通 GitHub 外部技能生态（raw + HEAD 默认分支 + 64KB 截断保护），与内置 skill 工具同构的加载体验
+- 交付物：4 源文件（tools/types/context/skills）+ mock 双场景 + 11 新断言 + 2 截图 + README 三处同步；四域 280 断言全绿
