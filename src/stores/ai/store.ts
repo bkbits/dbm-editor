@@ -266,6 +266,37 @@ export function createAiStore(deps: AiDeps) {
       this.releaseZipDownloads();
     },
 
+    /**
+     * 重试失败的问答请求：移除该次失败的交换（配对的 user 消息 + 其后全部助手
+     * 消息——含失败前已完成的轮次与压缩标记）后，按原问题重新发送。
+     *
+     * 语义：等价于该次失败从未发生（模型序列种子同步变干净）；失败轮次里已执行
+     * 的写类工具效果仍保留在数据中，右侧调用记录也不回滚（append-only 历史）；
+     * 暂停中的任务在下轮发送时照常同步给模型。仅对最后一条消息生效——其后已有
+     * 新内容时移除会丢失后续对话，界面层亦不提供入口，此处防御性拒绝。
+     */
+    async retryFailed(messageId: string) {
+      if (this.running) return;
+      const idx = this.messages.findIndex((m) => m.id === messageId);
+      if (idx < 0) return;
+      const failed = this.messages[idx];
+      if (failed.role !== "assistant" || failed.status !== "error" || failed.noRetry) return;
+      if (idx !== this.messages.length - 1) return;
+      // 配对的问题：自失败消息向前找最近的 user 消息（期间可能隔着多轮助手消息）
+      let userIdx = -1;
+      for (let i = idx - 1; i >= 0; i--) {
+        if (this.messages[i].role === "user") {
+          userIdx = i;
+          break;
+        }
+      }
+      if (userIdx < 0) return;
+      const question = String(this.messages[userIdx].content ?? "").trim();
+      if (!question) return;
+      this.messages.splice(userIdx);
+      await this.send(question);
+    },
+
     /** 仅清空能力调用记录（聊天消息保留；释放被清记录关联的 zip 下载缓存） */
     clearToolRecords() {
       if (this.running) return;
@@ -355,6 +386,7 @@ export function createAiStore(deps: AiDeps) {
           content:
             "尚未配置 AI 服务：请先在「系统设置 → AI」中添加供应商（选择对话协议、填写服务地址）并添加模型，保存后再来对话。",
           status: "error",
+          noRetry: true, // 配置型提示：重发同样的问题无意义，不提供重试
           createdAt: Date.now(),
         });
         return;

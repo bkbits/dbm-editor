@@ -37,6 +37,8 @@ export interface AiChatMessage {
   toolCalls?: AiChatToolCall[];
   status: "streaming" | "done" | "error" | "aborted";
   error?: string;
+  /** 错误消息不可重试标记（未配置 AI 服务等配置型提示——重发同样的问题无意义） */
+  noRetry?: boolean;
   createdAt: number;
   /** token 用量：user 消息 = 该问题全部轮次输入/输出合计；assistant 消息 = 本轮 usage */
   tokens?: { input: number; output: number };

@@ -1239,3 +1239,22 @@ Stage Summary:
 - 交付物：六处复杂模块拆分（最大单文件 1913 → 891 纯模板数据）、197 处 JSDoc、全新 E2E 套件（scripts/e2e/ 五脚本 + 统一 mock，217 断言四域全绿）、四个产品缺陷修复、四张验证截图
 - 关键决策：① Vue SFC 拆分用「编排器 + 子组件/分区组件」模式，scoped 样式随模板迁移、媒体查询规则随组件归位（防级联顺序不确定）；② 设置页分区用 defineExpose 统一契约（与既有 AiSettingsSection 一致）；③ seed 目录化后 barrel 保持导入面零改动；④ E2E 按用户术语域组织并合并历史保留锚点，mock 关键词路由 + 结构性判定（压缩请求/重建请求）分层
 - 环境：沙箱会话间回收派生进程——服务与断言必须单次 bash 调用一体化；浏览器/服务僵尸进程需及时清理防线程耗尽
+
+---
+Task ID: 51
+Agent: main (Super Z)
+Task: AI 聊天两项交互增强——点击选项（【选项】块 → 可点击按钮 → 选择即发送）+ 问答请求失败重试（移除失败交换后重发）
+
+Work Log:
+- 前置同步：本地 devel 3612138 快进至 ac9f8f8（新 ManagerApi 原型 + AIApi 三协议 + 51 工具链已由他处完成）；bun install 后遭遇 antdv-next 包损坏（dist/upload 缺失致 dev server 依赖优化崩溃，历史已知坑第三次）→ bun install --force antdv-next 修复
+- 点击选项：系统提示新增「选项模板」（【选项】块 + 编号方案，与任务清单模板同构，prompt.ts）；src/stores/ai/options.ts 新建（parseAiOptions 头部行 + 项行解析——流式半写头剔除防闪烁、含 】 但整行不匹配头的按普通文本保留防误吞、Markdown 强调与行内代码清洗、序号/字母/项目符号前缀（后者回退序号 key）、optionChoiceText 选择文本构造）；AiMessageItem 选项区（序号角标 + 描述按钮，交互窗口 = 空闲 + 最后一条消息 + 本条完成，点击 emit select-option 发送「选择方案 N：描述」；转静态后 disabled 保留可读、头部文案切换「请点击选择一个方案」→「提供的可选方案」）；正文剥离链 task-list → options 两级；AiChatPane 下传 :interactive（空闲 + 末条）并接线 ai.send / ai.retryFailed
+- 失败重试：store.retryFailed(messageId)——仅最后一条 error 消息可重试（其后已有新内容时防御性拒绝，防丢后续对话）；自失败消息向前找配对 user 消息，splice 移除整次失败交换（含期间已完成助手轮次与压缩标记）后按原问题 send 重发；语义等价于失败从未发生（模型序列种子变干净），已执行写类工具效果与右侧调用记录保留（append-only），暂停中的任务照常在下轮同步给模型；未配置 AI 服务的配置型提示打 noRetry 标记不提供重试；轮数上限中止的 error 消息可重试（模型可凭历史续跑）
+- 视觉缺陷修复（VLM 截图复核发现）：重试按钮在 running=false 后才渲染，而聊天贴底跟随只监听 messages/toolRecords——按钮被裁在折叠线之下（DOM 存在性断言通过但视觉不可见）→ AiChatPane watcher 监听源补 ai.running（运行态联动补滚）；E2E 同步固化「按钮可见性」断言（getBoundingClientRect 完整落在 chat-scroll 视口内）
+- E2E（scripts/e2e/mock/ai-mock.mjs + ai-agent.sh）：mock 新增三分支——「选项演示」单轮回复带【选项】块、「选择方案」点击回执（打印 OPTION-CHOICE）、「请求失败」首个请求 HTTP 500（JSON 错误体 + REQ-FAIL-500 日志，进程级一次性状态，重试后成功）；ai-agent.sh 新增第 19/20 节 17 断言（选项区渲染/可点击/正文剥离/文本渲染/交互态头部/点击发送选择消息/回复到达/转静态禁用/头部静态文案/选择文本日志 + 错误块 HTTP 500/重试按钮存在/按钮可见/重试成功/失败交换移除/原问题唯一/500 日志），后续节次顺延重编号；EXPECTED_ERR_RE 补 chat() 抛错模拟服务内部异常（按设计的 500）
+- 验证：bun run typecheck ✓；vp check 139 文件格式 + 127 文件 lint ✓；check-readme.py 33 标题 ✓；解析器 18 用例 bun 直跑全绿（标准块/流式半写头/无块/字母前缀/Markdown 清洗/头后非项行/项目符号/选择文本构造）；E2E 四域全绿——AI 工具链 135（含新增 17）+ 设置 43 + 模型元素 56 + 字典模板 35 = 269 断言，全程页面错误与控制台意外 ERROR 为 0；VLM 三轮截图复核（选项区排版、重试按钮可见性修复前后对照）
+- README 同步：命令表 ai-agent.sh 断言数与覆盖点更新（118→135 + 点击选项/请求失败重试）、AI 工具节新增「点击选项」「请求失败重试」两条、默认规则 ② 注明选项模板、截图表补 e2e-ai-options.png 与 e2e-ai-retry.png
+
+Stage Summary:
+- 两项交互增强落地：模型按「选项模板」输出【选项】块时界面解析为可点击按钮（点击即把「选择方案 N：描述」作为下一条用户消息发送，免手打；转入历史后按钮转静态保留可读）；某次问答请求失败时最后一条错误消息提供「重试本次请求」（移除该次失败交换后按原问题重发，等价于失败从未发生）
+- 关键决策：① 选项块与任务清单模板同构（头部行 + 项行 + 流式半写头剔除），解析独立成 options.ts 与 task-list.ts 平行；② 重试语义取「移除失败交换 + 重发原问题」而非「末尾追加重问」——历史不重复污染、模型种子干净，且仅限最后一条错误消息（中途失败重试会丢后续对话，界面层不提供入口、仓库层防御性拒绝）；③ 配置型提示（未配置 AI 服务）noRetry 不提供重试；④ VLM 复核发现运行态渲染时序导致按钮被折叠线裁切（存在性断言的盲区）——贴底跟随补监听 running 修复，并以可见性断言固化
+- 交付物：src/stores/ai/options.ts（新）、store.retryFailed、AiMessageItem 选项区与重试按钮、AiChatPane interactive 下传与事件接线、mock 三分支、ai-agent.sh 第 19/20 节 17 断言、截图 docs/screenshots/e2e-ai-{options,retry}.png

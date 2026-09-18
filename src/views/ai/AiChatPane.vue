@@ -8,6 +8,8 @@
  * - 空态引导（未配置 AI 服务时的前往配置入口；已配置时的建议问题列表）
  * - 底部输入区：自适应高度 textarea（Enter 发送 / Shift+Enter 换行）、
  *   模型选择、上下文占用与输出速度状态条、新会话与停止生成按钮
+ * - 消息级交互接线：最后一条消息的选项区点击（select-option → 发送选择）
+ *   与请求失败重试（retry → 仓库 retryFailed：移除失败交换后重发原问题）
  */
 import { computed, nextTick, onMounted, ref, watch } from "vue";
 import { Bot, Eraser, Send, Settings2, Square } from "@lucide/vue";
@@ -118,9 +120,11 @@ onMounted(() => {
   textareaEl.value?.focus();
 });
 
-/** 消息与工具记录变化时贴底跟随（流式输出期间高频触发） */
+/** 消息、工具记录与运行态变化时贴底跟随（流式输出期间高频触发）。
+ *  running 也须监听：重试按钮在运行结束（running=false）后才渲染，若不补滚
+ *  会被裁在可视区下方（错误块贴底时按钮正好落在折叠线之下） */
 watch(
-  () => [ai.messages, ai.toolRecords],
+  () => [ai.messages, ai.toolRecords, ai.running],
   async () => {
     if (stickBottom.value) {
       await nextTick();
@@ -160,12 +164,15 @@ watch(
         </div>
       </div>
 
-      <!-- 消息列表 -->
+      <!-- 消息列表：最后一条消息在空闲时进入交互窗口（选项可点击 / 失败可重试） -->
       <AiMessageItem
-        v-for="m in ai.messages"
+        v-for="(m, idx) in ai.messages"
         :key="m.id"
         :message="m"
+        :interactive="!ai.running && idx === ai.messages.length - 1"
         @locate="(id) => emit('locate', id)"
+        @select-option="(text) => ai.send(text)"
+        @retry="(id) => ai.retryFailed(id)"
       />
     </div>
 

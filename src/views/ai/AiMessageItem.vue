@@ -8,30 +8,64 @@
  *   时新内容追加自动跟随滚到底（贴底跟随逻辑内聚到每条消息实例，用户上翻
  *   即停跟、回底恢复）
  * - 正文渲染：用户为纯文本气泡，助手经 markstream-vue 流式 Markdown 渲染
- *   （任务清单块已剥离——由左侧任务面板展示）
+ *   （任务清单块与选项块已剥离——分别由左侧任务面板与本消息选项区展示）
+ * - 选项区（【选项】块 → 可点击按钮）：最后一条消息且空闲时可点击，点击即
+ *   作为下一条用户消息发送；转入历史后按钮转静态展示（可读不可再点）
+ * - 失败重试：最后一条消息为请求失败（status=error 且非配置型提示）时提供
+ *   「重试本次请求」按钮（向上冒泡 retry 事件，由页面层移除失败交换后重发）
  * - 工具调用芯片（技能加载为独立蓝色书本样式）；点击向上冒泡 locate 事件，
  *   由页面级定位右侧对应能力调用记录
  * - token 用量标签（问题花费 / 本轮输出与速度）、错误与中止提示
  */
-import { nextTick, ref, watch } from "vue";
-import { Archive, BookOpen, Bot, Brain, ChevronRight, User, Wrench } from "@lucide/vue";
+import { computed, nextTick, ref, watch } from "vue";
+import {
+  Archive,
+  BookOpen,
+  Bot,
+  Brain,
+  ChevronRight,
+  ListChecks,
+  RotateCcw,
+  User,
+  Wrench,
+} from "@lucide/vue";
 import MarkdownRender from "markstream-vue";
 import "markstream-vue/index.css";
-import { parseAiTaskList, type AiChatMessage } from "@/stores/ai";
+import { parseAiOptions, parseAiTaskList, type AiChatMessage } from "@/stores/ai";
 import { useThemeStore } from "@/stores/theme";
 import { fmtTok } from "./format";
 
-const props = defineProps<{ message: AiChatMessage }>();
-const emit = defineEmits<{ locate: [callId: string] }>();
+const props = defineProps<{
+  message: AiChatMessage;
+  /** 空闲且为会话最后一条消息（选项可点击 / 失败可重试的交互窗口） */
+  interactive?: boolean;
+}>();
+const emit = defineEmits<{
+  locate: [callId: string];
+  "select-option": [text: string];
+  retry: [messageId: string];
+}>();
 
 const theme = useThemeStore();
 
-/** 助手消息展示文本：剔除任务清单块（已解析到左侧任务面板，正文中不再重复展示） */
-const displayContent = () => {
+/** 助手消息展示视图：剔除任务清单块（左侧任务面板）与选项块（本消息选项区） */
+const view = computed(() => {
   const m = props.message;
-  if (m.role !== "assistant" || !m.content) return m.content;
-  return parseAiTaskList(m.content).cleaned;
-};
+  if (m.role !== "assistant" || !m.content) return { content: m.content, options: null };
+  const task = parseAiTaskList(m.content);
+  const opt = parseAiOptions(task.cleaned);
+  return { content: opt.cleaned, options: opt.options };
+});
+
+/* ==================== 选项区与失败重试的交互窗口 ==================== */
+
+/** 选项可点击：空闲 + 最后一条消息 + 本条已完成 */
+const canSelect = computed(() => Boolean(props.interactive) && props.message.status === "done");
+
+/** 失败可重试：空闲 + 最后一条消息 + 请求失败（配置型提示 noRetry 除外） */
+const canRetry = computed(
+  () => Boolean(props.interactive) && props.message.status === "error" && !props.message.noRetry,
+);
 
 /* ==================== 思考块滚动跟随（本消息实例私有） ==================== */
 
@@ -119,19 +153,39 @@ watch(
         </div>
 
         <!-- 正文：用户为纯文本，助手用 markstream 流式 Markdown 渲染
-             （任务清单块已剥离——解析到左侧任务面板） -->
+             （任务清单块与选项块已剥离——分别由左侧任务面板与本消息选项区展示） -->
         <div v-if="message.content && message.role === 'user'" class="msg-content user-text">
           {{ message.content }}
         </div>
         <MarkdownRender
-          v-else-if="displayContent()"
+          v-else-if="view.content"
           mode="chat"
           class="msg-content md-render"
-          :content="displayContent()"
+          :content="view.content"
           :final="message.status !== 'streaming'"
           :is-dark="theme.isDark"
         />
         <div v-else-if="message.status === 'streaming'" class="msg-content pending">…</div>
+
+        <!-- 选项区（【选项】块解析结果）：交互窗口内可点击发送选择，转静态后保留可读 -->
+        <div v-if="view.options" class="option-group" :class="{ active: canSelect }">
+          <div class="opt-head">
+            <ListChecks :size="12" />
+            <span>{{ canSelect ? "请点击选择一个方案" : "提供的可选方案" }}</span>
+          </div>
+          <button
+            v-for="o in view.options"
+            :key="o.key + o.text"
+            class="opt-btn"
+            type="button"
+            :disabled="!canSelect"
+            :title="canSelect ? '点击选择该方案（作为下一条消息发送）' : '本轮已结束'"
+            @click="emit('select-option', `选择方案 ${o.key}：${o.text}`)"
+          >
+            <span class="opt-key">{{ o.key }}</span>
+            <span class="opt-text">{{ o.text }}</span>
+          </button>
+        </div>
 
         <!-- 工具调用芯片（技能加载为独立样式：展示加载了哪个技能的哪些部分） -->
         <div v-if="message.toolCalls?.length" class="tool-chips">
@@ -173,6 +227,15 @@ watch(
           {{ message.error }}
         </div>
         <div v-else-if="message.status === 'aborted'" class="msg-aborted">（已中止生成）</div>
+
+        <!-- 失败重试：最后一次问答请求失败时提供（配置型提示除外）；
+             点击移除本次失败交换后重发原问题（由页面层接线仓库 retryFailed） -->
+        <div v-if="canRetry" class="msg-retry">
+          <button class="retry-btn" type="button" @click="emit('retry', message.id)">
+            <RotateCcw :size="12" />
+            <span>重试本次请求</span>
+          </button>
+        </div>
       </div>
     </template>
   </div>
@@ -394,6 +457,114 @@ watch(
   font-family: var(--dbm-font-mono);
   opacity: 0.92;
   user-select: none;
+}
+
+/* ---------- 选项区（【选项】块 → 可点击按钮；转静态后保留可读） ---------- */
+.option-group {
+  border: 1px solid color-mix(in srgb, var(--dbm-primary) 32%, transparent);
+  background: color-mix(in srgb, var(--dbm-primary) 4%, var(--dbm-bg-2));
+  border-radius: var(--dbm-radius-m);
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  .opt-head {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    color: var(--dbm-text-3);
+    user-select: none;
+
+    svg {
+      flex-shrink: 0;
+    }
+  }
+
+  /* 交互窗口内：头部提示主色引导点击 */
+  &.active .opt-head {
+    color: var(--dbm-primary);
+    font-weight: 600;
+  }
+
+  .opt-btn {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    width: 100%;
+    text-align: left;
+    border: 1px solid var(--dbm-border);
+    background: var(--dbm-bg-panel);
+    color: var(--dbm-text-1);
+    border-radius: var(--dbm-radius-s);
+    padding: 7px 10px;
+    font-size: 12.5px;
+    line-height: 1.6;
+    cursor: pointer;
+    transition:
+      border-color 0.15s ease,
+      background-color 0.15s ease,
+      color 0.15s ease;
+
+    .opt-key {
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 18px;
+      height: 18px;
+      padding: 0 4px;
+      margin-top: 1px;
+      border-radius: var(--dbm-radius-s);
+      background: var(--dbm-primary-weak);
+      color: var(--dbm-primary);
+      font-family: var(--dbm-font-mono);
+      font-size: 10.5px;
+      font-weight: 600;
+    }
+
+    .opt-text {
+      min-width: 0;
+      word-break: break-word;
+    }
+
+    &:hover:not(:disabled) {
+      border-color: var(--dbm-primary);
+      background: var(--dbm-primary-weak);
+      color: var(--dbm-primary-text);
+    }
+
+    /* 转入历史（本轮已结束）：静态展示，不可再点 */
+    &:disabled {
+      cursor: default;
+      opacity: 0.72;
+      background: transparent;
+    }
+  }
+}
+
+/* ---------- 失败重试 ---------- */
+.msg-retry {
+  .retry-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    border: 1px solid var(--dbm-border);
+    background: var(--dbm-bg-2);
+    color: var(--dbm-text-2);
+    border-radius: 999px;
+    padding: 4px 12px;
+    font-size: 11.5px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+
+    &:hover {
+      border-color: var(--dbm-primary);
+      color: var(--dbm-primary-text);
+      background: var(--dbm-primary-weak);
+    }
+  }
 }
 
 /* ---------- markstream 流式 Markdown 渲染（主题令牌对接） ----------

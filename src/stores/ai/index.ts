@@ -8,6 +8,7 @@
  * 内部结构：
  * - types.ts       展示模型与类型契约（会话消息 / 任务项 / 工具记录 / 依赖与钩子）
  * - task-list.ts   任务清单块解析与渲染
+ * - options.ts     选项块解析与选择文本构造（【选项】→ 可点击按钮）
  * - tool-schema.ts 工具参数 JSON Schema
  * - codegen.ts     代码生成共用逻辑
  * - prompt.ts      系统提示与上下文压缩提示
@@ -27,5 +28,7 @@ export type {
   AiZipDownload,
 } from "./types";
 export { TASK_STATUS_LABEL, parseAiTaskList } from "./task-list";
+export { optionChoiceText, parseAiOptions } from "./options";
+export type { AiOptionItem } from "./options";
 export { createAiStore, useAiStore, modelKeyOf, splitModelKey } from "./store";
 export type { AiStore, AiModelPair } from "./store";

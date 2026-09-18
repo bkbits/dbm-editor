@@ -22,6 +22,9 @@
  *     → r2 总结
  *   · 含「执行失败」：r0 removeTableCategory(cat-system)（api 中文错误）→ r1 总结
  *   · 含「双工具」：r0 同轮 getSettings + getTables → r1 总结
+ *   · 含「选项演示」：单轮回复带【选项】块（界面解析为可点击按钮）
+ *   · 含「选择方案」：用户点击选项按钮后的回执（打印 OPTION-CHOICE）
+ *   · 含「请求失败」：首个请求 HTTP 500（打印 REQ-FAIL-500），重试后成功
  *   · 含「任务清单」：r0 汇报模板（3 项未开始）→ r1 同步模板（推进状态）→
  *     r2+ 慢速长流 30 段（供中止）
  *   · 含「继续」：打印 `ECHO-LAST-USER >>> <完整 user 正文>`；回全完成同步模板
@@ -398,6 +401,13 @@ const COMPACT_SUMMARY = `【上下文压缩】
 - 任务清单最新状态：1 项完成，2 项进行中
 - 待办：继续设计字段并校验`;
 
+/** 选项演示回复（【选项】块 → 界面解析为可点击按钮；正文仅留引入语） */
+const OPTIONS_REPLY =
+  "设计订单表前需要先确认数据规模方向：\n\n【选项】\n1. 采用单表设计，结构简单，适合小规模数据\n2. 采用主子两表设计，扩展性强，适合持续增长\n3. 引入字典冗余，查询性能最好，维护成本略高\n";
+
+/** 「请求失败」场景状态：首个请求 500，重试后成功（每个 mock 进程一次） */
+let reqFailOnce = false;
+
 /** 从工具结果文本中提取 prv- 供应商 id（AI 设置链路的 setCurrentModel 参数用） */
 function extractProviderId(ctx) {
   for (const text of [...ctx.toolResults].reverse()) {
@@ -501,6 +511,30 @@ function route(ctx) {
       };
     }
     return { desc: { text: "双工具链路完成：两个查询均已执行。", usage: [150, 30] }, interval: 40 };
+  }
+
+  // 点击选项（模型输出【选项】块，界面解析为可点击按钮；等待用户选择）
+  if (userBase.includes("选项演示")) {
+    return { desc: { text: OPTIONS_REPLY, usage: [280, 40] }, interval: 40 };
+  }
+
+  // 点击选项的回执（用户点击按钮 → 新 user 消息「选择方案 N：…」）
+  if (userBase.includes("选择方案")) {
+    console.log(`OPTION-CHOICE >>> ${ctx.lastUser}`);
+    return {
+      desc: { text: "已按所选方案继续执行：选项链路完成。", usage: [260, 40] },
+      interval: 40,
+    };
+  }
+
+  // 请求失败重试（首个请求 HTTP 500 → 界面展示错误与重试按钮；重试后成功）
+  if (userBase.includes("请求失败")) {
+    if (!reqFailOnce) {
+      reqFailOnce = true;
+      console.log("REQ-FAIL-500 sent");
+      return { httpError: { status: 500, message: "e2e 模拟服务内部异常" } };
+    }
+    return { desc: { text: "重试链路完成：请求已成功恢复。", usage: [300, 40] }, interval: 40 };
   }
 
   // 任务清单流程（汇报 → 同步 → 慢速长流供中止）
@@ -862,7 +896,17 @@ const server = http.createServer((req, res) => {
     if (isResponses) console.log("RES-MOCK-REQ received");
     if (isAnthropic) console.log("ANT-MOCK-REQ received");
 
-    const { desc, interval } = route(ctx) || {};
+    const routed = route(ctx) || {};
+    // 场景指定 HTTP 错误（请求失败重试链路：非 SSE，直接 JSON 错误体）
+    if (routed.httpError) {
+      res.writeHead(routed.httpError.status, {
+        ...CORS,
+        "Content-Type": "application/json",
+      });
+      res.end(JSON.stringify({ error: { message: routed.httpError.message } }));
+      return;
+    }
+    const { desc, interval } = routed;
     if (isAnthropic) {
       sseAnthropic(res, toAnthropicEvents(desc), interval ?? 40);
     } else if (isResponses) {

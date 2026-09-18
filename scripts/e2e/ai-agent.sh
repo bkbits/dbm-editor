@@ -2,7 +2,7 @@
 # e2e/ai-agent.sh —— AI 工具链域（pi-agent-core 内核 + 对话 + 工具 + 流式 + 任务清单 + 用量）
 #
 # 覆盖（合并自原 task35/39/40/41/43 + regress-b 的全部保留锚点 + 本任务
-# AIApi 三协议与新工具链断言）：
+# AIApi 三协议与新工具链断言 + 点击选项与失败重试）：
 # - 对话基础：发送/停止按钮渲染与前景色、markstream Markdown 渲染（h2/代码块/
 #   首部去空白）、暗色 dark 类、消息 flexShrink、建议列表
 # - 内核链路（pi-agent-core）：系统提示能力域 + 全局规则流入、工具全量注册（51）、
@@ -19,6 +19,8 @@
 # - 危险操作确认：removeAll 清空（弹窗确认 + 画布清空 + 字典不受影响）→
 #   resetDemo 重置（弹窗确认 + 演示数据恢复）
 # - fetch 工具：经 AIApi.fetch 请求 mock 的 /hello 数据端点
+# - 交互增强：点击选项（【选项】块解析为按钮，点击即发送选择；转静态保留可读）、
+#   请求失败重试（HTTP 500 错误块 + 重试按钮 → 移除失败交换后重发成功）
 # - 流式与滚动：思考块自动展开 / 溢出 / 贴底跟随 / 上翻停跟 / 回底恢复 /
 #   完成收起 / 重开贴底 / 高频流竞态
 # - 任务清单与压缩：汇报模板解析、状态同步、中止转暂停、下轮注入（回显日志）、
@@ -32,8 +34,9 @@ source "$(dirname "$0")/lib.sh"
 ensure_dev_server
 start_mock
 # 预期 error 级日志（按设计）：api 日志器记录工具执行的业务拒绝（参数校验 /
-# 执行失败演示链路）与用户主动中止的 AbortError
-export EXPECTED_ERR_RE="removeTableCategory\(\) 抛错|chat\(\) 抛错.*AbortError"
+# 执行失败演示链路）与用户主动中止的 AbortError，以及请求失败重试链路的
+# 模拟 HTTP 500（首个请求按场景设计失败）
+export EXPECTED_ERR_RE="removeTableCategory\(\) 抛错|chat\(\) 抛错.*AbortError|chat\(\) 抛错.*模拟服务内部异常"
 echo "=============================================="
 echo "== AI 工具链域 E2E（pi-agent-core 内核） =="
 echo "=============================================="
@@ -409,7 +412,43 @@ check "fetch 返回体含 mock 数据（hello from mock）" "(function(){var r=[
 wait_ai_done 40
 
 echo ""
-echo "== 19. 任务清单流程（汇报 → 同步 → 中止转暂停 → 继续完成） =="
+echo "== 19. 点击选项（【选项】块 → 可点击按钮 → 选择即发送） =="
+ask "选项演示"
+wait_ai_done 30
+check "选项区渲染（3 个选项按钮）" "document.querySelectorAll('.option-group .opt-btn').length === 3"
+check "选项按钮可点击（交互窗口内非禁用）" "(function(){var b=document.querySelector('.option-group .opt-btn');return !!b && !b.disabled})()"
+check "选项块从正文剥离（无【选项】字样）" "!document.body.innerText.includes('【选项】')"
+check "选项文本渲染（单表设计）" "(function(){var bs=[...document.querySelectorAll('.option-group .opt-btn')];return bs.some(function(b){return b.textContent.includes('采用单表设计')})})()"
+check "交互态头部引导点击" "(function(){var h=document.querySelector('.option-group .opt-head');return !!h && h.textContent.includes('请点击选择')})()"
+agent-browser screenshot "$SHOTS/e2e-ai-options.png" >/dev/null 2>&1
+# 点击第一个选项 → 作为下一条用户消息发送「选择方案 1：…」
+agent-browser eval "(function(){var b=document.querySelector('.option-group .opt-btn');if(b){b.click();return 'ok'}return 'nf'})()" >/dev/null 2>&1
+sleep 1
+check "点击后发送选择消息（选择方案 1）" "(function(){var ms=[...document.querySelectorAll('.msg.user .msg-content')];var t=ms[ms.length-1];return !!t && t.textContent.includes('选择方案 1：采用单表设计')})()"
+wait_ai_done 30
+check "所选方案回复到达（已按所选方案继续执行）" "(function(){return document.body.innerText.includes('已按所选方案继续执行')})()"
+check "旧选项区转静态（按钮禁用不可再点）" "(function(){var b=document.querySelector('.option-group .opt-btn');return !!b && b.disabled})()"
+check "旧选项区头部转静态文案" "(function(){var h=document.querySelector('.option-group .opt-head');return !!h && h.textContent.includes('提供的可选方案')})()"
+mock_has "OPTION-CHOICE >>> 选择方案 1" && check_eq "选择文本到达 mock（日志）" "ok" "ok" || check_eq "选择文本到达 mock（日志）" "miss" "ok"
+
+echo ""
+echo "== 20. 请求失败重试（HTTP 500 → 移除失败交换 → 重发成功） =="
+ask "请求失败演示"
+wait_ai_done 20
+check "失败消息错误块渲染（HTTP 500）" "(function(){var e=document.querySelector('.msg-error');return !!e && e.textContent.includes('HTTP 500')})()"
+check "失败消息提供重试按钮" "(function(){var m=[...document.querySelectorAll('.msg')];var t=m[m.length-1];return !!t.querySelector('.retry-btn')})()"
+check "重试按钮可见（未被折叠线裁切）" "(function(){var b=document.querySelector('.msg .retry-btn');var c=document.querySelector('.chat-scroll');if(!b||!c)return false;var r=b.getBoundingClientRect(),cr=c.getBoundingClientRect();return r.bottom<=cr.bottom+1 && r.top>=cr.top-1})()"
+agent-browser screenshot "$SHOTS/e2e-ai-retry.png" >/dev/null 2>&1
+# 点击重试：移除本次失败交换（配对 user 消息 + 错误 assistant 消息）后重发原问题
+agent-browser eval "document.querySelector('.msg .retry-btn')?.click()" >/dev/null 2>&1
+poll "(function(){return document.body.innerText.includes('重试链路完成')})()" 30
+check "重试后回答到达（重试链路完成）" "(function(){return document.body.innerText.includes('重试链路完成')})()"
+check "失败交换已移除（无错误块残留）" "!document.querySelector('.msg-error')"
+check "原问题仅出现一次（失败消息已移除）" "(function(){var us=[...document.querySelectorAll('.msg.user')].filter(function(m){return m.textContent.includes('请求失败演示')});return us.length===1})()"
+mock_has "REQ-FAIL-500 sent" && check_eq "mock 首请求 500（日志）" "ok" "ok" || check_eq "mock 首请求 500（日志）" "miss" "ok"
+
+echo ""
+echo "== 21. 任务清单流程（汇报 → 同步 → 中止转暂停 → 继续完成） =="
 ask "演示任务清单流程"
 poll "document.querySelectorAll('.task-item').length === 3" 20
 check "汇报模板解析为任务面板（3 项）" "document.querySelectorAll('.task-item').length === 3"
@@ -436,7 +475,7 @@ fi
 check "任务块不从助手正文重复展示（已剥离）" "(function(){var ms=[...document.querySelectorAll('.msg.assistant .msg-content')];return !ms.some(function(m){return m.textContent.includes('【任务清单')})})()"
 
 echo ""
-echo "== 20. 上下文 85% 自动压缩（pi 内核：轮边界自动触发并整体回落） =="
+echo "== 22. 上下文 85% 自动压缩（pi 内核：轮边界自动触发并整体回落） =="
 nav "系统设置" >/dev/null 2>&1
 sleep 1
 # 上限改 2400，触发 2112/2400=88%
@@ -457,7 +496,7 @@ echo "  [diag] 压缩后 meter = $METER2"
 check "压缩后上下文回落（摘要基座小占用）" "(function(){var m=document.querySelector('.tok-stats .ctx-meter');return m.textContent.replace(/\s+/g,'').includes('460/2400')})()"
 
 echo ""
-echo "== 21. 工具调用轮数上限 =="
+echo "== 23. 工具调用轮数上限 =="
 nav "系统设置" >/dev/null 2>&1
 sleep 1
 agent-browser find first '.rounds-block .ant-input-number input' fill "2" >/dev/null 2>&1
@@ -471,6 +510,6 @@ sleep 3
 check "轮数上限 2 后循环请求被中止" "(function(){var ms=[...document.querySelectorAll('.msg')];var t=ms[ms.length-1];return t.classList.contains('aborted') || document.body.innerText.includes('轮')})()"
 
 echo ""
-echo "== 22. 截图与收尾 =="
+echo "== 24. 截图与收尾 =="
 agent-browser screenshot "$SHOTS/e2e-ai-agent.png" >/dev/null 2>&1
 finish_suite "AI 工具链域"
