@@ -1280,3 +1280,19 @@ Stage Summary:
 - 交付物：导航字段兜底工具（src/utils/navigate.ts 三个新导出）、写入层与迁移层归一、renderFor / generateFiles 降级、AI 工具 schema 必填收紧、两张验证截图
 - 关键决策：① 以数据层归一为主同时保留渲染层防御——单条脏数据不应让整页不可用；② 不做独立版本号，沿用 loadDB「检测即迁移」策略（与其他字段迁移一致）；③ 不引入新依赖、不改 ManagerApi 契约（仅演示实现与 AI 工具参数契约收紧）
 - 遗留提示：格式问题的真正根因是仓库缺 .gitattributes（Windows 检出为 CRLF、oxfmt 期望 LF），未擅自新增；后续任一次 git checkout 都会重现该标记，建议单独任务加 `* text=auto eol=lf`
+
+---
+Task ID: 53
+Agent: main (Zed)
+Task: 仓库行尾策略固化——新增 .gitattributes（统一 LF），消除 vp check 全仓格式误报与 git status 噪声
+
+Work Log:
+- 现象核实：Task 52 期间按用户要求跑全仓 `vp check --fix` 后，`git status` 长期列出 91 个 M 条目；逐字节比对（`git show :<path>` 对比工作区文件、`git hash-object --path=` 对比索引 blob）证明文本文件内容与索引完全一致（README.md / src/ai/pi-agent.ts 逐字节相同；worklog.md 等 12 个文件差异仅 CRLF↔LF），`git add -A --dry-run` 计 0——即无任何可提交的内容改动
+- 根因：仓库无 .gitattributes + 本机 core.autocrlf=true（Windows 检出 CRLF），而 oxfmt 期望 LF；两者冲突即表现为「vp check 报格式问题」与「status 大量仅行尾 M」
+- 处置：新增仓库级 .gitattributes（`* text=auto eol=lf` + 图片 / 字体 / 压缩包 binary 声明）；`git add --renormalize .` 校验索引 blob 零变化（`git ls-files --eol` 中 i/crlf 计数为 0，索引本已全 LF），故本提交不改变任何文件内容
+- 效果：status 立即归零（仅 .gitattributes 为新增条目），此后任意平台检出均为 LF，vp check 结果不再依赖本机 autocrlf 配置
+
+Stage Summary:
+- 交付物：.gitattributes（19 行，随本节同提交推送）
+- 关键决策：不改任何源文件内容、不改本机与用户的 autocrlf 配置，仅以仓库级属性固化行尾策略（跨平台一致，本地需 CRLF 者自行覆盖）
+- 备注：该操作只影响行尾与二进制判定，按用户指示未做功能测试

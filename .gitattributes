@@ -1,0 +1,19 @@
+# 行尾策略：仓库内一律 LF，检出亦为 LF。
+# 背景：Windows 上 core.autocrlf=true 会把文本检出为 CRLF，而 oxfmt 期望 LF，
+# 导致 `vp check` 全仓误报格式问题、`git status` 出现大量仅行尾差异的 M 条目。
+# 本文件为仓库级约定，跨平台检出均为 LF（本地如需 CRLF 请自行配置 core.autocrlf）。
+* text=auto eol=lf
+
+# 二进制资产：显式声明，避免被判定为文本而参与行尾转换/差异计算
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.zip binary
+*.gz binary
+*.zst binary
