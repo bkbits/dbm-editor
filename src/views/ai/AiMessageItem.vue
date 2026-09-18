@@ -6,7 +6,8 @@
  * - 上下文自动压缩分隔条（compact 标记消息整条以分隔条呈现）
  * - 思考内容可收缩块：流式输出中自动展开、完成后自动收起；块内停留在底部
  *   时新内容追加自动跟随滚到底（贴底跟随逻辑内聚到每条消息实例，用户上翻
- *   即停跟、回底恢复）
+ *   即停跟、回底恢复）；思考文本由 ReasoningVirtualText 虚拟滚动渲染
+ *   （pretext 离屏测量 + 视口窗口，超长思考流不再整段重排卡顿）
  * - 正文渲染：用户为纯文本气泡，助手经 markstream-vue 流式 Markdown 渲染
  *   （任务清单块与选项块已剥离——分别由左侧任务面板与本消息选项区展示）
  * - 选项区（【选项】块 → 可点击按钮）：最后一条消息且空闲时可点击，点击即
@@ -34,6 +35,7 @@ import "markstream-vue/index.css";
 import { parseAiOptions, parseAiTaskList, type AiChatMessage } from "@/stores/ai";
 import { useThemeStore } from "@/stores/theme";
 import { fmtTok } from "./format";
+import ReasoningVirtualText from "./ReasoningVirtualText.vue";
 
 const props = defineProps<{
   message: AiChatMessage;
@@ -148,7 +150,7 @@ watch(
             :data-msg-id="message.id"
             @scroll="onReasoningScroll"
           >
-            {{ message.reasoning }}
+            <ReasoningVirtualText :text="message.reasoning" />
           </div>
         </div>
 
@@ -400,7 +402,9 @@ watch(
     padding: 8px 12px;
     border-top: 1px solid var(--dbm-border);
     font-size: 11.5px;
-    line-height: 1.7;
+    /* 行高整数化（11.5 × 1.7 ≈ 19.55 → 20）：与 ReasoningVirtualText 的
+       虚拟行高精确对齐，亚像素累积误差归零 */
+    line-height: 20px;
     color: var(--dbm-text-3);
     white-space: pre-wrap;
     word-break: break-word;

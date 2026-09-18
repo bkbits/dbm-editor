@@ -646,6 +646,16 @@ function route(ctx) {
     };
   }
 
+  // 虚拟滚动压测（500 段 × 4ms 超长流：pretext 虚拟窗口渲染验证）
+  if (userBase.includes("虚拟滚动")) {
+    const reasoning = [];
+    for (let i = 1; i <= 500; i++) reasoning.push(`第 ${i} 段虚拟滚动压测思考内容。\n`);
+    return {
+      desc: { reasoning, text: "虚拟滚动压测完成。", usage: [600, 900] },
+      interval: 4,
+    };
+  }
+
   // 快速思考（120 段 × 8ms 高频流，贴底竞态验证）
   if (userBase.includes("快速思考")) {
     const reasoning = [];

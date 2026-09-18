@@ -243,7 +243,26 @@ check "高频流中思考块保持贴底（竞态修复回归）" "(function(){v
 wait_ai_done 30
 
 echo ""
-echo "== 10. 代码生成 / 替换链路（genCodeZip → genCodeReplace → Markdown 总结） =="
+echo "== 10. 思考块虚拟滚动（pretext 离屏测量 + 视口窗口，500 段超长流） =="
+ask "虚拟滚动压测"
+wait_ai_done 40
+# 完成后自动收起：点击最后一块头部重新展开（v-show 保留滚动位置）
+agent-browser eval "(function(){var bs=[...document.querySelectorAll('.reasoning-block')];var last=bs[bs.length-1];if(last&&!last.classList.contains('open')){last.querySelector('.reasoning-head').click()}return 'ok'})()" >/dev/null 2>&1
+poll "(function(){var b=(function(){var os=[...document.querySelectorAll('.reasoning-block.open .reasoning-body')];return os[os.length-1]})();return !!b && b.scrollHeight - b.clientHeight > 8000})()" 15
+check "总高按虚拟行数撑起（500 行 × 20px 起，兼容换行增高）" "(function(){var b=(function(){var os=[...document.querySelectorAll('.reasoning-block.open .reasoning-body')];return os[os.length-1]})();return !!b && b.scrollHeight >= 10000 && b.scrollHeight <= 20000})()"
+check "重展开贴底（距底 < 24）" "(function(){var b=(function(){var os=[...document.querySelectorAll('.reasoning-block.open .reasoning-body')];return os[os.length-1]})();return !!b && (b.scrollHeight - b.scrollTop - b.clientHeight) < 24})()"
+check "底部窗口含末段（第 500 段）" "(function(){var b=(function(){var os=[...document.querySelectorAll('.reasoning-block.open .reasoning-body')];return os[os.length-1]})();return !!b && b.textContent.includes('第 500 段')})()"
+check "虚拟化生效：首段不在 DOM（窗口外由占位块撑高）" "(function(){var b=(function(){var os=[...document.querySelectorAll('.reasoning-block.open .reasoning-body')];return os[os.length-1]})();return !!b && !b.textContent.includes('第 1 段')})()"
+check "DOM 行节点有界（≤ 700 行）" "(function(){var b=(function(){var os=[...document.querySelectorAll('.reasoning-block.open .reasoning-body')];return os[os.length-1]})();return !!b && b.querySelectorAll('.rvt-row').length > 0 && b.querySelectorAll('.rvt-row').length <= 700})()"
+check "占位块存在（上 rvt-pad 携带窗口外高度）" "(function(){var b=(function(){var os=[...document.querySelectorAll('.reasoning-block.open .reasoning-body')];return os[os.length-1]})();var ps=b?b.querySelectorAll('.rvt-pad'):[];return ps.length===2 && ps[0].offsetHeight>0})()"
+# 滚回顶部：窗口上移，首段进入 DOM、末段移出
+agent-browser eval "(function(){var b=(function(){var os=[...document.querySelectorAll('.reasoning-block.open .reasoning-body')];return os[os.length-1]})();if(b){b.scrollTop=0;b.dispatchEvent(new Event('scroll'))}return 'ok'})()" >/dev/null 2>&1
+poll "(function(){var b=(function(){var os=[...document.querySelectorAll('.reasoning-block.open .reasoning-body')];return os[os.length-1]})();return !!b && b.textContent.includes('第 1 段')})()" 10
+check "滚顶后首段进入窗口（第 1 段可见）" "(function(){var b=(function(){var os=[...document.querySelectorAll('.reasoning-block.open .reasoning-body')];return os[os.length-1]})();return !!b && b.textContent.includes('第 1 段')})()"
+check "滚顶后末段移出窗口（第 500 段不在 DOM）" "(function(){var b=(function(){var os=[...document.querySelectorAll('.reasoning-block.open .reasoning-body')];return os[os.length-1]})();return !!b && !b.textContent.includes('第 500 段')})()"
+
+echo ""
+echo "== 11. 代码生成 / 替换链路（genCodeZip → genCodeReplace → Markdown 总结） =="
 agent-browser eval "ai.clearSession?.()" >/dev/null 2>&1 || true
 nav "AI 工具" >/dev/null 2>&1
 sleep 1
@@ -273,7 +292,7 @@ check "暗色下 markstream dark 类生效" "!!document.querySelector('.md-rende
 theme_toggle
 
 echo ""
-echo "== 11. reload 四工具（顶栏「刷新」按钮等价：模型元素/字典/模板/设置） =="
+echo "== 12. reload 四工具（顶栏「刷新」按钮等价：模型元素/字典/模板/设置） =="
 ask "请刷新数据"
 poll "(function(){var r=[...document.querySelectorAll('.tool-record .rec-name')].find(function(x){return x.textContent==='reload'});return !!r && r.closest('.tool-record').classList.contains('success')})()" 25
 check "reload 能力记录 success" "(function(){var r=[...document.querySelectorAll('.tool-record .rec-name')].find(function(x){return x.textContent==='reload'});return !!r && r.closest('.tool-record').classList.contains('success')})()"
@@ -282,7 +301,7 @@ wait_ai_done 40
 check "reload 会话后占用更新 1120/8192" "(function(){var m=document.querySelector('.tok-stats .ctx-meter');return m.textContent.replace(/\s+/g,'').includes('1120/8192')})()"
 
 echo ""
-echo "== 12. AIApi 三协议对话（OpenAI Responses / Anthropic Messages） =="
+echo "== 13. AIApi 三协议对话（OpenAI Responses / Anthropic Messages） =="
 nav "系统设置" >/dev/null 2>&1
 sleep 1
 # 供应商 2：Resp（openai-responses）
@@ -326,7 +345,7 @@ check "Anthropic 协议思考内容渲染" "(function(){var bs=[...document.quer
 mock_has "ANT-MOCK-REQ received" && check_eq "Anthropic 端点请求到达（mock 日志）" "ok" "ok" || check_eq "Anthropic 端点请求到达" "miss" "ok"
 
 echo ""
-echo "== 13. 记录清空 =="
+echo "== 14. 记录清空 =="
 check "清空前有调用记录" "document.querySelectorAll('.tool-record').length >= 1"
 agent-browser eval "document.querySelector('.tools-clear')?.click()" >/dev/null 2>&1
 sleep 0.8
@@ -336,7 +355,7 @@ check "清空后聊天消息保留" "document.querySelectorAll('.msg').length >=
 check "清空后按钮禁用" "(function(){var b=document.querySelector('.tools-clear');return !!b && b.disabled})()"
 
 echo ""
-echo "== 14. 技能加载（skill 工具） =="
+echo "== 15. 技能加载（skill 工具） =="
 ask "加载技能演示"
 poll "(function(){return document.querySelectorAll('.tool-record.skill').length===1})()" 25
 check "技能加载为单独一轮工具调用（skill）" "(function(){return document.querySelectorAll('.tool-record.skill').length===1})()"
@@ -348,7 +367,7 @@ check "技能记录展示已加载部分清单（2 项）" "(function(){var r=do
 wait_ai_done 40
 
 echo ""
-echo "== 15. AI 设置工具链（getAISettings → setCurrentModel） =="
+echo "== 16. AI 设置工具链（getAISettings → setCurrentModel） =="
 ask "演示 AI 设置链路"
 poll "(function(){var r=[...document.querySelectorAll('.tool-record .rec-name')].find(function(x){return x.textContent==='getAISettings'});return !!r && r.closest('.tool-record').classList.contains('success')})()" 25
 check "getAISettings 记录 success" "(function(){var r=[...document.querySelectorAll('.tool-record .rec-name')].find(function(x){return x.textContent==='getAISettings'});return !!r && r.closest('.tool-record').classList.contains('success')})()"
@@ -359,7 +378,7 @@ check "setCurrentModel 后下拉切回 Mock/e2e-model" "(function(){var t=docume
 check "AI 设置会话收尾" "(function(){return document.body.innerText.includes('AI 设置链路完成')})()"
 
 echo ""
-echo "== 16. 撤销链路（addTableCategory → undo → redo → clearHistory） =="
+echo "== 17. 撤销链路（addTableCategory → undo → redo → clearHistory） =="
 ask "演示撤销链路"
 poll "(function(){var r=[...document.querySelectorAll('.tool-record .rec-name')].find(function(x){return x.textContent==='addTableCategory'});return !!r && r.closest('.tool-record').classList.contains('success')})()" 25
 check "addTableCategory 成功（本地先行 + 落盘）" "(function(){var db=JSON.parse(localStorage.getItem('gdbme:db:v2'));return db.categories.some(function(c){return c.name==='e2e-ai-cat'})})()"
@@ -374,7 +393,7 @@ wait_ai_done 40
 check "撤销链路会话收尾" "(function(){return document.body.innerText.includes('撤销链路完成')})()"
 
 echo ""
-echo "== 17. 危险操作确认（removeAll 清空 → resetDemo 重置） =="
+echo "== 18. 危险操作确认（removeAll 清空 → resetDemo 重置） =="
 ask "请清空模型元素"
 poll "(function(){var m=document.querySelector('.ant-modal');return !!m && m.textContent.includes('清空模型元素') && getComputedStyle(m.closest('.ant-modal-wrap')).display!=='none'})()" 15
 check "removeAll 危险确认弹窗出现" "(function(){var m=document.querySelector('.ant-modal');return !!m && m.textContent.includes('清空模型元素')})()"
@@ -402,7 +421,7 @@ nav "AI 工具" >/dev/null 2>&1
 sleep 1
 
 echo ""
-echo "== 18. fetch 工具（AIApi.fetch → mock /hello） =="
+echo "== 19. fetch 工具（AIApi.fetch → mock /hello） =="
 ask "发起网络请求"
 poll "(function(){var r=[...document.querySelectorAll('.tool-record .rec-name')].find(function(x){return x.textContent==='fetch'});return !!r && r.closest('.tool-record').classList.contains('success')})()" 25
 check "fetch 记录 success" "(function(){var r=[...document.querySelectorAll('.tool-record .rec-name')].find(function(x){return x.textContent==='fetch'});return !!r && r.closest('.tool-record').classList.contains('success')})()"
@@ -412,7 +431,7 @@ check "fetch 返回体含 mock 数据（hello from mock）" "(function(){var r=[
 wait_ai_done 40
 
 echo ""
-echo "== 19. getTableRects（表卡片矩形 → 画布布局基础数据源） =="
+echo "== 20. getTableRects（表卡片矩形 → 画布布局基础数据源） =="
 ask "画布布局"
 poll "(function(){var r=[...document.querySelectorAll('.tool-record .rec-name')].find(function(x){return x.textContent==='getTableRects'});return !!r && r.closest('.tool-record').classList.contains('success')})()" 25
 check "getTableRects 记录 success" "(function(){var r=[...document.querySelectorAll('.tool-record .rec-name')].find(function(x){return x.textContent==='getTableRects'});return !!r && r.closest('.tool-record').classList.contains('success')})()"
@@ -427,7 +446,7 @@ wait_ai_done 40
 check "画布布局会话收尾" "(function(){return document.body.innerText.includes('画布布局完成')})()"
 
 echo ""
-echo "== 20. skill-github（GitHub 技能文档加载，真实网络） =="
+echo "== 21. skill-github（GitHub 技能文档加载，真实网络） =="
 ask "GitHub技能"
 poll "(function(){var r=[...document.querySelectorAll('.tool-record.skill')].find(function(x){return x.textContent.includes('Building LLM-Powered')});return !!r && r.classList.contains('success')})()" 40
 check "skill-github 记录 success" "(function(){var r=[...document.querySelectorAll('.tool-record.skill')].find(function(x){return x.textContent.includes('Building LLM-Powered')});return !!r && r.classList.contains('success')})()"
@@ -441,7 +460,7 @@ wait_ai_done 40
 check "GitHub 技能会话收尾" "(function(){return document.body.innerText.includes('GitHub 技能加载完成')})()"
 
 echo ""
-echo "== 21. 点击选项（【选项】块 → 可点击按钮 → 选择即发送） =="
+echo "== 22. 点击选项（【选项】块 → 可点击按钮 → 选择即发送） =="
 ask "选项演示"
 wait_ai_done 30
 check "选项区渲染（3 个选项按钮）" "document.querySelectorAll('.option-group .opt-btn').length === 3"
@@ -461,7 +480,7 @@ check "旧选项区头部转静态文案" "(function(){var h=document.querySelec
 mock_has "OPTION-CHOICE >>> 选择方案 1" && check_eq "选择文本到达 mock（日志）" "ok" "ok" || check_eq "选择文本到达 mock（日志）" "miss" "ok"
 
 echo ""
-echo "== 22. 请求失败重试（HTTP 500 → 移除失败交换 → 重发成功） =="
+echo "== 23. 请求失败重试（HTTP 500 → 移除失败交换 → 重发成功） =="
 ask "请求失败演示"
 wait_ai_done 20
 check "失败消息错误块渲染（HTTP 500）" "(function(){var e=document.querySelector('.msg-error');return !!e && e.textContent.includes('HTTP 500')})()"
@@ -477,7 +496,7 @@ check "原问题仅出现一次（失败消息已移除）" "(function(){var us=
 mock_has "REQ-FAIL-500 sent" && check_eq "mock 首请求 500（日志）" "ok" "ok" || check_eq "mock 首请求 500（日志）" "miss" "ok"
 
 echo ""
-echo "== 23. 任务清单流程（汇报 → 同步 → 中止转暂停 → 继续完成） =="
+echo "== 24. 任务清单流程（汇报 → 同步 → 中止转暂停 → 继续完成） =="
 ask "演示任务清单流程"
 poll "document.querySelectorAll('.task-item').length === 3" 20
 check "汇报模板解析为任务面板（3 项）" "document.querySelectorAll('.task-item').length === 3"
@@ -504,7 +523,7 @@ fi
 check "任务块不从助手正文重复展示（已剥离）" "(function(){var ms=[...document.querySelectorAll('.msg.assistant .msg-content')];return !ms.some(function(m){return m.textContent.includes('【任务清单')})})()"
 
 echo ""
-echo "== 24. 上下文 85% 自动压缩（pi 内核：轮边界自动触发并整体回落） =="
+echo "== 25. 上下文 85% 自动压缩（pi 内核：轮边界自动触发并整体回落） =="
 nav "系统设置" >/dev/null 2>&1
 sleep 1
 # 上限改 2400，触发 2112/2400=88%
@@ -525,7 +544,7 @@ echo "  [diag] 压缩后 meter = $METER2"
 check "压缩后上下文回落（摘要基座小占用）" "(function(){var m=document.querySelector('.tok-stats .ctx-meter');return m.textContent.replace(/\s+/g,'').includes('460/2400')})()"
 
 echo ""
-echo "== 25. 工具调用轮数上限 =="
+echo "== 26. 工具调用轮数上限 =="
 nav "系统设置" >/dev/null 2>&1
 sleep 1
 agent-browser find first '.rounds-block .ant-input-number input' fill "2" >/dev/null 2>&1
@@ -539,6 +558,6 @@ sleep 3
 check "轮数上限 2 后循环请求被中止" "(function(){var ms=[...document.querySelectorAll('.msg')];var t=ms[ms.length-1];return t.classList.contains('aborted') || document.body.innerText.includes('轮')})()"
 
 echo ""
-echo "== 26. 截图与收尾 =="
+echo "== 27. 截图与收尾 =="
 agent-browser screenshot "$SHOTS/e2e-ai-agent.png" >/dev/null 2>&1
 finish_suite "AI 工具链域"

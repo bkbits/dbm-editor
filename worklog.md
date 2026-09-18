@@ -1315,3 +1315,25 @@ Work Log:
 Stage Summary:
 - AGENT 工具集 51 → 53：getTableRects 为画布布局美化提供准确的基础数据（实测矩形 + 隐藏态 + 字段数），canvas-layout 技能随之改写（实测间距推算取代过时固定值）；skill-github 打通 GitHub 外部技能生态（raw + HEAD 默认分支 + 64KB 截断保护），与内置 skill 工具同构的加载体验
 - 交付物：4 源文件（tools/types/context/skills）+ mock 双场景 + 11 新断言 + 2 截图 + README 三处同步；四域 280 断言全绿
+
+---
+Task ID: 55
+Agent: main (Super Z)
+Task: 思考块虚拟滚动优化——引入 @chenglou/pretext 依赖库，解决「思考中/思考过程」卡片超长文本流式追加极其卡顿问题
+
+Work Log:
+- 问题与选型：思考体原为单文本节点（white-space: pre-wrap，max-height 240px 滚动容器），流式追加数十万字符时每次追加触发整段浏览器重排 O(全文)；选 @chenglou/pretext 0.0.9（canvas measureText 离屏测量 + 纯算术分行，零运行时依赖，pretext 官方 README 明言其定位即「解锁无估算的虚拟化/遮挡渲染」）
+- 新组件 src/views/ai/ReasoningVirtualText.vue（AiMessageItem 思考体接入）：仅渲染视口附近窗口（±300 行，边界按 50 行量化防快滚抖动）内的行，窗口外用上下 rvt-pad 占位块撑出真实总高——scrollHeight/贴底跟随/滚动语义与整段渲染完全一致；行元素 white-space: pre 禁止浏览器二次折行（测量安全边 2px 吸收 clientWidth 取整与舍入差），行高整数化 20px（.reasoning-body line-height 1.7 → 20px 对齐）
+- 流式增量架构：按 \n 切分段落持有 prepared 句柄——已完结段落不可变只 prepare 一次，流式期间仅重测增长中的尾段（pretext 测量缓存按 (文本段, 字体) 命中重复前缀）；flush 自适应节流（基础 90ms，尾段越大间隔越长，上限 400ms）；message_end 的 trim() 全文替换触发最终 flush（收缩时全量重建句柄）
+- 贴底与隐藏：flush 前记录距底 <24px、DOM 应用后回写新底部（覆盖最后一次 flush 晚于流结束的时序，与消息级贴底 watcher 互补）；完成后收起（display:none 宽度 0）不布局不销毁保留最后窗口，重展开由 ResizeObserver 唤醒补齐——textContent 对外稳定
+- 字体一致性：canvas 字体串从滚动容器计算样式组合（style/weight/size/family），经「赋值往返校验」探测 canvas 拒收（失败会静默保留旧字体），系统族名（-apple-system/BlinkMacSystemFont/system-ui 等）被拒时剔除后重试，行元素显式使用同一字体族保证「量什么渲什么」；document.fonts.ready 后强制重测（自定义字体迟到）；字体变化（宿主主题切换）触发全量重建
+- 健壮性：\r\n/\r 归一为 \n（对齐浏览器文本处理模型）；空段落按 CSS pre-wrap 语义占一空行；pretext 运行抛错 console.error 后永久回退整段渲染（engineFailed）；环境缺 Intl.Segmenter / canvas 2d 直接回退（PRETEXT_OK）；卸载时 clearCache() 释放共享测量缓存（prepared 句柄自带宽度不受影响）
+- E2E：mock 新增「虚拟滚动」场景（500 段 × 4ms 超长流）；ai-agent.sh 新增第 10 节 8 断言（总高 500×20px 撑起/重展开贴底/底部窗口含第 500 段/首段不在 DOM/行节点 ≤700/上占位块携带窗口外高度/滚顶后首段进入/末段移出），后续节次重编号 10-26 → 11-27
+- 排障记录：①首跑 E2E 全红——bun add 触发 node_modules 重装致 antdv-next 包损坏（dist 缺 upload/index.js，历史已知问题），rm -rf 后 bun install 修复；②沙箱后台进程在 Bash 调用结束时被整组回收（nohup/setsid & 均不可存活），双 fork（外层 bash 即刻退出→脚本被 PID 1 收养）方可跨调用长跑，agent-browser 守护进程本就是 PPID 1 孤儿故能存活；③新增断言首跑 4 红——非组件缺陷，第 8 节手动重开的思考块永远 open，querySelector('.reasoning-block.open .reasoning-body') 命中 DOM 序第一个 open 块（第 8 节的），8 个断言结果与「第 01 段补零格式 40 行块」逐一吻合后定位；修复为取最后一个 open 块 + 点击前判重（已 open 不点击防翻转）；④独立诊断脚本复现（curl 验 mock 分支 500 事件 + 浏览器 DOM 转储 sh=10016/窗口[151,500]/滚顶交换）先行排除组件嫌疑再查套件上下文
+- 验证：typecheck ✓；vp check --fix 后 140 文件格式 + 128 lint 全绿 ✓；build ✓（单文件 2.49MB，pretext 内部签名确认入包）；E2E 四域 288 断言全绿（AI 工具链 154 含新增 8 + 模型元素 56 + 字典模板 35 + 设置 43，页面错误 0/控制台 ERROR 0）；VLM 双截图复核无缺陷（底部第 489-500 段贴底、顶部第 1 段起、行距均匀无截断无横向滚动条）；check-readme 33 标题 ✓
+- README 同步：思考内容特性条目补虚拟滚动说明、E2E 断言数 146→154、目录结构补 ReasoningVirtualText、截图表新增两张（e2e-ai-vscroll-bottom/top）、getTableRects 节号引用 19/20 → 20/21
+
+Stage Summary:
+- 思考块超长流卡顿根治：pretext 离屏测量 + 段落增量 + 视口窗口虚拟渲染，DOM 行数恒定有界（≈视口+缓冲），流式工作量 O(尾段) 而非 O(全文)；滚动/贴底/收起重开行为与原先完全一致（E2E 第 8/9 节原断言零改动全绿即证）
+- 交付物：ReasoningVirtualText.vue（新组件）+ AiMessageItem.vue 接入 + mock 场景 + 第 10 节 8 断言 + 2 截图 + README 四处同步；四域 288 断言全绿
+- 方法沉淀：套件内新断言的选择器必须考虑「前节遗留的 open 块」这类跨节状态污染；沙箱长任务用双 fork 孤儿化
